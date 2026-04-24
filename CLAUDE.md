@@ -1,6 +1,6 @@
 # Workflows
 
-Use the appropriate skill for each action:
+Use the appropriate `knowledge-base` skill for each action:
 - **Ingest** (notes, Confluence, bulk) — `knowledge-base-ingest` skill
 - **Query** — `knowledge-base-query` skill (default: use this when the user asks any question)
 - **Health check / lint** — `knowledge-base-health-check` skill
