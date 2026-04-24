@@ -64,7 +64,13 @@ Install via Homebrew:
 brew install qmd
 ```
 
-Then initialise the index in this directory:
+Register all `raw/` and `wiki/` subdirectories as QMD collections:
+
+```sh
+bash scripts/qmd-sync-collections.sh
+```
+
+Then build the index:
 
 ```sh
 qmd update                # text index (fast, ~seconds)
