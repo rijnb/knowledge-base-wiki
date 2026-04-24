@@ -24,6 +24,7 @@ Access to the knowledge base is as follows:
 	- user asks a high-level question
 	- LLM queries semantic database (with the `qmd` skill) for relevant page links (fast/token-efficient)
 	- LLM processes `qmd`-suggested pages and produces answer to user
+	- LLM store valuable conversations in `raw/conversations` to extend the knowledge base
 
 The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them, makes this implementation of a knowledge significantly faster and more token efficient than when it's using Markdown files only.
 ## Directory structure (condensed)
@@ -46,6 +47,7 @@ The combination of using a semantic database to fetch relevant pages before anal
 │   ├── concepts/        ← mental models and domain concepts
 │   │   └── _index.md    ← alphabetical index of all concept pages
 │   ├── competition/     ← competitor profiles
+│   ├── conversations/   ← interesting and valuable conversations (query results)
 │   ├── decisions/       ← decision records
 │   ├── people/          ← people and team pages
 │   ├── problems/        ← living problem tracking pages
@@ -60,7 +62,7 @@ The combination of using a semantic database to fetch relevant pages before anal
 Only the Claude prompt and scripts are part of the Git repository, the raw notes and the generated wiki are not stored in Git.
 ## Workflows
 
-### 1. Workflow: ingest (standard)
+### Action: ingest (standard)
 
 When the user provides a source file to process, or ask to 'ingest new raw notes':
 
@@ -89,8 +91,7 @@ A single ingested source note may easily touch 5–15, or even more, wiki pages.
 After ingestion of the notes, commit the changes to Git and push to `main`.
 
 Note: if the user asks to 'ingest raw notes' (instead of new raw notes), then the user actually means to only ingest the new raw notes; do not ingest (or re-ingest) all notes, ever, without user confirmation.
-
-### 2. Workflow: ingest (Confluence via MCP)
+### Action: ingest (Confluence via MCP)
 
 This ingestion is triggered when a Confluence URL or Confluence page title is provided:
 
@@ -106,29 +107,9 @@ This ingestion is triggered when a Confluence URL or Confluence page title is pr
 
 **Re-ingest:** 
 - If the user says "refresh this Confluence page", re-fetch, overwrite the cache, diff against the previous version, and flag any changes that affect existing wiki pages. 
+### Action: bulk ingestion
 
-### 3. Workflow: query
-
-When the user asks a question:
-
-1. Use `mcp__plugin_qmd_qmd__query` to search across wiki collections (concepts, decisions, people, systems, competition). For broad questions also search the notes collection.
-2. Use `mcp__plugin_qmd_qmd__get` or `mcp__plugin_qmd_qmd__multi_get` to retrieve specific documents identified in step 1.
-3. If QMD returns no results, fall back to reading the relevant `wiki/<type>/_index.md` directly, or `wiki/index.md` for top-level navigation.
-4. Synthesize an answer with citations (`[[wiki/decisions/title]]`, `[[wiki/systems/name]]`, etc.)
-5. If the answer is a valuable artifact (comparison, analysis, non-obvious connection), file it as a new wiki page and update the index
-### 4. Workflow: health check - lint
-
-When the user asks for a health check:
-
-1. Scan for orphan pages (no inbound `[[links]]` from other pages).
-2. Flag contradictions between pages.
-3. Identify topics mentioned in multiple pages that lack their own dedicated page.
-4. Suggest data gaps and new sources worth finding.
-### 5. Workflow: bulk ingestion
-
-When processing multiple raw source files, ingest them incrementally in batches of 20 files, unless specified otherwise, date sorted newest-to-oldest.
-
-Each batch builds the wiki term pages mentioned above incrementally. After each source note, announce which topics were created or updated and update the log file (see below). 
+When processing multiple raw source files, ingest them incrementally in batches of 20 files, unless specified otherwise, date sorted newest-to-oldest. Each batch builds the wiki term pages mentioned above incrementally. After each source note, announce which topics were created or updated and update the log file (see below). 
 
 **Batch commit message format:**
 ```
@@ -137,6 +118,26 @@ wiki: ingest batch <N> — <type>/<date-range>
 Example: `wiki: ingest batch 3 — notes/2025-01 to 2025-03`
 
 When a batch is done, proceed with the next batch, until all notes are processed.
+### Action: query
+
+When the user asks a question:
+
+1. Use `mcp__plugin_qmd_qmd__query` to search across wiki collections (concepts, decisions, people, systems, competition). For broad questions also search the notes collection.
+2. Use `mcp__plugin_qmd_qmd__get` or `mcp__plugin_qmd_qmd__multi_get` to retrieve specific documents identified in step 1.
+3. If QMD returns no results, fall back to reading the relevant `wiki/<type>/_index.md` directly, or `wiki/index.md` for top-level navigation.
+4. Synthesize an answer with citations (`[[wiki/decisions/title]]`, `[[wiki/systems/name]]`, etc.).
+5. If the answer is a valuable artifact (comparison, analysis, non-obvious connection), file it as a new wiki page in `wiki/discussions` and update the index.
+### Action: health check (or lint)
+
+When the user asks for a health check:
+
+1. Scan for orphan pages (no inbound `[[links]]` from other pages). It is perfectly OK if the only inbound link is from an `index.md` or `_index.md` file.
+2. Scan for contradictions in or between pages. These may occur when contradicting facts have been ingested earlier.
+3. Identify topics mentioned in multiple pages that lack their own dedicated page within top-level topics.
+4. Identify missing top-level topics. These may be suggest if multiple (10 or more) pages relate to the same high-level concept (just like projects, systems, decisions are high-level concepts) but the concept is not listed as a top-level topic in the main index.
+5. Suggest data gaps and new sources worth finding.
+
+The health check should never modify the database without user confirmation, but should provide clear recommendations for resolution of identified issues.
 ## Topic types in `wiki/` (priority order)
 
 1. **Concepts** — technologies, standards, mental models, domain vocabulary
@@ -326,6 +327,19 @@ type: competitor
 - [[...]]
 ## Related notes
 - [[...links to related raw notes (short description of relationship)...]]
+- [[...]]
+```
+### `wiki/conversations/<slug>.md`
+
+```markdown
+---
+type: conversation
+---
+# <Conversations>
+## Summary
+## Conversation
+## Related
+- [[...links to related notes...]]
 - [[...]]
 ```
 ### `wiki/projects/<slug>.md` 

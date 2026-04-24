@@ -19,15 +19,16 @@ Access to the knowledge base is as follows:
 	- user stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`
 - **ingest notes**
 	- user asks to ingest (new) raw notes
-	- LLM transcribes `raw/transcripts` and `raw/scans` to Markdown
+	- LLM transcribes non-Markdown `raw/transcripts` (`.vtt`) and `raw/scans` (`.pdf/.jpg`) to Markdown (in `transcribed` directories)
 	- LLM ingests raw notes and updates all relevant wiki topic pages in `wiki/`
 	- LLM updates the semantic database `qmd` and runs a health check to keep the knowledge base lean and clean (after user confirmation)
 - **query wiki** 
 	- user asks a high-level question
 	- LLM queries semantic database (with the `qmd` skill) for relevant page links (fast/token-efficient)
 	- LLM processes `qmd`-suggested pages and produces answer to user
+	- LLM store valuable conversations in `raw/conversations` to extend the knowledge base
 
-The LLM tries to minimize the number of tokens spent and maximize speed, by working together with QMD, instead of reading all pages itself, every time.
+The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them, makes this implementation of a knowledge significantly faster and more token efficient than when it's using Markdown files only.
 ## Getting started
 
 This knowledge base setup uses a combination of Obsidian (front-end), Claude and QMD (database) to create that knowledge base. It consists of:
@@ -108,6 +109,7 @@ Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the i
 │   ├── concepts/        ← mental models and domain concepts
 │   │   └── _index.md    ← alphabetical index of concept pages
 │   ├── competition/     ← competitor profiles
+│   ├── conversations/   ← interesting and valuable conversations (query results)
 │   ├── decisions/       ← decision records
 │   ├── people/          ← people and team pages
 │   ├── problems/        ← living problem tracking pages
