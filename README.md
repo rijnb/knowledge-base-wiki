@@ -1,16 +1,14 @@
-# Knowledge Base Wiki
+# Knowledge base wiki
 
 (C) 2026, Rijn Buve
 
 An LLM-maintained knowledge base for work-related notes, structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database QMD.
-
 ## Purpose
 
 The primary goal is **efficient decision intelligence**: understanding why decisions were taken, on what basis, by whom, and when. Secondary goals include mapping how technologies and systems relate, who is involved in what, and how competitors compare. And 'efficient', because the mechanism needs to be token (and environmentally) efficient.
 
 **Division of labor:** The user curates source files in `raw/`. Claude Code does all writing, cross-referencing, and bookkeeping in `wiki/`. 
-
-## In a Nutshell
+## In a nutshell
 
 Access to the knowledge base is as follows:
 - user produces raw notes and stores them in the `raw/notes` directory, or
@@ -29,8 +27,7 @@ Access to the knowledge base is as follows:
 
 The LLM tries to minimize the number of tokens spent and maximize speed, 
 by working together with QMD, instead of reading all pages itself, every time.
-
-## Getting Started
+## Getting started
 
 This knowledge base setup uses a combination of Obsidian (front-end), Claude and QMD (database) to create that knowledge base. It consists of:
 
@@ -48,7 +45,6 @@ I’ve tried to make this pretty user-friendly, so putting stuff in the ‘raw�
 - using the Obsidian Web Clipper to automatically clip articles to ‘raw/clips’ (clipper template provided in repo); this means it’s just one Shift-Cmd-O press to store an article in the right location
 - using drag-and-drop from Outlook to the ‘raw/emails’ directory to store ‘.eml’ files (Claude will use the provided conversion script to create perfect Markdowns of these); putting an alias to the email directory on your desktop makes it easy to find that directory for drag-and-drop 😊 
 - storing meeting transcripts (‘.vtt’) in ‘raw/transcripts’ (Claude will convert those to Markdown as well)
-
 ## Installation
 
 ### Obsidian
@@ -56,7 +52,6 @@ I’ve tried to make this pretty user-friendly, so putting stuff in the ‘raw�
 Download and install [Obsidian](https://obsidian.md) (free, Mac/Windows/Linux). Open this directory as a vault: **Open folder as vault** → select the repo root. Obsidian reads the `wiki/` pages with wikilink navigation, graph view, and backlinks out of the box — no plugins required for basic use.
 
 For web clipping, install the [Obsidian Web Clipper](https://obsidian.md/clipper) browser extension and import `Obsidian Web Clipper Template.json` from this repo as a clipper template.
-
 ### QMD
 
 QMD is the local semantic search engine that lets Claude query thousands of notes efficiently without reading every file.
@@ -88,8 +83,7 @@ Register QMD as a Claude Code MCP server by adding the following to your `~/.cla
 ```
 
 Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the index current. Claude will prompt you to do this at the end of every ingest.
-
-## Directory Structure
+## Directory structure (condensed)
 
 ```
 <root>/
@@ -101,9 +95,10 @@ Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the i
 │   ├── notes/          ← notes, 1:1s, and people-specific files
 │   └── transcripts/    ← meeting and conversation transcripts (.vtt)
 ├── wiki/
-│   ├── index.md        ← catalog of all wiki pages
+│   ├── index.md        ← top-level navigation to section indexes
 │   ├── log.md          ← append-only ingest log
 │   ├── concepts/       ← mental models and domain concepts
+│   │   └── _index.md   ← alphabetical index of concept pages
 │   ├── competition/    ← competitor profiles
 │   ├── decisions/      ← decision records
 │   ├── people/         ← people and team pages
@@ -114,8 +109,7 @@ Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the i
 └── README.md           ← this file
 ```
 The directories `raw` and `wiki` are not stored in Git. Create them manually before first use.
-
-## Wiki Entity Types
+## Wiki entity types
 
 | Type            | Purpose                                                    |
 | --------------- | ---------------------------------------------------------- |
@@ -126,10 +120,13 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | **Problems**    | Active and past problems                                   |
 | **Projects**    | Active and past initiatives                                |
 | **Systems**     | System, products, platforms, and services                  |
-
-## Key Rules
+## Key rules
 
 - `raw/` is immutable — Claude never writes there (except `raw/confluence/` as a fetch cache).
 - `wiki/` is LLM-owned — Claude writes, the user reads.
-- `wiki/index.md` and `wiki/log.md` are updated on every ingest.
+- The relevant `wiki/<type>/_index.md` and `wiki/log.md` are updated on every ingest.
 - Hand-curated content in wiki pages is never deleted or overwritten.
+## Recognition
+
+- Andrej Karpahty - for his original idea for the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
+- Rob van der Most - for brainstorming and experimenting with this idea.

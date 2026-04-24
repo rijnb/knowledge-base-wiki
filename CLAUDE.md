@@ -1,4 +1,4 @@
-# Knowledge Base Wiki
+# Knowledge base wiki
 (C) 2026, Rijn Buve
 
 This is an LLM-maintained knowledge base for work. The primary goal is **decision intelligence**: understanding why decisions were taken, on what basis, by whom, and when. 
@@ -6,7 +6,7 @@ This is an LLM-maintained knowledge base for work. The primary goal is **decisio
 Secondary goals are mapping how technologies and systems relate, who is involved in what, and how competitors compare. 
 
 The user curates the 'raw' source files; the LLM never changes the 'raw' files. The LLM maintains the wiki, does all writing, cross-referencing, and bookkeeping. The user reads the wiki, but never, or hardly ever, touches it.
-## In a Nutshell
+## In a nutshell
 
 Access to the knowledge base is as follows:
 - user produces raw notes and stores them in the `raw/notes` directory, or
@@ -25,7 +25,7 @@ Access to the knowledge base is as follows:
 
 The LLM tries to minimize the number of tokens spent and maximize speed, 
 by working together with QMD, instead of reading all pages itself, every time.
-## Directory Structure
+## Directory structure (condensed)
 
 ```
 <root>/
@@ -37,9 +37,10 @@ by working together with QMD, instead of reading all pages itself, every time.
 │   ├── notes/          ← notes, 1:1s, and people-specific files
 │   └── transcripts/    ← meeting and conversation transcripts (.vtt)
 ├── wiki/
-│   ├── index.md        ← catalog of all wiki pages
+│   ├── index.md        ← top-level navigation to section indexes
 │   ├── log.md          ← append-only ingest log
 │   ├── concepts/       ← mental models and domain concepts
+│   │   └── _index.md   ← alphabetical index of all concept pages
 │   ├── competition/    ← competitor profiles
 │   ├── decisions/      ← decision records
 │   ├── people/         ← people and team pages
@@ -50,10 +51,85 @@ by working together with QMD, instead of reading all pages itself, every time.
 └── README.md           ← this file
 ```
 
-**Rule:** `raw/` is immutable — the LLM reads from it, never writes to it (exception: `raw/confluence/` is written during Confluence fetch — treat as a fetch cache). `wiki/` is LLM-owned — the LLM writes, the user reads. Always update `wiki/index.md` and `wiki/log.md` on every ingest. `CLAUDE.md` is co-evolved by both.
+**Rule:** `raw/` is immutable — the LLM reads from it, never writes to it (exception: `raw/confluence/` is written during Confluence fetch — treat as a fetch cache). `wiki/` is LLM-owned — the LLM writes, the user reads. Always update the relevant `wiki/<type>/_index.md` and `wiki/log.md` on every ingest. `CLAUDE.md` is co-evolved by both.
 
 Only the Claude prompt and scripts are part of the Git repository, the raw notes and the generated wiki are not stored in Git.
-## Entity Types in `wiki/` (Priority Order)
+## Workflows
+
+### 1. Workflow: ingest (standard)
+
+When the user provides a source file to process, or ask to 'ingest new raw notes':
+
+1. Check the last date of file ingestion using `wiki/log.md`. The file is sorted oldest-to-newest, so you should `tail` the file to see when the last ingestion date was.
+2. Read the source files that have not been ingested yet, from `raw/`.
+3. Source files may contain links to attachments (for example, in the `_resource` directory); always read the attachments as well.
+4. Transcribe attachments if they are images or PDFs (e.g., handwritten notes, whiteboard photos) using `mcp__claude_ai_Atlassian__fetch` or a similar tool;.
+5. Save transcriptions as Markdown with YAML frontmatter to a `scanned/` in the directory where you read the source note and make sure the YAML frontmatter of the Markdown file links back to the original source note.
+6. Transcripts from meetings in `raw/transcripts` may be in VTT format. Make sure the `.vtt` are prefix with `YYYY-mm-dd` of their `mtime` and rewrite them to a proper Markdown file and store the `.md` file next to the `.vtt` file (same name, different extension). Use the tags, like speaker tags, to make it clear who said what. Subsequently ingest the Markdown file.
+7. Emails in `raw/emails/` may be in `.eml` format. Convert these to Markdown using `scripts/eml_to_md.py` for that (use `scripts/eml_to_md.py --help` to find out how the tool works).
+8. Render the email body as Markdown; preserve quoted reply threads with `>` blockquotes. Subsequently ingest the `.md` file.
+9. Identify whether the note to be ingested has a relation to these terms: competition, concepts, decisions, people, problems, projects and competitors.
+10. For each terms: create a new wiki page or update the existing one based on the ingested note. When updating existing pages: add new information and expand sections; preserve existing content; never delete or overwrite hand-curated content.
+11. When you identify contradictions between what was there and what you have added, clearly mark this contradiction with a short explanation of what contradicts and why.
+12. Cross-reference terms pages — add `[[wikilinks]]` between related pages.
+13. Update the relevant `wiki/<type>/_index.md` — add new pages (one line: link + summary); update summaries if materially changed. Keep entries alphabetically sorted.
+14. Append to end of `wiki/log.md`: `## [YYYY-MM-DD] ingest | [[<relative path>]]` followed by a 1-2 sentence brief.
+15. At the end of ingestion, ask the user: *"Refresh QMD (semantic database) index? (1) `qmd update` — text re-index, fast; (2) `qmd update && qmd embed` — text + vectors, loads ~2GB models; (3) skip"* — run only what is confirmed.
+
+A single ingested source note may easily touch 5–15, or even more, wiki pages. That is expected and desirable.
+
+After ingestion of the notes, commit the changes to Git and push to `main`.
+
+Note: if the user asks to 'ingest raw notes' (instead of new raw notes), then the user actually means to only ingest the new raw notes; do not ingest (or re-ingest) all notes, ever, without user confirmation.
+
+### 2. Workflow: ingest (Confluence via MCP)
+
+This ingestion is triggered when a Confluence URL or Confluence page title is provided:
+
+1. Fetch the page via `mcp__claude_ai_Atlassian__fetch`
+2. Save to `raw/confluence/<page-slug>.md` with frontmatter (exception to the raw/ read-only rule — this is a fetch cache):
+   ```yaml
+   ---
+   source_url: <confluence-url>
+   fetched: YYYY-MM-DD
+   ---
+   ```
+3. Proceed with standard ingest flow (above) from step 3.
+
+**Re-ingest:** 
+- If the user says "refresh this Confluence page", re-fetch, overwrite the cache, diff against the previous version, and flag any changes that affect existing wiki pages. 
+
+### 3. Workflow: query
+
+When the user asks a question:
+
+1. Use `mcp__plugin_qmd_qmd__query` to search across wiki collections (concepts, decisions, people, systems, competition). For broad questions also search the notes collection.
+2. Use `mcp__plugin_qmd_qmd__get` or `mcp__plugin_qmd_qmd__multi_get` to retrieve specific documents identified in step 1.
+3. If QMD returns no results, fall back to reading the relevant `wiki/<type>/_index.md` directly, or `wiki/index.md` for top-level navigation.
+4. Synthesize an answer with citations (`[[wiki/decisions/title]]`, `[[wiki/systems/name]]`, etc.)
+5. If the answer is a valuable artifact (comparison, analysis, non-obvious connection), file it as a new wiki page and update the index
+### 4. Workflow: health check - lint
+
+When the user asks for a health check:
+
+1. Scan for orphan pages (no inbound `[[links]]` from other pages).
+2. Flag contradictions between pages.
+3. Identify topics mentioned in multiple pages that lack their own dedicated page.
+4. Suggest data gaps and new sources worth finding.
+### 5. Workflow: bulk ingestion
+
+When processing multiple raw source files, ingest them incrementally in batches of 20 files, unless specified otherwise, date sorted newest-to-oldest.
+
+Each batch builds the wiki term pages mentioned above incrementally. After each source note, announce which topics were created or updated and update the log file (see below). 
+
+**Batch commit message format:**
+```
+wiki: ingest batch <N> — <type>/<date-range>
+```
+Example: `wiki: ingest batch 3 — notes/2025-01 to 2025-03`
+
+When a batch is done, proceed with the next batch, until all notes are processed.
+## Topic types in `wiki/` (priority order)
 
 1. **Concepts** — technologies, standards, mental models, domain vocabulary
 2. **Systems** — our products, platforms, and services
@@ -62,13 +138,13 @@ Only the Claude prompt and scripts are part of the Git repository, the raw notes
 5. **Problems** — active and past problems
 6. **Competitors** — competing companies, products, and approaches
 7. **People** — colleagues, contacts, external stakeholders, teams
-## Page Templates
+## Page templates for topics
 
 Use these rules when creating new pages:
 - **Wikilink convention:** In page body text, always use bare slugs like `[[elastic-map]]`.
 - Sections that provide links are presented bullet lists, not comma separated lists.
 - Sections that provide links but that are empty are omitted (for example, if a system has no related decisions, the `## Related decisions` section is left out entirely).
-- In `wiki/index.md` entries, use vault-relative paths: `[[wiki/systems/elastic-map]]`. 
+- In `wiki/<type>/_index.md` entries, use vault-relative paths: `[[wiki/systems/elastic-map]]`. 
 - Never mix formats. 
 - If you reference a page or a raw note, or a person, make sure you make the reference a proper Wikilink.
 - In the YAML frontmatter, make sure lists of items are using this format:
@@ -79,28 +155,42 @@ some-list:
 ```
 ### `wiki/index.md`
 
-The index paghe of the wiki is as listed below. Note that all lists in header-2 (`##`) sections must always be kept alphabetically sorted.
+Top-level navigation page — links to section indexes only. Never add individual page entries here.
 ```markdown
 ---
 type: index
 date: YYYY-MM-DD
 ---
-# Knowledge Based Index
-## Concepts
+# Knowledge Base - index
+
+Topics:
+* [[wiki/competition/_index|Competition]] — competing companies, products, and approaches
+* [[wiki/concepts/_index|Concepts]] — technologies, standards, mental models, domain vocabulary
+* [[wiki/decisions/_index|Decisions]] — why decisions were taken, on what basis, by whom, and when
+* [[wiki/people/_index|People]] — colleagues, contacts, external stakeholders, teams
+* [[wiki/problems/_index|Problems]] — active and past problems
+* [[wiki/projects/_index|Projects]] — active and past initiatives
+* [[wiki/systems/_index|Systems]] — our products, platforms, and services
+```
+
+### `wiki/<type>/_index.md`
+
+One per section (`concepts`, `decisions`, `systems`, `people`, `problems`, `projects`, `competition`). Entries must be kept alphabetically sorted. When adding a new page, add one line here; when materially changing a page summary, update the line.
+```markdown
+---
+type: index
+date: YYYY-MM-DD
+---
+# <Type> - index
+
+<One-sentence description of what this topic type covers, from the topic types list above.>
+
 - [[wiki/concepts/isa-regulation|ISA regulation]] — EU Intelligent Speed Assistance mandatory regulation; requires current speed limit data even post-subscription-expiry.
-- [[wiki/concepts/lane-level-navigation|Lane level navigation]] - LLN capabilities: visualization, positioning, guidance, closures, turn-dependent jams; HD Orbis data requirements.
-# Systems
-- [[wiki/systems/AutoStream|AutoStream]] — Real-time map data streaming service.
-## Decisions
-- [[wiki/decisions/adopt-vector-tiles|Adopting vector tiles]] — Adopted 2025-11-01, why we moved away.
-## Projects
-- [[wiki/projects/hdmap-refresh|HD map refresh]] — HD map accuracy initiative (status: *active*).
-## Problems
-- [[wiki/problems/tile-cache-latency|Tile cache latency]] — Cache latency spike in EU region.
-## Competition
-- [[wiki/competition/HERE Technologies|HERE]] — Major mapping and location data.
-## People
-- [[wiki/people/jane-smith|Jane Smith]] — Senior engineer, maps platform team.
+- [[wiki/concepts/lane-level-navigation|Lane level navigation]] — LLN capabilities: visualization, positioning, guidance, closures, turn-dependent jams; HD Orbis data requirements.
+
+---
+
+[[wiki/index|← Index]]
 ```
 ### `wiki/decisions/<slug>.md`
 
@@ -286,83 +376,7 @@ started: YYYY-MM-DD
 ```
 
 **Rule:** The `## Log` section is append-only within the page. Updates go here without touching the rest of the structure.
-
-## Workflows
-
-### 1. Workflow: Ingest (standard)
-
-When the user provides a source file to process, or ask to 'ingest new raw notes':
-
-1. Check the last date of file ingestion using `wiki/log.md`. The file is sorted oldest-to-newest, so you should `tail` the file to see when the last ingestion date was.
-2. Read the source files that have not been ingested yet, from `raw/`.
-3. Source files may contain links to attachments (for example, in the `_resource` directory); always read the attachments as well.
-4. Transcribe attachments if they are images or PDFs (e.g., handwritten notes, whiteboard photos) using `mcp__claude_ai_Atlassian__fetch` or a similar tool;.
-5. Save transcriptions as Markdown with YAML frontmatter to a `scanned/` in the directory where you read the source note and make sure the YAML frontmatter of the Markdown file links back to the original source note.
-6. Transcripts from meetings in `raw/transcripts` may be in VTT format. Make sure the `.vtt` are prefix with `YYYY-mm-dd` of their `mtime` and rewrite them to a proper Markdown file and store the `.md` file next to the `.vtt` file (same name, different extension). Use the tags, like speaker tags, to make it clear who said what. Subsequently ingest the Markdown file.
-7. Emails in `raw/emails/` may be in `.eml` format. Convert these to Markdown using `scripts/eml_to_md.py` for that (use `scripts/eml_to_md.py --help` to find out how the tool works).
-8. Render the email body as Markdown; preserve quoted reply threads with `>` blockquotes. Subsequently ingest the `.md` file.
-9. Identify whether the note to be ingested has a relation to these terms: competition, concepts, decisions, people, problems, projects and competitors.
-10. For each terms: create a new wiki page or update the existing one based on the ingested note. When updating existing pages: add new information and expand sections; preserve existing content; never delete or overwrite hand-curated content.
-11. When you identify contradictions between what was there and what you have added, clearly mark this contradiction with a short explanation of what contradicts and why.
-12. Cross-reference terms pages — add `[[wikilinks]]` between related pages.
-13. Update `wiki/index.md` — add new pages (one line: link + summary); update summaries if materially changed. Make sure section lists in the index remain alphabetically sorted. The order of the sections must never be changed.
-14. Append to end of `wiki/log.md`: `## [YYYY-MM-DD] ingest | [[<relative path>]]` followed by a 1-2 sentence brief.
-15. At the end of ingestion, ask the user: *"Refresh QMD (semantic database) index? (1) `qmd update` — text re-index, fast; (2) `qmd update && qmd embed` — text + vectors, loads ~2GB models; (3) skip"* — run only what is confirmed.
-
-A single ingested source note may easily touch 5–15, or even more, wiki pages. That is expected and desirable.
-
-After ingestion of the notes, commit the changes to Git and push to `main`.
-
-Note: if the user asks to 'ingest raw notes' (instead of new raw notes), then the user actually means to only ingest the new raw notes; do not ingest (or re-ingest) all notes, ever, without user confirmation.
-
-### 2. Workflow: Ingest (Confluence via MCP)
-
-This ingestion is triggered when a Confluence URL or Confluence page title is provided:
-
-1. Fetch the page via `mcp__claude_ai_Atlassian__fetch`
-2. Save to `raw/confluence/<page-slug>.md` with frontmatter (exception to the raw/ read-only rule — this is a fetch cache):
-   ```yaml
-   ---
-   source_url: <confluence-url>
-   fetched: YYYY-MM-DD
-   ---
-   ```
-3. Proceed with standard ingest flow (above) from step 3.
-
-**Re-ingest:** 
-- If the user says "refresh this Confluence page", re-fetch, overwrite the cache, diff against the previous version, and flag any changes that affect existing wiki pages. 
-
-### 3. Workflow: Query
-
-When the user asks a question:
-
-1. Use `mcp__plugin_qmd_qmd__query` to search across wiki collections (concepts, decisions, people, systems, competition). For broad questions also search the notes collection.
-2. Use `mcp__plugin_qmd_qmd__get` or `mcp__plugin_qmd_qmd__multi_get` to retrieve specific documents identified in step 1.
-3. If QMD returns no results, fall back to reading `wiki/index.md` directly.
-4. Synthesize an answer with citations (`[[wiki/decisions/title]]`, `[[wiki/systems/name]]`, etc.)
-5. If the answer is a valuable artifact (comparison, analysis, non-obvious connection), file it as a new wiki page and update the index
-### 4. Workflow: Health check - lint
-
-When the user asks for a health check:
-
-1. Scan for orphan pages (no inbound `[[links]]` from other pages).
-2. Flag contradictions between pages.
-3. Identify entities mentioned in multiple pages that lack their own dedicated page.
-4. Suggest data gaps and new sources worth finding.
-### 5. Workflow: Bulk Ingestion
-
-When processing multiple raw source files, ingest them incrementally in batches of 20 files, unless specified otherwise, date sorted newest-to-oldest.
-
-Each batch builds the wiki term pages mentioned above incrementally. After each source note, announce which entities were created or updated and update the log file (see below). 
-
-**Batch commit message format:**
-```
-wiki: ingest batch <N> — <type>/<date-range>
-```
-Example: `wiki: ingest batch 3 — notes/2025-01 to 2025-03`
-
-When a batch is done, proceed with the next batch, until all notes are processed.
-## log.md Format
+## log.md format
 
 This file is updated by the LLM after every ingest. It contains a oldest-to-newest list of ingestion actions. The log uses Markdown format with a header-3 (`###`) for the status message followed by a Markdown list of items that were added, changed, removed or other. Those items are always presented as a list, never comma-separated on a single line.
 
