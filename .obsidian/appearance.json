@@ -1,4 +1,7 @@
 {
   "theme": "obsidian",
-  "translucency": false
+  "translucency": false,
+  "showViewHeader": true,
+  "showRibbon": true,
+  "nativeMenus": true
 }

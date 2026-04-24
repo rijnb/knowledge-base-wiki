@@ -94,6 +94,13 @@ Installing the Claude skill isn't needed - it's part of this repo. But if you wa
 qmd skill install --global --yes   # or omit --global if you want it local-omly
 ```
 Re-run `qmd update` (and `qmd embed`) after each ingest to keep the index current. Claude will prompt you to do this at the end of every ingest.
+### Running Claude within Obsidian
+
+You can run Claude from within Obsidian using the Claudian plugin. Install the plugin simply by asking Claude to do so with the following prompt:
+```
+Claude, I want you to install the following Obsidian plugin from Github. First, I want you to review ihe plugin
+and make sure it is safe to install. And if it is safe, install it. This is the repo: https://github.com/YishenTu/claudian
+```
 ## Directory structure (condensed)
 
 ```

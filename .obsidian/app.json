@@ -7,5 +7,6 @@
   "newFileFolderPath": "raw/notes",
   "attachmentFolderPath": "/raw/notes/_resources",
   "newLinkFormat": "absolute",
-  "uriCallbacks": true
+  "uriCallbacks": true,
+  "showInlineTitle": false
 }
