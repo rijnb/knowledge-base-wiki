@@ -2,7 +2,7 @@
 
 (C) 2026, Rijn Buve
 
-An LLM-maintained knowledge base for work-related notes, structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database QMD.
+This repository contains a solid implementation of [Andrej Karpathy's LLM Wiki idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f). It is an LLM-maintained knowledge base for work-related notes, structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd).
 ## Purpose
 
 The primary goal is **efficient decision intelligence**: understanding why decisions were taken, on what basis, by whom, and when. Secondary goals include mapping how technologies and systems relate, who is involved in what, and how competitors compare. And 'efficient', because the mechanism needs to be token (and environmentally) efficient.
