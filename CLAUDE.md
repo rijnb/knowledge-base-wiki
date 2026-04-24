@@ -24,7 +24,7 @@ Access to the knowledge base is as follows:
 	- user asks a high-level question
 	- LLM queries semantic database (with the `qmd` skill) for relevant page links (fast/token-efficient)
 	- LLM processes `qmd`-suggested pages and produces answer to user
-	- LLM store valuable conversations in `raw/conversations` to extend the knowledge base
+	- LLM store valuable conversations in `raw/conversations` to extend the knowledge base (after user confirmation)
 
 The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them, makes this implementation of a knowledge significantly faster and more token efficient than when it's using Markdown files only.
 ## Directory structure (condensed)
@@ -175,6 +175,7 @@ date: YYYY-MM-DD
 Topics:
 * [[wiki/competition/_index|Competition]] — competing companies, products, and approaches
 * [[wiki/concepts/_index|Concepts]] — technologies, standards, mental models, domain vocabulary
+* [[wiki/conversations/_index|Conversations]] — valuable results of earlier queries/conversations
 * [[wiki/decisions/_index|Decisions]] — why decisions were taken, on what basis, by whom, and when
 * [[wiki/people/_index|People]] — colleagues, contacts, external stakeholders, teams
 * [[wiki/problems/_index|Problems]] — active and past problems
