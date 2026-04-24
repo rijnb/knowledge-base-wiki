@@ -77,10 +77,6 @@ qmd update                # text index (fast, ~seconds)
 qmd update && qmd embed   # + vector embeddings (slow; needed for semantic search)
 ```
 
-Install the Claude skill:
-```sh
-qmd skill install --global --yes   # or omit --global if you want it local-omly
-```
 Register QMD as a Claude Code MCP server by adding the following to your `~/.claude/claude_desktop_config.json` (or equivalent Claude config):
 
 ```json
@@ -94,7 +90,11 @@ Register QMD as a Claude Code MCP server by adding the following to your `~/.cla
 }
 ```
 
-Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the index current. Claude will prompt you to do this at the end of every ingest.
+Installing the Claude skill isn't needed - it's part of this repo. But if you want to do it manually (again):
+```sh
+qmd skill install --global --yes   # or omit --global if you want it local-omly
+```
+Re-run `qmd update` (and `qmd embed`) after each ingest to keep the index current. Claude will prompt you to do this at the end of every ingest.
 ## Directory structure (condensed)
 
 ```
