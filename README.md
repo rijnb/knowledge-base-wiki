@@ -65,10 +65,14 @@ brew install qmd
 Then initialise the index in this directory:
 
 ```sh
-qmd update          # text index (fast, ~seconds)
-qmd update && qmd embed   # + vector embeddings (slow, loads ~2 GB models; needed for semantic search)
+qmd update                # text index (fast, ~seconds)
+qmd update && qmd embed   # + vector embeddings (slow; needed for semantic search)
 ```
 
+Install the Claude skill:
+```sh
+qmd skill install --global --yes   # or omit --global if you want it local-omly
+```
 Register QMD as a Claude Code MCP server by adding the following to your `~/.claude/claude_desktop_config.json` (or equivalent Claude config):
 
 ```json
@@ -112,7 +116,7 @@ Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the i
 └── README.md            ← this file
 ```
 The directories `raw` and `wiki` are not stored in Git. Create them manually before first use.
-## Wiki entity types
+## Wiki topic types
 
 | Type            | Purpose                                                    |
 | --------------- | ---------------------------------------------------------- |
@@ -131,5 +135,5 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 - Hand-curated content in wiki pages is never deleted or overwritten.
 ## Recognition
 
-- Andrej Karpahty - for his original idea for the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
+- Andrej Karpathy - for his original idea for the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
 - Rob van der Most - for brainstorming and experimenting with this idea.
