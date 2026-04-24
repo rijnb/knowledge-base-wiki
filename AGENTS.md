@@ -1,1 +1,1 @@
-You have to read CLAUDE.md as well!
+Please study AGENTS.md to learn about this repository.

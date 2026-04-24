@@ -121,15 +121,16 @@ Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the i
 The directories `raw` and `wiki` are not stored in Git. Create them manually before first use.
 ## Wiki topic types
 
-| Type            | Purpose                                                    |
-| --------------- | ---------------------------------------------------------- |
-| **Concepts**    | Technologies, standards, mental models, domain vocabulary  |
-| **Competitors** | Competing companies, products, and approaches              |
-| **Decisions**   | Why decisions were taken, on what basis, by whom, and when |
-| **People**      | Colleagues, contacts, external stakeholders, teams         |
-| **Problems**    | Active and past problems                                   |
-| **Projects**    | Active and past initiatives                                |
-| **Systems**     | System, products, platforms, and services                  |
+| Type              | Purpose                                                    |
+| ----------------- | ---------------------------------------------------------- |
+| **Concepts**      | Technologies, standards, mental models, domain vocabulary  |
+| **Competitors**   | Competing companies, products, and approaches              |
+| **Conversations** | Valuable results of earlier queries/conversations          |
+| **Decisions**     | Why decisions were taken, on what basis, by whom, and when |
+| **People**        | Colleagues, contacts, external stakeholders, teams         |
+| **Problems**      | Active and past problems                                   |
+| **Projects**      | Active and past initiatives                                |
+| **Systems**       | System, products, platforms, and services                  |
 ## Key rules
 
 - `raw/` is immutable — Claude never writes there (except `raw/confluence/` as a fetch cache).
