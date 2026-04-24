@@ -13,7 +13,7 @@ Access to the knowledge base is as follows:
 - user uses the Obsidian Web Clipper to store notes in `raw/clips`, or
 - user stores `.vtt` meetings transscripts in `raw/transcripts`, or
 - user drags `.eml` emails to `raw/emails`, or
-- user stored handwritten notes or scanned pages (PDF, JPG) in `raw/journals`
+- user stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`
 - user asks to ingest (new) raw notes
 - LLM ingests raw notes and updates all relevant wiki-pages in `wiki/`
 - LLM updates QMD (semantic database), after user confirmation
@@ -33,7 +33,7 @@ by working together with QMD, instead of reading all pages itself, every time.
 │   ├── clips/          ← web articles and saved pages (web clipper)
 │   ├── confluence/     ← pages fetched from Atlassian Confluence (fetch cache)
 │   ├── emails/         ← email threads (.elm)
-│   ├── journals/       ← handwritten pages, whiteboards
+│   ├── scans/          ← handwritten pages, whiteboards
 │   ├── notes/          ← notes, 1:1s, and people-specific files
 │   └── transcripts/    ← meeting and conversation transcripts (.vtt)
 ├── wiki/
