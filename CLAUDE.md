@@ -6,27 +6,7 @@ This is an LLM-maintained knowledge base for work. The primary goal is **decisio
 Secondary goals are mapping how technologies and systems relate, who is involved in what, and how competitors compare. 
 
 The user curates the 'raw' source files; the LLM never changes the 'raw' files. The LLM maintains the wiki, does all writing, cross-referencing, and bookkeeping. The user reads the wiki, but never, or hardly ever, touches it.
-## In a nutshell
 
-Access to the knowledge base is as follows:
-- **create and collect notes** 
-	- user produces raw notes and stores them in the `raw/notes` directory, or
-	- user uses the Obsidian Web Clipper to store notes in `raw/clips`, or
-	- user stores `.vtt` meeting transcripts in `raw/transcripts`, or
-	- user drags `.eml` emails to `raw/emails`, or
-	- user stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`
-- **ingest notes**
-	- user asks to ingest (new) raw notes
-	- LLM transcribes non-Markdown `raw/transcripts` (`.vtt`) and `raw/scans` (`.pdf/.jpg`) to Markdown (in `transcribed` directories)
-	- LLM ingests raw notes and updates all relevant wiki topic pages in `wiki/`
-	- LLM updates the semantic database `qmd` and runs a health check to keep the knowledge base lean and clean (after user confirmation)
-- **query wiki** 
-	- user asks a high-level question
-	- LLM queries semantic database (with the `qmd` skill) for relevant page links (fast/token-efficient)
-	- LLM processes `qmd`-suggested pages and produces answer to user
-	- LLM store valuable conversations in `raw/conversations` to extend the knowledge base (after user confirmation)
-
-The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them, makes this implementation of a knowledge significantly faster and more token efficient than when it's using Markdown files only.
 ## Directory structure (condensed)
 
 ```
