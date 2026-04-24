@@ -19,7 +19,7 @@ Access to the knowledge base is as follows:
 	- user stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`
 - **ingest notes**
 	- user asks to ingest (new) raw notes
-	- LLM transcribes non-Markdown `raw/transcripts` (`.vtt`) and `raw/scans` (`.pdf/.jpg`) to Markdown (in `transcribed` directories)
+	- LLM transcribes non-Markdown `raw/transcripts` (`.vtt`) and `raw/scans` (`.pdf/.jpg`) to Markdown
 	- LLM ingests raw notes and updates all relevant wiki topic pages in `wiki/`
 	- LLM updates the semantic database `qmd` and runs a health check to keep the knowledge base lean and clean (after user confirmation)
 - **query wiki** 
