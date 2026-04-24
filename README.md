@@ -70,11 +70,10 @@ Register all `raw/` and `wiki/` subdirectories as QMD collections:
 ./scripts/qmd-sync-collections.sh
 ```
 
-Then build the index:
+Then build the index (this can take a while!):
 
 ```sh
-qmd update                # text index (fast, ~seconds)
-qmd update && qmd embed   # + vector embeddings (slow; needed for semantic search)
+qmd update && qmd embed   
 ```
 
 Register QMD as a Claude Code MCP server by adding the following to your `~/.claude/claude_desktop_config.json` (or equivalent Claude config):
