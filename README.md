@@ -87,27 +87,29 @@ Re-run `qmd update` (and optionally `qmd embed`) after each ingest to keep the i
 
 ```
 <root>/
+├── config/              ← config file for Obsidian web clipper
+├── scripts/             ← helper scripts for CLAUDE.md
 ├── raw/
-│   ├── clips/          ← web articles and saved pages (web clipper)
-│   ├── confluence/     ← pages fetched from Atlassian Confluence (fetch cache)
-│   ├── emails/         ← email threads (.eml)
-│   ├── scans/          ← handwritten pages, whiteboards
+│   ├── clips/           ← web articles and saved pages (web clipper)
+│   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)
+│   ├── emails/          ← email threads (.eml)
+│   ├── scans/           ← handwritten pages, whiteboards
 │   │   └── transcribed/ ← transcribed scans (LLM-generated Markdown)
-│   ├── notes/          ← notes, 1:1s, and people-specific files
-│   └── transcripts/    ← meeting and conversation transcripts (.vtt)
+│   ├── notes/           ← notes, 1:1s, and people-specific files
+│   └── transcripts/     ← meeting and conversation transcripts (.vtt)
 ├── wiki/
-│   ├── index.md        ← top-level navigation to section indexes
-│   ├── log.md          ← append-only ingest log
-│   ├── concepts/       ← mental models and domain concepts
-│   │   └── _index.md   ← alphabetical index of concept pages
-│   ├── competition/    ← competitor profiles
-│   ├── decisions/      ← decision records
-│   ├── people/         ← people and team pages
-│   ├── problems/       ← living problem tracking pages
-│   ├── projects/       ← living project tracking pages
-│   └── systems/        ← living system reference pages
-├── CLAUDE.md           ← schema and workflow instructions for Claude Code
-└── README.md           ← this file
+│   ├── index.md         ← top-level navigation to section indexes
+│   ├── log.md           ← append-only ingest log
+│   ├── concepts/        ← mental models and domain concepts
+│   │   └── _index.md    ← alphabetical index of concept pages
+│   ├── competition/     ← competitor profiles
+│   ├── decisions/       ← decision records
+│   ├── people/          ← people and team pages
+│   ├── problems/        ← living problem tracking pages
+│   ├── projects/        ← living project tracking pages
+│   └── systems/         ← living system reference pages
+├── CLAUDE.md            ← schema and workflow instructions for Claude Code
+└── README.md            ← this file
 ```
 The directories `raw` and `wiki` are not stored in Git. Create them manually before first use.
 ## Wiki entity types

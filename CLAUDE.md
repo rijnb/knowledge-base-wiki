@@ -29,27 +29,29 @@ by working together with QMD, instead of reading all pages itself, every time.
 
 ```
 <root>/
+├── config/              ← config file for Obsidian web clipper
+├── scripts/             ← helper scripts for CLAUDE.md
 ├── raw/
-│   ├── clips/          ← web articles and saved pages (web clipper)
-│   ├── confluence/     ← pages fetched from Atlassian Confluence (fetch cache)
-│   ├── emails/         ← email threads (.elm)
-│   ├── notes/          ← notes, 1:1s, and people-specific files
-│   ├── scans/          ← handwritten pages, whiteboards
+│   ├── clips/           ← web articles and saved pages (web clipper)
+│   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)
+│   ├── emails/          ← email threads (.elm)
+│   ├── notes/           ← notes, 1:1s, and people-specific files
+│   ├── scans/           ← handwritten pages, whiteboards
 │   │   └── transcribed/ ← transcribed scans (LLM-generated Markdown)
-│   └── transcripts/    ← meeting and conversation transcripts (.vtt)
+│   └── transcripts/     ← meeting and conversation transcripts (.vtt)
 ├── wiki/
-│   ├── index.md        ← top-level navigation to section indexes
-│   ├── log.md          ← append-only ingest log
-│   ├── concepts/       ← mental models and domain concepts
-│   │   └── _index.md   ← alphabetical index of all concept pages
-│   ├── competition/    ← competitor profiles
-│   ├── decisions/      ← decision records
-│   ├── people/         ← people and team pages
-│   ├── problems/       ← living problem tracking pages
-│   ├── projects/       ← living project tracking pages
-│   └── systems/        ← living system reference pages
-├── CLAUDE.md           ← schema and workflow instructions for Claude Code
-└── README.md           ← this file
+│   ├── index.md         ← top-level navigation to section indexes
+│   ├── log.md           ← append-only ingest log
+│   ├── concepts/        ← mental models and domain concepts
+│   │   └── _index.md    ← alphabetical index of all concept pages
+│   ├── competition/     ← competitor profiles
+│   ├── decisions/       ← decision records
+│   ├── people/          ← people and team pages
+│   ├── problems/        ← living problem tracking pages
+│   ├── projects/        ← living project tracking pages
+│   └── systems/         ← living system reference pages
+├── CLAUDE.md            ← schema and workflow instructions for Claude Code
+└── README.md            ← this file
 ```
 
 **Rule:** `raw/` is immutable — the LLM reads from it, never writes to it (exception: `raw/confluence/` is written during Confluence fetch — treat as a fetch cache). `wiki/` is LLM-owned — the LLM writes, the user reads. Always update the relevant `wiki/<type>/_index.md` and `wiki/log.md` on every ingest. `CLAUDE.md` is co-evolved by both.

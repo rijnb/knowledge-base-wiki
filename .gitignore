@@ -1,9 +1,12 @@
-.claude/settings.local.json
-.obsidian/plugins/
-.obsidian/workspace.json
 .agents/
-.idea/
+.claude/settings.local.json
 .gitnexus/
+.idea/
+.obsidian/plugins/
+.obsidian/appearance.json
+.obsidian/community-plugins.json
+.obsidian/core-plugins.json
+.obsidian/workspace.json
 docs/
 raw/
 wiki/
