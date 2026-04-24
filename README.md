@@ -76,7 +76,7 @@ Then build the index (this can take a while!):
 qmd update && qmd embed   
 ```
 
-Register QMD as a Claude Code MCP server (simply ask Claude to read this `README.md` and install it for you):
+Register QMD as a Claude Code MCP server by adding the following to your `~/.claude/claude_desktop_config.json` (or equivalent Claude config):
 
 ```json
 {
