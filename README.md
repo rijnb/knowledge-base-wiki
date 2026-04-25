@@ -47,13 +47,17 @@ I’ve tried to make this pretty user-friendly, so putting stuff in the ‘raw�
 - using the Obsidian Web Clipper to automatically clip articles to ‘raw/clips’ (clipper template provided in repo); this means it’s just one Shift-Cmd-O press to store an article in the right location
 - using drag-and-drop from Outlook to the ‘raw/emails’ directory to store ‘.eml’ files (Claude will use the provided conversion script to create perfect Markdowns of these); putting an alias to the email directory on your desktop makes it easy to find that directory for drag-and-drop 😊 
 - storing meeting transcripts (‘.vtt’) in ‘raw/transcripts’ (Claude will convert those to Markdown as well)
+### Personalizing your setup
+
+You can provide personal info on who you are, what you do and what your focus is, in `config/personal_info.md`. This file will be picked up by Claude to make responses even more relevant to you.
+
 ## Installation
 
 ### Obsidian
 
 Download and install [Obsidian](https://obsidian.md) (free, Mac/Windows/Linux). Open this directory as a vault: **Open folder as vault** → select the repo root. Obsidian reads the `wiki/` pages with wikilink navigation, graph view, and backlinks out of the box — no plugins required for basic use.
 
-For web clipping, install the [Obsidian Web Clipper](https://obsidian.md/clipper) browser extension and import `Obsidian Web Clipper Template.json` from this repo as a clipper template.
+For web clipping, install the [Obsidian Web Clipper](https://obsidian.md/clipper) browser extension and import `obsidian_webclipper_template.json` from this repo as a clipper template.
 ### QMD
 
 QMD is the local semantic search engine that lets Claude query thousands of notes efficiently without reading every file.

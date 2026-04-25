@@ -1,5 +1,8 @@
 # Workflows
 
+Before your start, read the file `config/personal_info.md` (it may not exist, which is OK).
+Use the information from that file to make your responses more relevant to me.
+
 Use the appropriate `knowledge-base` skill for each action:
 - **Ingest** (notes, Confluence, bulk) — `knowledge-base-ingest` skill
 - **Query** — `knowledge-base-query` skill (default: use this when the user asks any question)
