@@ -1,8 +1,10 @@
 ---
-tags: daily
+tags:
+  - daily
+date: "{{date:YYYY-MM-DD}}"
 ---
 
-# [[<% tp.date.now("YYYY-MM-DD", 0, tp.file.title, "YYYY-MM-DD") %>]]
+# {{date:YYYY-MM-DD}} - Notes
 
 ## Notes
 -

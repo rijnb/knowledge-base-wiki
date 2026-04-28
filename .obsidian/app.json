@@ -8,7 +8,7 @@
   "attachmentFolderPath": "/raw/notes/_resources",
   "newLinkFormat": "absolute",
   "uriCallbacks": true,
-  "showInlineTitle": true,
+  "showInlineTitle": false,
   "mobileToolbarCommands": [
     "editor:undo",
     "editor:redo",
@@ -35,7 +35,7 @@
     "editor:configure-toolbar"
   ],
   "foldIndent": true,
-  "trashOption": "system",
+  "trashOption": "local",
   "userIgnoreFilters": [
     "wiki/log.md",
     "wiki/index.md",
