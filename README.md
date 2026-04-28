@@ -3,11 +3,13 @@
 (C) 2026, Rijn Buve
 
 This repository contains a solid implementation of [Andrej Karpathy's LLM Wiki idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f). It is an LLM-maintained knowledge base for work-related notes, structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd).
+
 ## Purpose
 
 The primary goal is **efficient decision intelligence**: understanding why decisions were taken, on what basis, by whom, and when. Secondary goals include mapping how technologies and systems relate, who is involved in what, and how competitors compare. And 'efficient', because the mechanism needs to be token (and environmentally) efficient.
 
 **Division of labor:** The user curates source files in `raw/`. Claude Code does all writing, cross-referencing, and bookkeeping in `wiki/`. 
+
 ## In a nutshell
 
 Access to the knowledge base is as follows:
@@ -29,6 +31,7 @@ Access to the knowledge base is as follows:
 	- LLM store valuable conversations in `raw/conversations` to extend the knowledge base
 
 The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them, makes this implementation of a knowledge significantly faster and more token efficient than when it's using Markdown files only.
+
 ## Getting started
 
 This knowledge base setup uses a combination of Obsidian (front-end), Claude and QMD (database) to create that knowledge base. It consists of:
@@ -47,6 +50,7 @@ I’ve tried to make this pretty user-friendly, so putting stuff in the ‘raw�
 - using the Obsidian Web Clipper to automatically clip articles to ‘raw/clips’ (clipper template provided in repo); this means it’s just one Shift-Cmd-O press to store an article in the right location
 - using drag-and-drop from Outlook to the ‘raw/emails’ directory to store ‘.eml’ files (Claude will use the provided conversion script to create perfect Markdowns of these); putting an alias to the email directory on your desktop makes it easy to find that directory for drag-and-drop 😊 
 - storing meeting transcripts (‘.vtt’) in ‘raw/transcripts’ (Claude will convert those to Markdown as well)
+
 ### Personalizing your setup
 
 You can provide personal info on who you are, what you do and what your focus is, in `config/personal_info.md`. This file will be picked up by Claude to make responses even more relevant to you.
@@ -58,6 +62,7 @@ You can provide personal info on who you are, what you do and what your focus is
 Download and install [Obsidian](https://obsidian.md) (free, Mac/Windows/Linux). Open this directory as a vault: **Open folder as vault** → select the repo root. Obsidian reads the `wiki/` pages with wikilink navigation, graph view, and backlinks out of the box — no plugins required for basic use.
 
 For web clipping, install the [Obsidian Web Clipper](https://obsidian.md/clipper) browser extension and import `obsidian_webclipper_template.json` from this repo as a clipper template.
+
 ### QMD
 
 QMD is the local semantic search engine that lets Claude query thousands of notes efficiently without reading every file.
@@ -98,6 +103,7 @@ Installing the Claude skill isn't needed - it's part of this repo. But if you wa
 qmd skill install --global --yes   # or omit --global if you want it local-omly
 ```
 Re-run `qmd update` (and `qmd embed`) after each ingest to keep the index current. Claude will prompt you to do this at the end of every ingest.
+
 ### Running Claude within Obsidian
 
 You can run Claude from within Obsidian using the Claudian plugin. Install the plugin simply by asking Claude to do so with the following prompt:
@@ -105,6 +111,7 @@ You can run Claude from within Obsidian using the Claudian plugin. Install the p
 Claude, I want you to install the following Obsidian plugin from Github. First, I want you to review ihe plugin
 and make sure it is safe to install. And if it is safe, install it. This is the repo: https://github.com/YishenTu/claudian
 ```
+
 ## Directory structure (condensed)
 
 ```
@@ -135,6 +142,7 @@ and make sure it is safe to install. And if it is safe, install it. This is the 
 └── README.md            ← this file
 ```
 The directories `raw` and `wiki` are not stored in Git. Create them manually before first use.
+
 ## Wiki topic types
 
 | Type              | Purpose                                                    |
@@ -147,12 +155,14 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | **Problems**      | Active and past problems                                   |
 | **Projects**      | Active and past initiatives                                |
 | **Systems**       | System, products, platforms, and services                  |
+
 ## Key rules
 
 - `raw/` is immutable — Claude never writes there (except `raw/confluence/` as a fetch cache).
 - `wiki/` is LLM-owned — Claude writes, the user reads.
 - The relevant `wiki/<type>/_index.md` and `wiki/log.md` are updated on every ingest.
 - Hand-curated content in wiki pages is never deleted or overwritten.
+
 ## Recognition
 
 - Andrej Karpathy - for his original idea for the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
