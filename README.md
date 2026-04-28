@@ -53,7 +53,15 @@ I’ve tried to make this pretty user-friendly, so putting stuff in the ‘raw�
 
 ### Personalizing your setup
 
-You can provide personal info on who you are, what you do and what your focus is, in `config/personal_info.md`. This file will be picked up by Claude to make responses even more relevant to you.
+You can provide personal info on who you are, what you do and what your focus is, in `config/personal_info.md`. This file will be picked up by Claude to make responses even more relevant to you. This could be something like this:
+
+```
+My name is ...
+I am ...
+My main focus points are:
+- ...
+- ...
+```
 
 ## Installation
 
