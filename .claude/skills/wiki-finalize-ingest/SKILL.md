@@ -16,9 +16,9 @@ ls .import/batch-log-*.jsonl 2>/dev/null
 ls .import/batch-import-*.txt 2>/dev/null
 ```
 
-- **No `batch-log-*.jsonl` files AND no `batch-import-*.txt` files**: nothing to finalize. Tell the user: "No batch import logs or files found. Nothing to finalize — run `wiki-ingest` to start a new import."
-- **Unclaimed `batch-import-*.txt` files still exist** (not `.claimed.`): warn the user: "Some batches have not been processed yet. Make sure all `wiki-ingest-next-batch` sessions have finished before finalizing." Use `AskUserQuestion` to ask: "Proceed anyway (partial finalization) or abort?"
-- **Only `batch-log-*.jsonl` files exist**: all batches are done — proceed to Step 1.
+- **No `.import/batch-log-N.jsonl` files AND no `.import/batch-import-N.txt` files**: nothing to finalize. Tell the user: "No batch import logs or files found. Nothing to finalize — run `wiki-ingest` to start a new import."
+- **Unclaimed `.import/batch-import-N.txt` files still exist** (not `.claimed.`): warn the user: "Some batches have not been processed yet. Make sure all `wiki-ingest-next-batch` sessions have finished before finalizing." Use `AskUserQuestion` to ask: "Proceed anyway (partial finalization) or abort?"
+- **Only `.import/batch-log-N.jsonl` files exist**: all batches are done — proceed to Step 1 of finalizing.
 
 ## Step 1 — Merge logs
 
@@ -37,7 +37,7 @@ This rebuilds `wiki/index.md` and all `wiki/<topic>/_index.md` files.
 
 ## Step 3 — Report stubs
 
-Use this command to scan markdown files for stubs:
+Use this command to scan Markdown files for stubs:
 ```bash
 find wiki -name "*.md" -exec awk '/^---/{p++} p==1{print FILENAME": "$0} p==2{p=0; nextfile}' {} + | grep "stub:.*true"
 ```

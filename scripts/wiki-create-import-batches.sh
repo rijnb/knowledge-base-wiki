@@ -83,7 +83,7 @@ else
     ingested=""
 fi
 
-all_files=$(find "$NOTES_DIR" \( -name "*.md" -o -name "*.doc" -o -name "*.docx" -o -name "*.txt" -o -name "*.vtt" -o -name "*.eml" \) | sort)
+all_files=$(find "$NOTES_DIR" \( -name "*.md" -o -name "*.pdf" -o -name "*.doc" -o -name "*.docx" -o -name "*.txt" -o -name "*.vtt" -o -name "*.eml" \) | sort)
 
 remaining=()
 while IFS= read -r line; do

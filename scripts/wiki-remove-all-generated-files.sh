@@ -38,14 +38,8 @@ fi
 
 find "$ROOT/wiki" -mindepth 1 ! -name ".gitkeep" -delete
 find "$ROOT/.import" -mindepth 1 ! -name ".gitkeep" -delete
-find "$ROOT/raw" -name converted -type d -exec "rm" {} \;
+find "$ROOT/raw" -name converted -type d -exec rm -rf "{}" \;
+"$SCRIPT_DIR/qmd-reset-collections.sh" --force
 
-echo "Done. wiki/ and .import/ removed."
-
-if [[ "$FORCE" == true ]]; then
-  "$SCRIPT_DIR/qmd-reset-collections.sh" --force
-else
-  "$SCRIPT_DIR/qmd-reset-collections.sh"
-fi
-
+echo "Done; comverted/, wiki/ and .import/ removed; QMD reset."
 echo "Run prompt 'ingest new notes' in the LLM to recreate the wiki."

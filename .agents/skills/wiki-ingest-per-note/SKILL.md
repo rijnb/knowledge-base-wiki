@@ -17,21 +17,30 @@ For each file you need to ingest, first use a sub-agent to convert it and any of
 - **`.eml` emails** in `raw/emails/`:
   - run `python3 scripts/convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted`.
   - Ingest only `.md` files.
-- **pdfs, images, .docx and attachments (files linked from in note)**: for each of these files that is not already markdown:
+- **pdf** in `raw/<section>` or in a `_resources` directory:
   1. Check if `<file_dir>/converted/<filename>.md` exists — if so, skip.
-  2. Otherwise, convert to markdown using the appropriate tool (e.g. `mcp__claude_ai_Atlassian__fetch` for PDFs/images or convert it yourself).
-     Save to `<file_dir>/converted/<filename>.md` with frontmatter: `source` (path to original), `converted` (now).
-  3. Append to the bottom of the source note:
-     ```markdown
-     ### AI converted attachments
-     | Original attachment | Converted to markdown |
-     | [[original link]] | [[converted link]] |
+  2. Convert it to Markdown using `pdftotext`:
      ```
-     (One table row per converted attachment; if the section already exists, append additional rows.)
+     pdftotext "<pdf-path>/<pdf-file>.pdf" "<pdf-path>/converted/<pdf-file>.md"
 
-After conversion of any file to markdown make sure you ingest that new file as well as the original. So, if you read `x.md` and it has an attachment to `y.jpg` and `y.jpg.md` gets generated during the conversion, then you must now ingest not just `x.md` but also `y.jpg.md`.
+     ```
+  2. Check if the converted markdown file is garbled or not (check the first 25 lines). If it seems to be garbled, re-convert the PDF using your LLM vision. Overwrite the converted `.md` file in that case with your conversion.
+- **images, .docx** and other files in `_resources`: for each of these files that is not already Markdown:
+  1. Check if `<file_dir>/converted/<filename>.md` exists — if so, skip.
+  2. Otherwise, convert to Markdown using the appropriate tool (do not install new tools!), or use LLM vision.
+     Save the result as Markdown to `<file_dir>/converted/<filename>.md` with frontmatter: `source` (path to original), `converted` (now).
 
-Then, for each markdown file to ingest:
+If you converted the attachment of a note, always append to the bottom of the source note:
+```markdown
+### AI converted attachments
+| Original attachment | Converted to Markdown |
+| [[original link]] | [[converted link]] |
+```
+(One table row per converted attachment; if the section already exists, append additional rows.)
+
+After conversion of any file to Markdown make sure you ingest that new file as well as the original. So, if you read `x.md` and it has an attachment to `y.jpg` and `y.jpg.md` gets generated during the conversion, then you must now ingest not just `x.md` but also `y.jpg.md`.
+
+Then, for each Markdown file to ingest:
 - The top-level Wiki topic list is: competition, concepts, decisions, people, problems, projects, systems.
 - **Only use topics from that list.** Never create a `wiki/<dir>/` that is not one of those topics — not "systems", not "architecture", not anything else.
 - Topic definitions — use these to classify correctly and avoid cross-topic confusion:
@@ -70,7 +79,7 @@ Then, for each markdown file to ingest:
   - The number of pages touched is reasonable relative to the length and density of the note (a dense meeting note should produce many pages, not one or two).
   - If any of these checks fail, go back and fill in the gaps before moving on.
 - Do NOT update `wiki/<topic>/_index.md` during a session (deferred to finalization).
-- **After finishing each note's Wiki pages** (immediately, before moving to the next note): append its log entry to the batch log file specified in your prompt. Write one JSON object per line — one for the original file, plus one for each converted markdown file produced from it:
+- **After finishing each note's Wiki pages** (immediately, before moving to the next note): append its log entry to the batch log file specified in your prompt. Write one JSON object per line — one for the original file, plus one for each converted Markdown file produced from it:
 ```json
 {"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/filename.md","summary":"One-sentence description.","pages_created":["wiki/concepts/NavSDK.md"],"pages_updated":["wiki/people/Jane Smith.md"]}
 ```
