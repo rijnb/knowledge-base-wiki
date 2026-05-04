@@ -2,10 +2,10 @@ config/personal_info.md
 .claude/settings.local.json
 .claude/skills/qmd
 .agents/
-.junie/
 .claudian/
 .gitnexus/
 .idea/
+.junie/
 .obsidian/plugins/
 .obsidian/appearance.json
 .obsidian/community-plugins.json
