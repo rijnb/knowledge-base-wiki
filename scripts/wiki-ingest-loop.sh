@@ -23,7 +23,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HUD_CACHE="$HOME/.claude/plugins/claude-hud/.usage-cache.json"
 CACHE_TTL_SECONDS=120
-THRESHOLD=80
+THRESHOLD=85
 WAIT_SECS=1800
 MAX_ERRORS=5
 MAX_LOOPS=25
@@ -46,7 +46,7 @@ Options:
   --agent AGENT              LLM agent command to use (default: claude).
                              Allowed values: claude (Anthropic Claude),
                                              junie  (JetBrains Junie).
-  --threshold N              Usage percentage ceiling (default: 80). Each phase starts only
+  --threshold N              Usage percentage ceiling (default: 85). Each phase starts only
                              when current usage is strictly below this value.
   --max-errors N             Maximum number of LLM agent command errors before the script
                              exits (default: 5). Each error pauses for confirmation first.
