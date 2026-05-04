@@ -162,7 +162,7 @@ QMD is the local semantic search engine that lets LLM query thousands of notes e
 Install via Homebrew:
 
 ```sh
-brew install qmd
+npm install -g @tobilu/qmd
 ```
 
 Register all `raw/` and `wiki/` subdirectories as QMD collections:

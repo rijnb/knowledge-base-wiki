@@ -5,6 +5,11 @@ description: Use when about to process individual notes during Wiki ingestion �
 
 # Per-Note Ingestion
 
+> **⚠ MANDATORY LOGGING — DO NOT SKIP**
+> After finishing all Wiki pages for each note, you MUST immediately append a JSON log entry to the batch log file specified in your prompt (e.g. `Write session logs to .import/batch-log-1.jsonl`).
+> **Do this after every single note — do not wait until all notes are done.**
+> Failing to write the log entry means the note is treated as unprocessed and will be re-ingested.
+
 For each file you need to ingest, first use a sub-agent to convert it and any of its attachments if needed:
 - **`.vtt` transcripts** in `raw/transcripts/`:
   - run `python3 scripts/convert-vtt-to-md.py --input-dir raw/transcripts --output-dir raw/transcripts/converted`.
@@ -70,3 +75,5 @@ Then, for each markdown file to ingest:
 {"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/filename.md","summary":"One-sentence description.","pages_created":["wiki/concepts/NavSDK.md"],"pages_updated":["wiki/people/Jane Smith.md"]}
 ```
   The batch log path and session number were given to you in your prompt (e.g. `Write session logs to .import/batch-log-1.jsonl`). Do not wait until all notes are processed — write each entry as you go.
+
+> **⚠ REMINDER:** You MUST write this log entry before moving on to the next note. This is not optional. If you skip it, the batch pipeline cannot track progress and the note will be re-ingested later.
