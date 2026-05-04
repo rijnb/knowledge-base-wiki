@@ -27,7 +27,7 @@ THRESHOLD=80
 WAIT_SECS=1800
 MAX_ERRORS=5
 MAX_LOOPS=25
-MAX_FILES_PER_BATCH=50
+MAX_FILES_PER_BATCH=20
 ERROR_COUNT=0
 LOOP_COUNT=0
 AGENT=claude
@@ -50,10 +50,11 @@ Options:
                              when current usage is strictly below this value.
   --max-errors N             Maximum number of LLM agent command errors before the script
                              exits (default: 5). Each error pauses for confirmation first.
-  --max-loops N              Maximum number of batch loops to run (default: 25). The
-                             script exits cleanly after this many iterations.
-  --max-files-per-batch N    Maximum number of files per batch (default: 50). Passed to
-                             wiki-create-import-batches.sh when partitioning notes.
+  --max-loops N              Maximum number of batch loops to run (default: 25).
+                             The script exits cleanly after this many iterations.
+  --max-files-per-batch N    Maximum number of files per batch (default: 20 for claude,
+                             5 for junie). Passed to wiki-create-import-batches.sh when
+                             partitioning notes.
   --help                     Show this help and exit.
 
 Data sources (in order of preference):
@@ -86,6 +87,13 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
 done
+
+# Apply agent-specific defaults for options not explicitly set by the user.
+if [ "$AGENT" = "junie" ]; then
+    : "${MAX_FILES_PER_BATCH:=5}"
+else
+    : "${MAX_FILES_PER_BATCH:=20}"
+fi
 
 # Warn when Junie is selected: the integration is experimental and untested.
 if [ "$AGENT" = "junie" ]; then
