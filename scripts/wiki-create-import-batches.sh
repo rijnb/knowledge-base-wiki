@@ -28,11 +28,11 @@ usage() {
     exit 0
 }
 
-MAX_SIZE=50
+MAX_FILES_PER_BATCH=50
 FORCE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --max-files-per-batch) MAX_SIZE="$2"; shift 2 ;;
+        --max-files-per-batch) MAX_FILES_PER_BATCH="$2"; shift 2 ;;
         --force)    FORCE=true; shift ;;
         --help|-h)  usage ;;
         *) echo "ERROR: Unknown argument: $1" >&2; echo "Run with --help for usage." >&2; exit 1 ;;
@@ -94,26 +94,26 @@ done < <(comm -23 <(echo "$all_files") <(echo "$ingested"))
 scanned=$(printf '%s\n' "$all_files" | grep -c . || true)
 total=${#remaining[@]}
 already_imported=$(( scanned - total ))
-num_batches=$(( (total + MAX_SIZE - 1) / MAX_SIZE ))
+num_batches=$(( (total + MAX_FILES_PER_BATCH - 1) / MAX_FILES_PER_BATCH ))
 [[ $total -eq 0 ]] && num_batches=0
 
 echo "wiki/log.jsonl    : $log_status"
 echo "Files scanned     : $scanned"
 echo "Already imported  : $already_imported"
 echo "New (un-ingested) : $total"
-echo "Max files/batch   : $MAX_SIZE (--max-files-per-batch)"
+echo "Max files/batch   : $MAX_FILES_PER_BATCH (--max-files-per-batch)"
 echo "Batches to create : $num_batches"
 
 if [[ $total -eq 0 ]]; then
     echo "Nothing to ingest."
-    echo "RESULT: total=0 new=0 already_imported=$already_imported batches=0 max_files_per_batch=$MAX_SIZE status=empty"
+    echo "RESULT: total=0 new=0 already_imported=$already_imported batches=0 max_files_per_batch=$MAX_FILES_PER_BATCH status=empty"
     exit 3
 fi
 
 mkdir -p "$IMPORT_DIR"
 
 for idx in "${!remaining[@]}"; do
-    batch=$(( idx / MAX_SIZE + 1 ))
+    batch=$(( idx / MAX_FILES_PER_BATCH + 1 ))
     echo "${remaining[$idx]}" >> "$IMPORT_DIR/batch-import-$batch.txt"
 done
 
@@ -125,4 +125,4 @@ for ((i=1; i<=num_batches; i++)); do
 done
 
 echo ""
-echo "RESULT: total=$total new=$total already_imported=$already_imported batches=$num_batches max_files_per_batch=$MAX_SIZE status=ready"
+echo "RESULT: total=$total new=$total already_imported=$already_imported batches=$num_batches max_files_per_batch=$MAX_FILES_PER_BATCH status=ready"
