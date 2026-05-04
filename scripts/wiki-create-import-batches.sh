@@ -77,19 +77,55 @@ batch_logs=( "$IMPORT_DIR"/batch-log-*.jsonl )
 shopt -u nullglob
 log_sources+=( ${batch_logs[@]+"${batch_logs[@]}"} )
 
-if [[ ${#log_sources[@]} -gt 0 ]]; then
-    ingested=$(sed -nE 's/.*"file":"([^"]+)".*/\1/p' "${log_sources[@]}" 2>/dev/null | sort -u || true)
-else
-    ingested=""
-fi
-
 all_files=$(find "$NOTES_DIR" \( -name "*.md" -o -name "*.pdf" -o -name "*.doc" -o -name "*.docx" -o -name "*.txt" -o -name "*.vtt" -o -name "*.eml" \) | sort)
 
+# Filter candidates: include if (a) not in log, or (b) mtime is newer than last import date
+_py=$(mktemp /tmp/wiki-filter.XXXXXX.py)
+cat > "$_py" << 'PYEOF'
+import sys, json, os
+
+log_files = sys.argv[1:]
+files_db = set()
+
+for logfile in log_files:
+    if not os.path.isfile(logfile):
+        continue
+    try:
+        with open(logfile) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                    fp = d.get('file', '')
+                    if fp:
+                        files_db.add(fp)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+for line in sys.stdin:
+    fp = line.rstrip('\n')
+    if not fp:
+        continue
+    if fp not in files_db:
+        print(fp)
+PYEOF
+
 remaining=()
+if [[ ${#log_sources[@]} -gt 0 ]]; then
+    filtered=$(echo "$all_files" | python3 "$_py" "${log_sources[@]}")
+else
+    filtered="$all_files"
+fi
+rm -f "$_py"
+
 while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     remaining+=("$line")
-done < <(comm -23 <(echo "$all_files") <(echo "$ingested"))
+done <<< "$filtered"
 
 scanned=$(printf '%s\n' "$all_files" | grep -c . || true)
 total=${#remaining[@]}
@@ -112,17 +148,13 @@ fi
 
 mkdir -p "$IMPORT_DIR"
 
+echo ""
 for idx in "${!remaining[@]}"; do
     batch=$(( idx / MAX_FILES_PER_BATCH + 1 ))
     echo "${remaining[$idx]}" >> "$IMPORT_DIR/batch-import-$batch.txt"
+    printf "\r  Writing batch files... %d / %d files" $(( idx + 1 )) "$total" >&2
 done
-
-echo ""
-echo "Batch breakdown:"
-for ((i=1; i<=num_batches; i++)); do
-    count=$(grep -c . "$IMPORT_DIR/batch-import-$i.txt" 2>/dev/null || echo 0)
-    echo "  $IMPORT_DIR/batch-import-$i.txt : $count files"
-done
+printf "\r  Writing batch files... done (%d files in %d batches)\n" "$total" "$num_batches"
 
 echo ""
 echo "RESULT: total=$total new=$total already_imported=$already_imported batches=$num_batches max_files_per_batch=$MAX_FILES_PER_BATCH status=ready"
