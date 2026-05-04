@@ -5,7 +5,7 @@
 #   bash scripts/wiki-create-import-batches.sh [--max-files-per-batch N] [--force] [--help]
 #
 # Options:
-#   --max-files-per-batch N   Maximum number of files per batch (default: 50)
+#   --max-files-per-batch N   Maximum number of files per batch (default: 10)
 #   --force                   Remove existing batch/log files before running
 #   --help                    Print this help and exit
 #
@@ -28,7 +28,7 @@ usage() {
     exit 0
 }
 
-MAX_FILES_PER_BATCH=50
+MAX_FILES_PER_BATCH=10
 FORCE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in

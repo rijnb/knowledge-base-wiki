@@ -27,7 +27,7 @@ THRESHOLD=80
 WAIT_SECS=1800
 MAX_ERRORS=5
 MAX_LOOPS=25
-MAX_FILES_PER_BATCH=20
+MAX_FILES_PER_BATCH=10
 ERROR_COUNT=0
 LOOP_COUNT=0
 AGENT=claude
@@ -52,8 +52,8 @@ Options:
                              exits (default: 5). Each error pauses for confirmation first.
   --max-loops N              Maximum number of batch loops to run (default: 25).
                              The script exits cleanly after this many iterations.
-  --max-files-per-batch N    Maximum number of files per batch (default: 20 for claude,
-                             5 for junie). Passed to wiki-create-import-batches.sh when
+  --max-files-per-batch N    Maximum number of files per batch (default: 10 for claude,
+                             3 for junie). Passed to wiki-create-import-batches.sh when
                              partitioning notes.
   --help                     Show this help and exit.
 
@@ -90,9 +90,9 @@ done
 
 # Apply agent-specific defaults for options not explicitly set by the user.
 if [ "$AGENT" = "junie" ]; then
-    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=5}
+    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=3}
 else
-    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=20}
+    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=10}
 fi
 
 # Warn when Junie is selected: the integration is experimental and untested.
