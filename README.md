@@ -1,4 +1,4 @@
-# Knowledge base wiki
+# Knowledge base Wiki
 
 (C) 2026, Rijn Buve
 
@@ -48,7 +48,7 @@ These skills commands and natural-language triggers are available:
 | "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
 | "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
 | "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
-| "add missing [topic]"     | Create a new wiki page for a missing concept, person, system, etc. |
+| "add missing [topic]"     | Create a new Wiki page for a missing concept, person, system, etc. |
 | "clear ingest batches"    | Remove incomplete batch files to restart a failed ingest |
 | ask any question          | Query the knowledge base (default behavior) |
 
@@ -88,7 +88,7 @@ This knowledge base setup uses a combination of Obsidian (front-end), LLM and QM
 - A `raw` directory, which is my territory: You put all my notes there; AI can only read this, not write.
 - A `wiki` directory, which is consolidated information about the raw notes; this is almost exclusively AI territory.
 
-After putting all your notes in the raw directories, the magic words for LLM are: “ingest new raw notes”. That will create the wiki and update the semantic database (QMD). After that you can ask all sorts of questions to LLM and it can efficiently reason over 100s or 1000s of pages (I’m using 2700 pages now and it seems to work just fine).
+After putting all your notes in the raw directories, the magic words for LLM are: “ingest new raw notes”. That will create the Wiki and update the semantic database (QMD). After that you can ask all sorts of questions to LLM and it can efficiently reason over 100s or 1000s of pages (I’m using 2700 pages now and it seems to work just fine).
 
 The keyword here is AI efficiency: if you have 10s of notes, you don’t need any of this. If you have 100s, you’re already burning tokens. If you have 1000s of notes, LLM won’t handle this well without a semantic database backing the search.
 
@@ -127,7 +127,7 @@ If the file is missing, or it contains no info topics, default topics will be us
 
 ### Re-creating the Wiki from Scratch
 
-To re-create the entire wiki, you can simply remove the `wiki/` directory, `/clear` the LLM conversations and ask it to `ingest new raw notes`. This will restart the entire ingestion process. Note that for large amounts of notes, this may be expensive and take a long time.
+To re-create the entire Wiki, you can simply remove the `wiki/` directory, `/clear` the LLM conversations and ask it to `ingest new raw notes`. This will restart the entire ingestion process. Note that for large amounts of notes, this may be expensive and take a long time.
 
 **Important:* The ingesting notes is a relatively expensive operation (as the LLM necessasrily needs to relate many notes to distill and create Wiki topics). If you are using the knowledge base on multipl client you _can_ recreate the entire Wiki from scratch if you just share the `raw/` directory, but it may be more cost effective to simply share the `wiki/` directory as well. The file `wiki/log.jsonl` keeps track of which notes have been ingested, so anhy client can run ingestions to keep the Wiki up to date.
 
@@ -151,7 +151,7 @@ Try it out. It's quite user-friendly.
 
 ### Obsidian
 
-Download and install [Obsidian](https://obsidian.md) (free, Mac/Windows/Linux). Open this directory as a vault: **Open folder as vault** → select the repo root. Obsidian reads the `wiki/` pages with wikilink navigation, graph view, and backlinks out of the box — no plugins required for basic use.
+Download and install [Obsidian](https://obsidian.md) (free, Mac/Windows/Linux). Open this directory as a vault: **Open folder as vault** → select the repo root. Obsidian reads the `wiki/` pages with WikiLink navigation, graph view, and backlinks out of the box — no plugins required for basic use.
 
 For web clipping, install the [Obsidian Web Clipper](https://obsidian.md/clipper) browser extension and import `obsidian_webclipper_template.json` from this repo as a clipper template.
 
@@ -256,7 +256,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 - `raw/` is immutable — LLM never writes there (except `raw/confluence/` as a fetch cache).
 - `wiki/` is LLM-owned — LLM writes, the user reads.
 - The relevant `wiki/<type>/_index.md` files are rebuilt and `wiki/log.jsonl` is updated on every finalized ingest.
-- Hand-curated content in wiki pages is never deleted or overwritten.
+- Hand-curated content in Wiki pages is never deleted or overwritten.
 
 ## Recognition
 
