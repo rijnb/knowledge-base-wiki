@@ -508,6 +508,9 @@ run_phase_batches() {
         usage_before=$(wait_for_capacity "before batch $iteration of $total")
 
         echo "Starting /wiki-ingest-next-batch..."
+        if [ "$AGENT" = "claude" ]; then
+            echo "(Claude may be silent for a long time and only show output after it's done... patience...)"
+        fi
         if ! run_llm "/wiki-ingest-next-batch"; then
             echo "ERROR: /wiki-ingest-next-batch failed on batch $iteration.  Current time: $(date '+%H:%M:%S')" >&2
             echo "Check $PROJECT_DIR/.import/ for current state." >&2
