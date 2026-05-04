@@ -220,6 +220,10 @@ wait_with_cancel() {
     saved_tty=$(stty -g 2>/dev/null) || { sleep "$timeout"; return 0; }
     stty -echo 2>/dev/null
 
+    # Flush any characters buffered in stdin while the LLM was running
+    # (e.g. accidental Enter presses), so they don't trigger instant continuation.
+    while IFS= read -r -s -n 1 -t 0 _flush_ch 2>/dev/null; do :; done
+
     printf "\n  Pausing %ds before %s — press Enter to continue now, ESC to stop.\n" "$timeout" "$label"
 
     local elapsed=0
@@ -230,7 +234,14 @@ wait_with_cancel() {
         printf "\r  Continuing in %2ds  (Enter = now, ESC = stop)" "$remaining"
 
         local ch
-        IFS= read -r -s -n 1 -t 1 ch 2>/dev/null || true
+        IFS= read -r -s -n 1 -t 1 ch 2>/dev/null
+        local read_rc=$?
+
+        if [ "$read_rc" -ne 0 ]; then
+            # Timed out — no key was pressed, just advance the clock
+            elapsed=$(( elapsed + 1 ))
+            continue
+        fi
 
         if [[ "$ch" == $'\x1b' ]]; then
             cancelled=true
