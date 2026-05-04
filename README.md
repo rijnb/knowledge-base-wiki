@@ -197,6 +197,13 @@ qmd skill install --global --yes   # or omit --global if you want it local-omly
 ```
 Re-run `qmd update` (and `qmd embed`) after each ingest to keep the index current. LLM will prompt you to do this at the end of every ingest.
 
+### Install `pdftotext`
+
+The LLM can convert PDFs to text, but that's quite expensive. If you have `pdftotext` installed, the ingest skill will first try that and only fall back to LLM vision if the result is not looking good (e.g. for handwritten notes). Install `pdftotext` using:
+```
+brew install poppler
+```
+
 ### Running Claude within Obsidian
 
 You can run Claude from within Obsidian using the Claudian plugin. Install the plugin simply by asking Claude to do so with the following prompt:
