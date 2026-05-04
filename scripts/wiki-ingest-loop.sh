@@ -90,9 +90,9 @@ done
 
 # Apply agent-specific defaults for options not explicitly set by the user.
 if [ "$AGENT" = "junie" ]; then
-    MAX_FILES_PER_BATCH=5
+    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=5}
 else
-    MAX_FILES_PER_BATCH=20
+    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=20}
 fi
 
 # Warn when Junie is selected: the integration is experimental and untested.
