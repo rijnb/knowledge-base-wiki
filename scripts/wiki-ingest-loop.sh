@@ -137,14 +137,10 @@ print(int(v))
 "
 }
 
-# Resolve current 5-hour usage %, preferring a fresh API call.
-# Junie doesn't expose a comparable usage endpoint, so we report 0%
-# for it — effectively disabling throttling for that agent.
+# Resolve current 5-hour usage % for Claude, preferring a fresh API call.
+# Returns non-zero (and prints nothing) if usage cannot be determined.
+# Not applicable to Junie — callers must skip throttling for non-Claude agents.
 get_usage() {
-    if [ "$AGENT" != "claude" ]; then
-        echo 0
-        return 0
-    fi
     local pct
     if pct=$(fetch_from_api 2>/dev/null); then
         echo "$pct"
@@ -167,14 +163,20 @@ next_attempt_time() {
 
 # Block until 5-hour usage is below THRESHOLD.
 # Prints the usage percentage to stdout once cleared; all other output to stderr.
+# For non-Claude agents, usage cannot be retrieved — throttling is skipped entirely.
 wait_for_capacity() {
     local context="$1"
+
+    if [ "$AGENT" != "claude" ]; then
+        echo "Usage throttling not available for agent '$AGENT' — skipping check." >&2
+        return 0
+    fi
+
     while true; do
         local pct
         if ! pct=$(get_usage); then
-            echo "Could not retrieve usage data ($context) — retrying at $(next_attempt_time)..." >&2
-            sleep "$WAIT_SECS"
-            continue
+            echo "Could not retrieve usage data ($context) — continuing anyway." >&2
+            return 0
         fi
         echo "5-hour usage: ${pct}%  (threshold: ${THRESHOLD}%)" >&2
         if [ "$pct" -lt "$THRESHOLD" ]; then
@@ -240,6 +242,14 @@ count_batch_files() {
     echo "${#files[@]}"
 }
 
+# Return the numeric suffix of the lowest-numbered batch file, or "" if none.
+get_first_batch_number() {
+    local first
+    first=$(ls "$PROJECT_DIR/.import"/batch-import-*.txt 2>/dev/null | sort | head -1) || true
+    [ -z "$first" ] && return 0
+    basename "$first" | grep -oE '[0-9]+' | head -1
+}
+
 # Invoke the selected LLM agent with a slash-command prompt.
 # Usage: run_llm "<slash-command>"
 run_llm() {
@@ -253,6 +263,7 @@ run_llm() {
 show_plan() {
     local needs_ingest="$1"
     local batch_count="$2"
+    local first_batch_num="${3:-}"
 
     echo ""
     echo "=== Wiki Ingest Pipeline ==="
@@ -284,10 +295,19 @@ BANNER
     echo ""
 
     if [ "$needs_ingest" = true ]; then
+        echo "  ► FRESH INGEST — starting from scratch"
+        echo ""
         echo "  Phase 0  convert raw files         (VTT transcripts → MD, EML emails → MD)"
         echo "  Phase 1  partition new notes       (wiki-create-import-batches.sh — may exit early if nothing to ingest)"
         echo "  Phase 2  /wiki-ingest-next-batch   (batch count determined after phase 1)"
     else
+        if [ -n "$first_batch_num" ]; then
+            printf "  ► CONTINUING EXISTING INGEST — resuming from batch %s  (%s batch(es) remaining)\n" \
+                "$first_batch_num" "$batch_count"
+        else
+            printf "  ► CONTINUING EXISTING INGEST — %s batch(es) remaining\n" "$batch_count"
+        fi
+        echo ""
         echo "  Phase 1  partition new notes       (skipped — ${batch_count} batch file(s) already exist)"
         echo "  Phase 2  /wiki-ingest-next-batch   ${batch_count} batch(es)"
     fi
@@ -532,8 +552,13 @@ main() {
         needs_ingest=true
     fi
 
+    local first_batch_num=""
+    if [ "$batch_count" -gt 0 ]; then
+        first_batch_num=$(get_first_batch_number)
+    fi
+
     echo "Start time: $(date '+%H:%M:%S')"
-    show_plan "$needs_ingest" "$batch_count"
+    show_plan "$needs_ingest" "$batch_count" "$first_batch_num"
     confirm_or_exit
 
     if [ "$needs_ingest" = true ]; then
