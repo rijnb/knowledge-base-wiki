@@ -552,6 +552,13 @@ run_phase_batches() {
             wait_label="next batch"
         fi
 
+        # Skip the inter-batch pause if the next iteration would immediately hit
+        # the max-loops limit — no point waiting only to exit right away.
+        if [ "$LOOP_COUNT" -ge "$MAX_LOOPS" ] && [ "$remaining_after" -gt 0 ]; then
+            echo "INFO: Max loops ($MAX_LOOPS) reached — stopping without waiting."
+            return 2
+        fi
+
         if ! wait_with_cancel 60 "$wait_label"; then
             break
         fi
