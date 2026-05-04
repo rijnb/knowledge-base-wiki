@@ -2,7 +2,9 @@
 
 (C) 2026, Rijn Buve
 
-This repository contains a solid implementation of [Andrej Karpathy's LLM Wiki idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f). It is an LLM-maintained knowledge base for work-related notes, structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd).
+This repository contains a solid implementation of [Andrej Karpathy's idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) for a LLM-maintained knowledge base, based on a Wiki. This implementation is meant for work-related notes, structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd).
+
+The implementation supports Anthropic Claude and Jetbrains Junie (both CLI) to ingest notes into the knowledge base.
 
 ## Purpose
 
@@ -10,27 +12,29 @@ The primary goal is **efficient decision intelligence**: understanding why decis
 
 **Division of labor:** 
 - The user curates source files in `raw/`.
-- LLM does all writing, cross-referencing, and bookkeeping in `wiki/`. 
+- LLM does all writing, cross-referencing, and bookkeeping in `wiki/`.
+- Obsidian is the UI for entering/accessing notes and asking questions (e.g. through `Claudian`).
 
 ## In a nutshell
 
-Access to the knowledge base is as follows:
-- **create and collect notes** 
-	- user produces raw notes and stores them in the `raw/notes` directory, or
-	- user uses the Obsidian Web Clipper to store notes in `raw/clips`, or
-	- user stores `.vtt` meeting transcripts in `raw/transcripts`, or
-	- user drags `.eml` emails to `raw/emails`, or
-	- user stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`
-- **ingest notes**
-	- user asks to "ingest new raw notes" or "ingest Confluence page `<URL>`"
-	- LLM converts non-Markdown inputs: `.vtt` transcripts → `raw/transcripts/converted/`, `.eml` emails → `raw/emails/converted/`, `.pdf/.jpg` scans → `raw/scans/converted/`
-	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session)
-	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `_index.md` files, and run post-processing (QMD re-index + health check)
-- **query wiki**
-	- user asks a high-level question
-	- LLM queries semantic database (with the `qmd` skill) for relevant page links (fast/token-efficient)
-	- LLM processes suggested pages and produces answer to user
-	- LLM stores valuable conversations in `wiki/conversations/` to extend the knowledge base
+- **Create and collect notes:** 
+	- User produces raw notes and stores them in the `raw/notes` directory.
+	- User uses the Obsidian Web Clipper to store notes in `raw/clips`.
+	- User stores `.vtt` meeting transcripts in `raw/transcripts`.
+	- User drags `.eml` emails to `raw/emails`.
+	- User stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
+
+- **Ingest notes:**
+	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.loop.sh`.
+	- LLM converts non-Markdown inputs: `.vtt` transcripts → `raw/transcripts/converted/`, `.eml` emails → `raw/emails/converted/`, `.pdf/.jpg` scans → `raw/scans/converted/`.
+	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
+	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `_index.md` files, and run post-processing (QMD re-index + health check).
+   
+- **Query wiki:**
+	- User asks a high-level question.
+	- LLM queries semantic database (with the `qmd` skill) for relevant page links (fast/token-efficient).
+	- LLM processes suggested pages and produces answer to user.
+	- LLM stores valuable conversations in `wiki/conversations/` to extend the knowledge base.
 
 The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them, makes this implementation of a knowledge significantly faster and more token efficient than when it's using Markdown files only.
 
@@ -50,7 +54,7 @@ These skills commands and natural-language triggers are available:
 
 The `ingest next batch` and `finalize ingest` commands are only needed for importing large amounts of notes. LLM will notify you when you `ingest new notes` and it sees it requires batched importing.
 
-### Pro-tip: use `wiki-ingest-loop.sh` to ingest multiple files
+### Pro-tip 1: use `wiki-ingest-loop.sh` to ingest multiple files
 
 You can use the script "scripts/wiki-ingest-loop.sh" to start ingesting new notes. The advantage of this script is that it will try to ingest new notes in batches, and wait if your 5h limit has been reached. It will first execute "ingest new notes" followed by as many "ingest next batch" prompts as necessary (up to a specified maximum). Use "--help" for help for this script.
 
@@ -61,13 +65,28 @@ scripts/wiki-ingest.loop.sh [--agent claude|junie]
 
 Use `wiki-ingest.loop.sh --help` for more options.
 
+### Pro-tip 2: use `wiki-lint-check.py` to health-check your knowledge base
+
+After each ingestion, the system can automatically run a health check on the knowledge base. It performs an automated, basic health-check and will check for missing topics, inconsistencies etc. using the LLM (takes time and tokens).
+
+You can also run the basic health-check (which does not use the LLM) manually, by simply executing:
+```
+scripts/wiki-lint-check.py --interactive
+```
+
+The `--interactive` flag offers an easy-to-use UI to deal with:
+- Broken links: these can be removed, flagged or simply replaced with plain text.
+- Orphaned pages: these can be deleted, or kept (marked with `orphan: false`).
+- Stub pages (that were identified by the LLM but never filled in): these can be deleted, or kept (no longer marked as `stub: true`).
+
+Using the `--interactive` option, you should be able to keep your knowledge base 100% free of false positive alerts so it's easy to see if the knowledge base is still sound or not.
 
 ## Getting started
 
 This knowledge base setup uses a combination of Obsidian (front-end), LLM and QMD (database) to create that knowledge base. It consists of:
 
-- a `raw` directory, which is my territory: I put all my notes there; AI can only read this, not write
-- a `wiki` directory, which is consolidated information about the raw notes; this is almost exclusively AI territory
+- A `raw` directory, which is my territory: You put all my notes there; AI can only read this, not write.
+- A `wiki` directory, which is consolidated information about the raw notes; this is almost exclusively AI territory.
 
 After putting all your notes in the raw directories, the magic words for LLM are: “ingest new raw notes”. That will create the wiki and update the semantic database (QMD). After that you can ask all sorts of questions to LLM and it can efficiently reason over 100s or 1000s of pages (I’m using 2700 pages now and it seems to work just fine).
 
@@ -76,10 +95,19 @@ The keyword here is AI efficiency: if you have 10s of notes, you don’t need an
 The directory is readable as an Obsidian vault. This is on purpose. Obsidian makes it really easy to add Markdown notes and read them, or do simple searches. You can use a LLM CLI next to it to query the same directory. Alternatively, you can run the whole thing in VS Code. 
 
 I’ve tried to make this pretty user-friendly, so putting stuff in the ‘raw’ directory is as easy as:
-- using Obsidian to create Markdown notes, and storing PDF or JPG attachments in the ‘\_resources’ directory (LLM will parse those and recognize handwriting and convert those to Markdown as well)
-- using the Obsidian Web Clipper to automatically clip articles to ‘raw/clips’ (clipper template provided in repo); this means it’s just one Shift-Cmd-O press to store an article in the right location
-- using drag-and-drop from Outlook to the ‘raw/emails’ directory to store ‘.eml’ files (LLM will use the provided conversion script to create perfect Markdowns of these); putting an alias to the email directory on your desktop makes it easy to find that directory for drag-and-drop 😊 
-- storing meeting transcripts (‘.vtt’) in ‘raw/transcripts’ (LLM will convert those to Markdown as well)
+- Using Obsidian to create Markdown notes, and storing PDF or JPG attachments in the ‘\_resources’ directory (LLM will parse those and recognize handwriting and convert those to Markdown as well).
+- Using the Obsidian Web Clipper to automatically clip articles to ‘raw/clips’ (clipper template provided in repo); this means it’s just one Shift-Cmd-O press to store an article in the right location.
+- Using drag-and-drop from Outlook to the ‘raw/emails’ directory to store ‘.eml’ files (LLM will use the provided conversion script to create perfect Markdowns of these); putting an alias to the email directory on your desktop makes it easy to find that directory for drag-and-drop 😊.
+- Storing meeting transcripts (‘.vtt’) in ‘raw/transcripts’ (LLM will convert those to Markdown as well).
+
+### Ingesting notes for the first time
+
+If you have pre-existing notes and you want to ingest them into the knowledge base, make sure they are located in the correct `raw/*` directories first. See the directory structure below. Then run:
+```
+scripts/wiki-ingest-loop.sh [--agent claude|junie]
+```
+
+This starts the ingestion loop and tries to deal with rate limiting (e.g. the Claude 5-hour token limit).
 
 ### Personalizing your setup
 
@@ -100,6 +128,8 @@ If the file is missing, or it contains no info topics, default topics will be us
 ### Re-creating the Wiki from Scratch
 
 To re-create the entire wiki, you can simply remove the `wiki/` directory, `/clear` the LLM conversations and ask it to `ingest new raw notes`. This will restart the entire ingestion process. Note that for large amounts of notes, this may be expensive and take a long time.
+
+**Important:* The ingesting notes is a relatively expensive operation (as the LLM necessasrily needs to relate many notes to distill and create Wiki topics). If you are using the knowledge base on multipl client you _can_ recreate the entire Wiki from scratch if you just share the `raw/` directory, but it may be more cost effective to simply share the `wiki/` directory as well. The file `wiki/log.jsonl` keeps track of which notes have been ingested, so anhy client can run ingestions to keep the Wiki up to date.
 
 ### Checking Your Database
 
@@ -185,12 +215,12 @@ and make sure it is safe to install. And if it is safe, install it. This is the 
 │   ├── clips/           ← web articles and saved pages (web clipper)
 │   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)
 │   ├── emails/          ← email threads (.eml)
-│   │   └── converted/   ← converted emails (LLM-generated Markdown)
+│   │   └── converted/   ← LLM generated: emails converted to Markdown
 │   ├── scans/           ← handwritten pages, whiteboards
-│   │   └── converted/   ← converted scans (LLM-generated Markdown)
+│   │   └── converted/   ← LLM generated: scans converted to Markdown
 │   ├── notes/           ← notes, 1:1s, and people-specific files
 │   └── transcripts/     ← meeting and conversation transcripts (.vtt)
-│       └── converted/   ← converted transcripts (LLM-generated Markdown)
+│       └── converted/   ← LLM generated: transcripts converted to Markdown
 ├── wiki/
 │   ├── index.md         ← top-level navigation to section indexes
 │   ├── log.jsonl        ← append-only ingest log (JSON Lines)
