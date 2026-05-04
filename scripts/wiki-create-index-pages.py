@@ -130,7 +130,7 @@ def build_root_index(wiki_dir: str, today: str, dry_run: bool, verbose: bool) ->
         "|---------|-------------|\n",
     ]
     for topic_key, (type_name, description) in TOPIC_DIRS.items():
-        link = f"[[wiki/{topic_key}/_index|{type_name}]]"
+        link = f"[[wiki/{topic_key}/_index\\|{type_name}]]"
         rows.append(f"| {link} | {description} |\n")
 
     content = "".join(rows)
