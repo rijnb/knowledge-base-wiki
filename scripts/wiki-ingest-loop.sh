@@ -87,6 +87,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Warn when Junie is selected: the integration is experimental and untested.
+if [ "$AGENT" = "junie" ]; then
+    echo ""
+    echo "⚠️  WARNING: --agent junie is currently EXPERIMENTAL and has not been fully tested."
+    echo "   Behaviour may be unreliable or produce unexpected results."
+    echo ""
+    echo -n "Press Enter to continue, or Ctrl-C to abort... "
+    read -r _junie_confirm
+    echo ""
+fi
+
 # Fetch utilization % from Anthropic API using the keychain OAuth token.
 # Prints an integer 0-100 on success, or returns non-zero on failure.
 fetch_from_api() {
