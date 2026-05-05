@@ -584,6 +584,7 @@ run_phase_batches() {
     local total="$1"
     local iteration=0
     local stopped_early=false
+    local effective_total=$(( total < MAX_BATCHES ? total : MAX_BATCHES ))
 
     while compgen -G "$PROJECT_DIR/.import/batch-import-*.txt" > /dev/null 2>&1; do
         iteration=$(( iteration + 1 ))
@@ -593,7 +594,7 @@ run_phase_batches() {
         remaining=$(count_batch_files)
         echo ""
         if [ "$MAX_BATCHES_EXPLICIT" = true ]; then
-            echo "=== Phase 2 - INGEST BATCHES: batch $CURRENT_BATCH of $MAX_BATCHES  ($remaining total batches remaining) ==="
+            echo "=== Phase 2 - INGEST BATCHES: batch $CURRENT_BATCH of $effective_total  ($remaining total batches remaining) ==="
         else
             echo "=== Phase 2 - INGEST BATCHES: batch $iteration of $total  ($remaining remaining, loop $CURRENT_BATCH/$MAX_BATCHES) ==="
         fi
@@ -622,7 +623,7 @@ run_phase_batches() {
         if [ "$MAX_BATCHES_EXPLICIT" = true ]; then
             local remaining_after_label
             remaining_after_label=$(count_batch_files)
-            batch_label="batch $CURRENT_BATCH of $MAX_BATCHES ($remaining_after_label total batches remaining)"
+            batch_label="batch $CURRENT_BATCH of $effective_total ($remaining_after_label total batches remaining)"
         else
             batch_label="batch $iteration of $total"
         fi
