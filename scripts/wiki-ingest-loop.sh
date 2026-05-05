@@ -346,9 +346,21 @@ get_first_batch_number() {
 run_llm() {
     local prompt="$1"
     case "$AGENT" in
-        claude) claude --dangerously-skip-permissions --output-format stream-json --include-partial-messages --verbose \
-            --print "$prompt" \
-            | jq -rj 'select(.type == "stream_event" and .event.delta.type? == "text_delta") | .event.delta.text' ;;
+        claude) claude --dangerously-skip-permissions --output-format stream-json --verbose \
+            --include-partial-messages --print "$prompt" \
+            | jq -rj '
+              if .type == "stream_event" then
+                if .event.delta.type? == "text_delta" then
+                  .event.delta.text
+                elif .event.type? == "content_block_start" and .event.content_block.type? == "tool_use" then
+                  "\n⚙ \(.event.content_block.name)…\n"
+                elif .event.type? == "message_stop" then
+                  "\n"
+                else empty
+                end
+              else empty
+              end
+            ' ;;
         junie)  junie --brave --skip-update-check --output-format=text --task "$prompt" ;;
     esac
 }
