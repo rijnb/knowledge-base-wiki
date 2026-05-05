@@ -89,7 +89,7 @@ def sort_key(f):
     mtime = os.path.getmtime(f) if os.path.exists(f) else 0
     # Convert mtime to an ISO-like string so it sorts consistently with date prefixes
     import datetime
-    return datetime.datetime.utcfromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.datetime.fromtimestamp(mtime, datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
 lines = sys.stdin.read().splitlines()
 lines.sort(key=sort_key, reverse=True)
 print('\n'.join(lines))
