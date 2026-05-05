@@ -266,6 +266,34 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 - The relevant `wiki/<type>/_index.md` files are rebuilt and `wiki/log.jsonl` is updated on every finalized ingest.
 - Hand-curated content in Wiki pages is never deleted or overwritten.
 
+## Scripts
+
+### Regular use
+
+| Script | Purpose |
+| ------ | ------- |
+| `wiki-ingest-loop.sh` | Main ingestion pipeline: converts raw files (VTT, EML), creates batches if needed, and runs ingestion sessions in a loop until all notes are processed. The normal way to ingest new notes. |
+| `wiki-lint-check.py` | Scans wiki Markdown files for broken internal and external links. Outputs structured JSON for AI consumption. Run periodically to keep the wiki healthy. |
+
+### Occasional use
+
+| Script | Purpose |
+| ------ | ------- |
+| `wiki-remove-all-generated-files.sh` | Deletes all LLM-generated wiki files and batch state, resetting the wiki to a clean slate. Use when you want to re-ingest everything from scratch. |
+| `wiki-remove-large-attachments.py` | Interactive TUI for browsing and removing large Obsidian attachments. Navigate with ↑↓, press `d`/`D` to move files to `.trash/`. Useful for reclaiming disk space. |
+| `qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
+| `copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories (Junie, Gemini, Codex, etc.) so all agents share the same skill set. |
+
+### For use by skills (not normally run directly)
+
+| Script | Purpose |
+| ------ | ------- |
+| `wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest-loop.sh` and the `wiki-ingest` skill. |
+| `wiki-create-index-pages.py` | Rebuilds `_index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
+| `qmd-sync-collections.sh` | Adds all `raw/` and `wiki/` subdirectories as QMD collections (idempotent) and re-indexes them. Called by the `wiki-finalize-ingest` skill. |
+| `convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
+| `convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
+
 ## Recognition
 
 - Andrej Karpathy - for his original idea for the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).

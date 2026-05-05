@@ -26,15 +26,16 @@ CACHE_TTL_SECONDS=120
 THRESHOLD=85
 WAIT_SECS=1800
 MAX_ERRORS=5
-MAX_LOOPS=25
-MAX_FILES_PER_BATCH=10
+MAX_BATCHES=25
+MAX_BATCHES_EXPLICIT=false
+MAX_FILES_PER_BATCH=""
 ERROR_COUNT=0
-LOOP_COUNT=0
+CURRENT_BATCH=0
 AGENT=claude
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-loops N] [--max-files-per-batch N] [--help]
+Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--help]
 
 Autonomous wiki ingestion pipeline. Runs /wiki-ingest (if needed), then loops
 /wiki-ingest-next-batch until all batches are done, then finalizes. Pauses
@@ -50,8 +51,8 @@ Options:
                              when current usage is strictly below this value.
   --max-errors N             Maximum number of LLM agent command errors before the script
                              exits (default: 5). Each error pauses for confirmation first.
-  --max-loops N              Maximum number of batch loops to run (default: 25).
-                             The script exits cleanly after this many iterations.
+  --max-batches N            Maximum number of batches to process (default: 25).
+                             The script exits cleanly after this many batches.
   --max-files-per-batch N    Maximum number of files per batch (default: 10 for claude,
                              3 for junie). Passed to wiki-create-import-batches.sh when
                              partitioning notes.
@@ -65,7 +66,7 @@ Data sources (in order of preference):
 
 Exit codes:
   0  Full pipeline complete (ingest → batches → finalize), or cleanly
-     paused at --max-loops limit (finalize intentionally skipped).
+     paused at --max-batches limit (not all batches consumed; finalize skipped).
   1  Interrupted or unexpected error.
 EOF
 }
@@ -79,10 +80,18 @@ while [[ $# -gt 0 ]]; do
                 *) echo "Unknown agent: $2 (allowed: claude, junie)" >&2; usage >&2; exit 1 ;;
             esac
             shift 2 ;;
-        --threshold)           THRESHOLD="$2";          shift 2 ;;
-        --max-errors)          MAX_ERRORS="$2";         shift 2 ;;
-        --max-loops)           MAX_LOOPS="$2";          shift 2 ;;
-        --max-files-per-batch) MAX_FILES_PER_BATCH="$2"; shift 2 ;;
+        --threshold)
+            [[ "$2" =~ ^[0-9]+$ ]] || { echo "--threshold must be a non-negative integer" >&2; exit 1; }
+            THRESHOLD="$2"; shift 2 ;;
+        --max-errors)
+            [[ "$2" =~ ^[0-9]+$ ]] || { echo "--max-errors must be a non-negative integer" >&2; exit 1; }
+            MAX_ERRORS="$2"; shift 2 ;;
+        --max-batches)
+            [[ "$2" =~ ^[0-9]+$ ]] || { echo "--max-batches must be a non-negative integer" >&2; exit 1; }
+            MAX_BATCHES="$2"; MAX_BATCHES_EXPLICIT=true; shift 2 ;;
+        --max-files-per-batch)
+            [[ "$2" =~ ^[0-9]+$ ]] || { echo "--max-files-per-batch must be a non-negative integer" >&2; exit 1; }
+            MAX_FILES_PER_BATCH="$2"; shift 2 ;;
         --help|-h)             usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
@@ -90,16 +99,18 @@ done
 
 # Apply agent-specific defaults for options not explicitly set by the user.
 if [ "$AGENT" = "junie" ]; then
-    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=3}
+    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:-3}
 else
-    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:=10}
+    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:-10}
 fi
 
 # Warn when Junie is selected: the integration is experimental and untested.
 if [ "$AGENT" = "junie" ]; then
     echo ""
-    echo "⚠️  WARNING: --agent junie is currently EXPERIMENTAL and has not been fully tested."
-    echo "   Behaviour may be unreliable or produce unexpected results."
+    echo "────────────────────────────────────────────────────────────────────"
+    echo "⚠️  WARNING: --agent junie is currently EXPERIMENTAL and has not been fully"
+    echo "            tested. Behaviour may be unreliable or produce unexpected results."
+    echo "────────────────────────────────────────────────────────────────────"
     echo ""
     echo -n "Press Enter to continue, or Ctrl-C to abort... "
     read -r _junie_confirm
@@ -231,7 +242,7 @@ wait_with_cancel() {
 
     while [ "$elapsed" -lt "$timeout" ]; do
         local remaining=$(( timeout - elapsed ))
-        printf "\r  Continuing in %2ds  (Enter = now, ESC = stop)" "$remaining"
+        printf "\r  Continuing in %2ds  (Enter = now, ESC = skip to finalize)" "$remaining"
 
         local ch
         IFS= read -r -s -n 1 -t 1 ch 2>/dev/null
@@ -275,7 +286,7 @@ count_batch_files() {
 # Return the numeric suffix of the lowest-numbered batch file, or "" if none.
 get_first_batch_number() {
     local first
-    first=$(ls "$PROJECT_DIR/.import"/batch-import-*.txt 2>/dev/null | sort | head -1) || true
+    first=$(ls "$PROJECT_DIR/.import"/batch-import-*.txt 2>/dev/null | sort -V | head -1) || true
     [ -z "$first" ] && return 0
     basename "$first" | grep -oE '[0-9]+' | head -1
 }
@@ -300,6 +311,7 @@ show_plan() {
     echo ""
     printf "LLM agent: %s\n" "$AGENT"
     echo ""
+    echo "────────────────────────────────────────────────────────────────────"
     case "$AGENT" in
         claude)
             cat <<'BANNER'
@@ -322,6 +334,7 @@ BANNER
 BANNER
             ;;
     esac
+    echo "────────────────────────────────────────────────────────────────────"
     echo ""
 
     if [ "$needs_ingest" = true ]; then
@@ -345,7 +358,7 @@ BANNER
     echo "  Phase 3  /wiki-finalize-ingest"
     echo ""
     printf "Pauses 30 min if 5-hour usage ≥ %s%%.\n" "$THRESHOLD"
-    printf "Max loops: %s  |  Max errors: %s  |  Max files/batch: %s\n" "$MAX_LOOPS" "$MAX_ERRORS" "$MAX_FILES_PER_BATCH"
+    printf "Max batches: %s  |  Max errors: %s  |  Max files/batch: %s\n" "$MAX_BATCHES" "$MAX_ERRORS" "$MAX_FILES_PER_BATCH"
     echo ""
 }
 
@@ -497,23 +510,20 @@ run_phase_partition() {
 run_phase_batches() {
     local total="$1"
     local iteration=0
+    local stopped_early=false
 
     while compgen -G "$PROJECT_DIR/.import/batch-import-*.txt" > /dev/null 2>&1; do
         iteration=$(( iteration + 1 ))
-        LOOP_COUNT=$(( LOOP_COUNT + 1 ))
-
-        if [ "$LOOP_COUNT" -gt "$MAX_LOOPS" ]; then
-            echo ""
-            echo "INFO: Maximum loop count ($MAX_LOOPS) reached after $iteration batch iteration(s)."
-            echo "INFO: Remaining batches can be processed by re-running the script."
-            echo "INFO: Skipping finalize — not all batches have been consumed."
-            return 2
-        fi
+        CURRENT_BATCH=$(( CURRENT_BATCH + 1 ))
 
         local remaining
         remaining=$(count_batch_files)
         echo ""
-        echo "=== Phase 2 — batch $iteration of $total  ($remaining remaining, loop $LOOP_COUNT/$MAX_LOOPS) ==="
+        if [ "$MAX_BATCHES_EXPLICIT" = true ]; then
+            echo "=== Phase 2 — batch $CURRENT_BATCH of $MAX_BATCHES  ($remaining total batches remaining) ==="
+        else
+            echo "=== Phase 2 — batch $iteration of $total  ($remaining remaining, loop $CURRENT_BATCH/$MAX_BATCHES) ==="
+        fi
 
         local usage_before
         usage_before=$(wait_for_capacity "before batch $iteration of $total")
@@ -530,17 +540,25 @@ run_phase_batches() {
 
         echo ""
         echo "────────────────────────────────────────────────────────────────────"
+        local batch_label
+        if [ "$MAX_BATCHES_EXPLICIT" = true ]; then
+            local remaining_after_label
+            remaining_after_label=$(count_batch_files)
+            batch_label="batch $CURRENT_BATCH of $MAX_BATCHES ($remaining_after_label total batches remaining)"
+        else
+            batch_label="batch $iteration of $total"
+        fi
         if [ "$AGENT" = "claude" ]; then
             local usage_after
             if usage_after=$(get_usage 2>/dev/null); then
                 local delta=$(( usage_after - usage_before ))
                 local sign=""; [ "$delta" -ge 0 ] && sign="+"
-                echo "Completed batch $iteration of $total.  5-hour usage: ${usage_after}%  (${sign}${delta}%)  Current time: $(date '+%H:%M:%S')"
+                echo "Completed $batch_label.  5-hour usage: ${usage_after}%  (${sign}${delta}%)  Current time: $(date '+%H:%M:%S')"
             else
-                echo "Completed batch $iteration of $total.  Current time: $(date '+%H:%M:%S')"
+                echo "Completed $batch_label.  Current time: $(date '+%H:%M:%S')"
             fi
         else
-            echo "Completed batch $iteration of $total.  Current time: $(date '+%H:%M:%S')"
+            echo "Completed $batch_label.  Current time: $(date '+%H:%M:%S')"
         fi
 
         local remaining_after
@@ -553,25 +571,30 @@ run_phase_batches() {
         fi
 
         # Skip the inter-batch pause if the next iteration would immediately hit
-        # the max-loops limit — no point waiting only to exit right away.
-        if [ "$LOOP_COUNT" -ge "$MAX_LOOPS" ] && [ "$remaining_after" -gt 0 ]; then
-            echo "INFO: Max loops ($MAX_LOOPS) reached — stopping without waiting."
+        # the max-batches limit — no point waiting only to exit right away.
+        if [ "$CURRENT_BATCH" -ge "$MAX_BATCHES" ] && [ "$remaining_after" -gt 0 ]; then
+            echo "INFO: Max batches ($MAX_BATCHES) reached — stopping without waiting."
             return 2
         fi
 
         if ! wait_with_cancel 60 "$wait_label"; then
+            stopped_early=true
             break
         fi
     done
 
     echo ""
-    echo "All $iteration batch(es) consumed."
+    if [ "$stopped_early" = true ]; then
+        echo "$iteration batch(es) processed; skipping remaining batches."
+    else
+        echo "All $iteration batch(es) consumed."
+    fi
 }
 
 run_phase_finalize() {
     echo ""
     echo "=== Phase 3: finalizing ==="
-    wait_for_capacity "before /wiki-finalize-ingest" > /dev/null
+    wait_for_capacity "before /wiki-finalize-ingest" > /dev/null  # usage % not needed here
     echo "Starting /wiki-finalize-ingest..."
     if ! run_llm "/wiki-finalize-ingest"; then
         echo "ERROR: /wiki-finalize-ingest exited with an error.  Current time: $(date '+%H:%M:%S')" >&2
@@ -611,13 +634,13 @@ main() {
 
         if [ "$partition_rc" -eq "$ND_NOTHING_TO_INGEST" ]; then
             echo ""
-            echo "============================================================"
+            echo "────────────────────────────────────────────────────────────────────"
             echo " Nothing to ingest."
             echo " wiki-create-import-batches.sh reported no new notes"
             echo " (exit code 3). All raw notes are already recorded in"
             echo " wiki/log.jsonl, so there is no batch to process and no"
             echo " finalization is needed."
-            echo "============================================================"
+            echo "────────────────────────────────────────────────────────────────────"
             echo "Pipeline finished cleanly.  Time: $(date '+%H:%M:%S')"
             exit 0
         fi
@@ -639,7 +662,7 @@ main() {
 
     if [ "$batches_rc" -eq 2 ]; then
         echo ""
-        echo "Pipeline paused at max-loops limit — finalize skipped."
+        echo "Pipeline paused at max-batches limit — finalize skipped."
         echo "Re-run the script to continue from where it left off."
         exit 0
     fi
