@@ -33,6 +33,38 @@ ERROR_COUNT=0
 CURRENT_BATCH=0
 AGENT=claude
 
+check_dependencies() {
+    local missing=()
+
+    command -v python3 &>/dev/null || \
+        missing+=("python3  →  brew install python3      (or https://www.python.org/downloads/)")
+    command -v curl &>/dev/null || \
+        missing+=("curl     →  brew install curl")
+
+    case "$AGENT" in
+        claude)
+            command -v claude &>/dev/null || \
+                missing+=("claude   →  npm install -g @anthropic-ai/claude-code  (or https://claude.ai/code)")
+            command -v jq &>/dev/null || \
+                missing+=("jq       →  brew install jq")
+            ;;
+        junie)
+            command -v junie &>/dev/null || \
+                missing+=("junie    →  install from JetBrains: https://www.jetbrains.com/junie/")
+            ;;
+    esac
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        echo "" >&2
+        echo "ERROR: The following required tool(s) are not installed:" >&2
+        for item in "${missing[@]}"; do
+            echo "  • $item" >&2
+        done
+        echo "" >&2
+        exit 1
+    fi
+}
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--help]
@@ -103,6 +135,8 @@ if [ "$AGENT" = "junie" ]; then
 else
     MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:-10}
 fi
+
+check_dependencies
 
 # Warn when Junie is selected: the integration is experimental and untested.
 if [ "$AGENT" = "junie" ]; then
@@ -274,6 +308,22 @@ wait_with_cancel() {
     return 0
 }
 
+# Format an elapsed-seconds value as "X seconds" or "X minutes and Y seconds".
+format_duration() {
+    local secs="$1"
+    if [ "$secs" -lt 60 ]; then
+        echo "${secs} seconds"
+    else
+        local m=$(( secs / 60 ))
+        local s=$(( secs % 60 ))
+        if [ "$s" -eq 0 ]; then
+            echo "${m} minutes"
+        else
+            echo "${m} minutes and ${s} seconds"
+        fi
+    fi
+}
+
 # Count unclaimed batch-import-*.txt files.
 count_batch_files() {
     local -a files
@@ -296,7 +346,9 @@ get_first_batch_number() {
 run_llm() {
     local prompt="$1"
     case "$AGENT" in
-        claude) claude --dangerously-skip-permissions --output-format text --print "$prompt" ;;
+        claude) claude --dangerously-skip-permissions --output-format stream-json --include-partial-messages --verbose \
+            --print "$prompt" \
+            | jq -rj 'select(.type == "stream_event" and .event.delta.type? == "text_delta") | .event.delta.text' ;;
         junie)  junie --brave --skip-update-check --output-format=text --task "$prompt" ;;
     esac
 }
@@ -445,7 +497,7 @@ ND_NOTHING_TO_INGEST=3
 # Convert raw VTT and EML files to Markdown before partitioning.
 # Errors are non-fatal: a failed conversion is reported but the pipeline continues.
 run_phase_convert() {
-    echo "=== Phase 0: converting raw files to Markdown ==="
+    echo "=== Phase 0 - CONVERT RAW FILES: converting raw files to Markdown ==="
     local scripts_dir="$PROJECT_DIR/scripts"
     local had_error=false
 
@@ -484,7 +536,7 @@ run_phase_convert() {
 #   3  Nothing to ingest. Caller should stop the pipeline cleanly.
 #   *  Anything else is treated as a fatal error and aborts the script.
 run_phase_partition() {
-    echo "=== Phase 1: partitioning new notes into batches ==="
+    echo "=== Phase 1 - PARTITION: partitioning new notes into batches ==="
     echo "Running scripts/wiki-create-import-batches.sh..."
     set +e
     bash "$PROJECT_DIR/scripts/wiki-create-import-batches.sh" --max-files-per-batch "$MAX_FILES_PER_BATCH"
@@ -520,9 +572,9 @@ run_phase_batches() {
         remaining=$(count_batch_files)
         echo ""
         if [ "$MAX_BATCHES_EXPLICIT" = true ]; then
-            echo "=== Phase 2 — batch $CURRENT_BATCH of $MAX_BATCHES  ($remaining total batches remaining) ==="
+            echo "=== Phase 2 - INGEST BATCHES: batch $CURRENT_BATCH of $MAX_BATCHES  ($remaining total batches remaining) ==="
         else
-            echo "=== Phase 2 — batch $iteration of $total  ($remaining remaining, loop $CURRENT_BATCH/$MAX_BATCHES) ==="
+            echo "=== Phase 2 - INGEST BATCHES: batch $iteration of $total  ($remaining remaining, loop $CURRENT_BATCH/$MAX_BATCHES) ==="
         fi
 
         local usage_before
@@ -532,9 +584,14 @@ run_phase_batches() {
         if [ "$AGENT" = "claude" ]; then
             echo "(Claude may be silent for a long time and only show output after it's done... patience...)"
         fi
+        local batch_start_ts
+        batch_start_ts=$(date +%s)
         if ! run_llm "/wiki-ingest-next-batch"; then
+            echo ""
+            echo "────────────────────────────────────────────────────────────────────"
             echo "ERROR: /wiki-ingest-next-batch failed on batch $iteration.  Current time: $(date '+%H:%M:%S')" >&2
-            echo "Check $PROJECT_DIR/.import/ for current state." >&2
+            echo "       Check $PROJECT_DIR/.import/ for current state." >&2
+            echo "────────────────────────────────────────────────────────────────────"
             confirm_after_error "/wiki-ingest-next-batch (batch $iteration)"
         fi
 
@@ -548,17 +605,21 @@ run_phase_batches() {
         else
             batch_label="batch $iteration of $total"
         fi
+        local batch_elapsed
+        batch_elapsed=$(( $(date +%s) - batch_start_ts ))
+        local batch_duration
+        batch_duration=$(format_duration "$batch_elapsed")
         if [ "$AGENT" = "claude" ]; then
             local usage_after
             if usage_after=$(get_usage 2>/dev/null); then
                 local delta=$(( usage_after - usage_before ))
                 local sign=""; [ "$delta" -ge 0 ] && sign="+"
-                echo "Completed $batch_label.  5-hour usage: ${usage_after}%  (${sign}${delta}%)  Current time: $(date '+%H:%M:%S')"
+                echo "Completed $batch_label in $batch_duration.  5-hour usage: ${usage_after}%  (${sign}${delta}%)  Current time: $(date '+%H:%M:%S')"
             else
-                echo "Completed $batch_label.  Current time: $(date '+%H:%M:%S')"
+                echo "Completed $batch_label in $batch_duration.  Current time: $(date '+%H:%M:%S')"
             fi
         else
-            echo "Completed $batch_label.  Current time: $(date '+%H:%M:%S')"
+            echo "Completed $batch_label in $batch_duration.  Current time: $(date '+%H:%M:%S')"
         fi
 
         local remaining_after
@@ -585,7 +646,8 @@ run_phase_batches() {
 
     echo ""
     if [ "$stopped_early" = true ]; then
-        echo "$iteration batch(es) processed; skipping remaining batches."
+        echo "$iteration batch(es) processed; remaining batches skipped by user."
+        return 2
     else
         echo "All $iteration batch(es) consumed."
     fi
@@ -593,14 +655,18 @@ run_phase_batches() {
 
 run_phase_finalize() {
     echo ""
-    echo "=== Phase 3: finalizing ==="
+    echo "=== Phase 3 - FINALIZE: consolidate logs and created indexes ==="
     wait_for_capacity "before /wiki-finalize-ingest" > /dev/null  # usage % not needed here
     echo "Starting /wiki-finalize-ingest..."
     if ! run_llm "/wiki-finalize-ingest"; then
+        echo ""
+        echo "────────────────────────────────────────────────────────────────────"
         echo "ERROR: /wiki-finalize-ingest exited with an error.  Current time: $(date '+%H:%M:%S')" >&2
+        echo "────────────────────────────────────────────────────────────────────"
         confirm_after_error "/wiki-finalize-ingest"
     fi
     echo ""
+    echo "────────────────────────────────────────────────────────────────────"
     echo "Pipeline complete.  Current time: $(date '+%H:%M:%S')"
 }
 
@@ -662,7 +728,7 @@ main() {
 
     if [ "$batches_rc" -eq 2 ]; then
         echo ""
-        echo "Pipeline paused at max-batches limit — finalize skipped."
+        echo "Pipeline stopped before all batches were consumed — finalize skipped."
         echo "Re-run the script to continue from where it left off."
         exit 0
     fi
