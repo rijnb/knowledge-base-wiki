@@ -79,17 +79,27 @@ log_sources+=( ${batch_logs[@]+"${batch_logs[@]}"} )
 
 all_files=$(find "$NOTES_DIR" \( -name "*.md" -o -name "*.pdf" -o -name "*.doc" -o -name "*.docx" -o -name "*.txt" -o -name "*.vtt" -o -name "*.eml" \) | \
     python3 -c "
-import sys, os, re
-DATE_RE = re.compile(r'^(\d{4}-\d{2}-\d{2})')
+import sys, os, re, datetime
+# Matches YYYY, YYYY-MM, or YYYY-MM-DD at the start of a path component,
+# followed by a non-digit separator (space, underscore, hyphen, dot) or end of string.
+DATE_RE = re.compile(r'^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?(?=[\s_\-.]|$)')
 def sort_key(f):
-    base = os.path.basename(f)
-    m = DATE_RE.match(base)
-    if m:
-        return m.group(1)
-    mtime = os.path.getmtime(f) if os.path.exists(f) else 0
-    # Convert mtime to an ISO-like string so it sorts consistently with date prefixes
-    import datetime
-    return datetime.datetime.fromtimestamp(mtime, datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
+    # Walk path components from leaf (basename) to root.
+    # Use the first dated component found, so files inside e.g. '2014-06-01_Foo.resources/'
+    # inherit that parent's date when their own basename has none.
+    for part in reversed(f.split(os.sep)):
+        m = DATE_RE.match(part)
+        if m:
+            year  = m.group(1)
+            month = m.group(2) or '12'
+            day   = m.group(3) or '31'
+            return f'{year}-{month}-{day}T23:59:59'
+    try:
+        st = os.stat(f)
+        ts = st.st_mtime or getattr(st, 'st_birthtime', None) or st.st_ctime
+    except OSError:
+        ts = 0
+    return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
 lines = sys.stdin.read().splitlines()
 lines.sort(key=sort_key, reverse=True)
 print('\n'.join(lines))
