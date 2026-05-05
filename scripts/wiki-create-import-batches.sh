@@ -78,7 +78,22 @@ shopt -u nullglob
 log_sources+=( ${batch_logs[@]+"${batch_logs[@]}"} )
 
 all_files=$(find "$NOTES_DIR" \( -name "*.md" -o -name "*.pdf" -o -name "*.doc" -o -name "*.docx" -o -name "*.txt" -o -name "*.vtt" -o -name "*.eml" \) | \
-    python3 -c "import sys, os; lines=sys.stdin.read().splitlines(); lines.sort(key=lambda f: os.path.getmtime(f) if os.path.exists(f) else 0, reverse=True); print('\n'.join(lines))")
+    python3 -c "
+import sys, os, re
+DATE_RE = re.compile(r'^(\d{4}-\d{2}-\d{2})')
+def sort_key(f):
+    base = os.path.basename(f)
+    m = DATE_RE.match(base)
+    if m:
+        return m.group(1)
+    mtime = os.path.getmtime(f) if os.path.exists(f) else 0
+    # Convert mtime to an ISO-like string so it sorts consistently with date prefixes
+    import datetime
+    return datetime.datetime.utcfromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+lines = sys.stdin.read().splitlines()
+lines.sort(key=sort_key, reverse=True)
+print('\n'.join(lines))
+")
 
 # Filter candidates: include if (a) not in log, or (b) mtime is newer than last import date
 _py=$(mktemp /tmp/wiki-filter.XXXXXX.py)
