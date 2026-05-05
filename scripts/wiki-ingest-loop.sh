@@ -333,6 +333,15 @@ count_batch_files() {
     echo "${#files[@]}"
 }
 
+# Count batch-log-*.jsonl files (present when all batches consumed but not yet finalized).
+count_batch_log_files() {
+    local -a files
+    shopt -s nullglob
+    files=("$PROJECT_DIR/.import"/batch-log-*.jsonl)
+    shopt -u nullglob
+    echo "${#files[@]}"
+}
+
 # Return the numeric suffix of the lowest-numbered batch file, or "" if none.
 get_first_batch_number() {
     local first
@@ -689,7 +698,31 @@ main() {
     local batch_count
     batch_count=$(count_batch_files)
 
-    if [ "$batch_count" -eq 0 ]; then
+    local log_count
+    log_count=$(count_batch_log_files)
+
+    # All batches consumed but not yet finalized: only batch-log files remain.
+    if [ "$batch_count" -eq 0 ] && [ "$log_count" -gt 0 ]; then
+        echo "Start time: $(date '+%H:%M:%S')"
+        echo ""
+        echo "  All ingest batches have been processed."
+        echo "  Found $log_count batch log file(s) in .import/ with no remaining batch-import files."
+        echo ""
+        if confirm_yn "Proceed directly to /wiki-finalize-ingest?"; then
+            run_phase_finalize
+            exit 0
+        fi
+        echo ""
+        if confirm_yn "Delete the $log_count batch-log file(s) and start a new ingest?"; then
+            rm -f "$PROJECT_DIR/.import"/batch-log-*.jsonl
+            echo "Batch log files deleted — starting fresh ingest."
+            echo ""
+            needs_ingest=true
+        else
+            echo "Stopped."
+            exit 0
+        fi
+    elif [ "$batch_count" -eq 0 ]; then
         needs_ingest=true
     fi
 
