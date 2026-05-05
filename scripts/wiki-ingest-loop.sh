@@ -708,12 +708,12 @@ main() {
         echo "  All ingest batches have been processed."
         echo "  Found $log_count batch log file(s) in .import/ with no remaining batch-import files."
         echo ""
-        if confirm_yn "Proceed directly to /wiki-finalize-ingest?"; then
+        if confirm_yn "Proceed directly to /wiki-finalize-ingest and process the batch-log files?"; then
             run_phase_finalize
             exit 0
         fi
         echo ""
-        if confirm_yn "Delete the $log_count batch-log file(s) and start a new ingest?"; then
+        if confirm_yn "Delete the $log_count batch-log file(s) and start a new ingest instead?"; then
             rm -f "$PROJECT_DIR/.import"/batch-log-*.jsonl
             echo "Batch log files deleted — starting fresh ingest."
             echo ""
