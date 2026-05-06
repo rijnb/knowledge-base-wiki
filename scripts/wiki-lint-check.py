@@ -20,7 +20,7 @@ Output is structured JSON designed for AI consumption:
   }
 
 Usage:
-  python3 check-broken-links.py [OPTIONS] [ROOT_DIR]
+  python3 wiki-lint-check.py [OPTIONS] [ROOT_DIR]
 
 Options:
   --help, -h          Show this help message and exit
@@ -50,10 +50,11 @@ from pathlib import Path
 # Captures only the target portion (before any | or # delimiter).
 # A single ']' that is NOT followed by another ']' is allowed inside the target
 # (e.g. [[example [1] of a note]]), while ']]' ends the link.
+# '"' is excluded to prevent false positives on JSON-like nested structures (e.g. [["a","b"]]).
 # '\|' (backslash-pipe) is also treated as a separator, as required inside markdown tables.
-RE_WIKILINK = re.compile(r'(?<!!)\[\[((?:[^\]|#\n\\]|\\(?!\|)|\](?!\]))+)')
+RE_WIKILINK = re.compile(r'(?<!!)\[\[((?:[^\]|#\n\\"]|\\(?!\|)|\](?!\]))+)')
 # Matches ![[target]] — Obsidian image embeds (same bracket rule applies)
-RE_IMAGE_EMBED = re.compile(r'!\[\[((?:[^\]|#\n\\]|\\(?!\|)|\](?!\]))+)')
+RE_IMAGE_EMBED = re.compile(r'!\[\[((?:[^\]|#\n\\"]|\\(?!\|)|\](?!\]))+)')
 # Matches [text](target) — standard markdown links; skips http/https separately
 RE_MDLINK = re.compile(r'(?<!!)\[[^\]]*\]\(([^)#\n]+?)(?:#[^)]*)?\)')
 # Matches ![alt](target) — standard markdown images
@@ -179,7 +180,7 @@ def fix_wikilinks_in_file(file_path: Path, fixes: list) -> int:
     content = file_path.read_text(encoding="utf-8", errors="replace")
     count = 0
     for old_target, new_target in fixes:
-        pattern = re.compile(r'(?<!!)\[\[' + re.escape(old_target) + r'(?=[\]|#\n])')
+        pattern = re.compile(r'(?<!!)\[\[' + re.escape(old_target) + r'(?=[\]|#\n]| #)')
         content, n = pattern.subn(f'[[{new_target}', content)
         count += n
     if count:
@@ -190,14 +191,19 @@ def fix_wikilinks_in_file(file_path: Path, fixes: list) -> int:
 def replace_mdlink_target_in_file(file_path: Path, old_target: str, new_target: str) -> int:
     """Replace a markdown link target in-place; returns substitution count."""
     content = file_path.read_text(encoding="utf-8", errors="replace")
-    pattern = re.compile(r'(?<!!)\[([^\]]*)\]\(' + re.escape(old_target) + r'(?:#[^)]*)?\)')
+    pattern = re.compile(r'(?<!!)\[([^\]]*)\]\(' + re.escape(old_target) + r'(?: ?#[^)]*)?\)')
     new_content, n = pattern.subn(lambda m: f'[{m.group(1)}]({new_target})', content)
     if n:
         file_path.write_text(new_content, encoding="utf-8")
     return n
 
 
-def resolve_wikilink(target: str, root: Path, all_md_stems: dict[str, list[Path]]) -> bool:
+def resolve_wikilink(
+    target: str,
+    root: Path,
+    all_md_stems: dict[str, list[Path]],
+    path_suffix_set: "set[str] | None" = None,
+) -> bool:
     """
     Resolve an Obsidian wikilink against the vault root.
     Wikilinks can be:
@@ -206,6 +212,10 @@ def resolve_wikilink(target: str, root: Path, all_md_stems: dict[str, list[Path]
       - a full path with ext:    wiki/concepts/foo.md
     Also checks .png/.jpg/.jpeg/.gif/.svg/.pdf for embedded files.
     If the target has no recognized extension, .md is assumed (Obsidian default).
+
+    [[x/y]] is valid if x/y is found anywhere under raw/ or wiki/ (any depth).
+    [[x]] is valid if x is found anywhere under raw/ or wiki/.
+
     Returns True if the target resolves to an existing file.
     """
     candidate = Path(target)
@@ -242,6 +252,23 @@ def resolve_wikilink(target: str, root: Path, all_md_stems: dict[str, list[Path]
     stem = candidate.stem if has_known_ext else candidate.name
     if stem in all_md_stems:
         return True
+
+    # Broad suffix search: [[x/y]] is valid if any file under raw/ or wiki/
+    # has a path that ends with x/y (at any depth).  Handles cases like
+    # [[_resources/foo/bar.pdf]] where the file lives at raw/notes/_resources/foo/bar.pdf,
+    # and bare names like [[foo.pdf]] where the file lives at raw/notes/foo.pdf.
+    if path_suffix_set is not None:
+        # Strip a leading "./" that Obsidian sometimes emits for relative embeds,
+        # then normalize curly quotes to straight so both sides match.
+        normalized = target
+        if normalized.startswith("./"):
+            normalized = normalized[2:]
+        normalized = normalized.translate(CURLY_TO_STRAIGHT)
+        if normalized in path_suffix_set:
+            return True
+        if not has_known_ext:
+            if (normalized + ".md") in path_suffix_set:
+                return True
 
     return False
 
@@ -305,7 +332,7 @@ def check_external(url: str, timeout: int) -> tuple[bool, str]:
     """Return (ok, reason). Performs a HEAD request, falls back to GET."""
     try:
         req = urllib.request.Request(url, method="HEAD")
-        req.add_header("User-Agent", "check-broken-links/1.0")
+        req.add_header("User-Agent", "wiki-lint-check/1.0")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status < 400, f"HTTP {resp.status}"
     except urllib.error.HTTPError as e:
@@ -313,7 +340,7 @@ def check_external(url: str, timeout: int) -> tuple[bool, str]:
             # HEAD not allowed — try GET
             try:
                 req2 = urllib.request.Request(url, method="GET")
-                req2.add_header("User-Agent", "check-broken-links/1.0")
+                req2.add_header("User-Agent", "wiki-lint-check/1.0")
                 with urllib.request.urlopen(req2, timeout=timeout) as resp:
                     return resp.status < 400, f"HTTP {resp.status}"
             except Exception as e2:
@@ -342,7 +369,7 @@ def mark_broken_wikilinks_in_file(file_path: Path, targets: list) -> int:
     count = 0
     for target in targets:
         pattern = re.compile(
-            r'(?<!!)\[\[(' + re.escape(target) + r')(#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
+            r'(?<!!)\[\[(' + re.escape(target) + r')( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
         )
         def _replacer(m, _t=target):
             heading = m.group(2) or ""
@@ -373,7 +400,7 @@ def delete_wikilink_in_file(file_path: Path, target: str):
     # were fully deleted (so callers can adjust line numbers in sibling entries).
     content = file_path.read_text(encoding='utf-8', errors='replace')
     link_pat = re.compile(
-        r'( ?)(?<!!)\[\[' + re.escape(target) + r'(?:#[^|\\\]]*)?(?:\\?\|[^\]]*)?\]\]( ?)'
+        r'( ?)(?<!!)\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|[^\]]*)?\]\]( ?)'
     )
     # Bare: optional indent + optional list marker + optional empty quote pair + whitespace.
     # Quote pairs: "" '' and their curly variants (via \u escapes)
@@ -414,7 +441,7 @@ def delink_wikilink_in_file(file_path: Path, target: str) -> int:
     Returns substitution count."""
     content = file_path.read_text(encoding='utf-8', errors='replace')
     pattern = re.compile(
-        r'(?<!!)\[\[' + re.escape(target) + r'(?:#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
+        r'(?<!!)\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
     )
     stem = Path(target).stem  # strips any path prefix and extension: x/y/z.md → z
     def _repl(m, _stem=stem):
@@ -432,7 +459,7 @@ def delete_mdlink_in_file(file_path: Path, target: str):
     Returns (changed, removed_linenos)."""
     content = file_path.read_text(encoding='utf-8', errors='replace')
     link_pat = re.compile(
-        r'( ?)(?<!!)\[[^\]]*\]\(' + re.escape(target) + r'(?:#[^)]*)?\)( ?)'
+        r'( ?)(?<!!)\[[^\]]*\]\(' + re.escape(target) + r'(?: ?#[^)]*)?\)( ?)'
     )
     bare_pat = re.compile(
         r'^\s*(?:[-*+]|\d+\.)?\s*(?:""|\'\'|\u201c\u201d|\u2018\u2019)?\s*$'
@@ -467,7 +494,7 @@ def mark_as_broken_link_in_file(file_path: Path, target: str) -> bool:
     """Rewrite [[target]] → [[broken-link|target]] in file. Returns True if changed."""
     content = file_path.read_text(encoding="utf-8", errors="replace")
     pattern = re.compile(
-        r'(?<!!)\[\[(' + re.escape(target) + r')(#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
+        r'(?<!!)\[\[(' + re.escape(target) + r')( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
     )
     def _replacer(m, _t=target):
         alias_part = m.group(3)
@@ -587,6 +614,36 @@ def build_stem_index(root: Path) -> dict[str, list[Path]]:
     return index
 
 
+def build_path_suffix_set(root: Path) -> set[str]:
+    """Build a set of all path suffixes for every file under raw/ and wiki/.
+
+    For a file at raw/notes/_resources/foo/bar.pdf this adds:
+      raw/notes/_resources/foo/bar.pdf
+      notes/_resources/foo/bar.pdf
+      _resources/foo/bar.pdf
+      foo/bar.pdf
+      bar.pdf
+
+    All entries are normalized (curly quotes → straight) so that a link
+    containing a straight apostrophe matches a filename with a curly quote.
+
+    This lets [[x/y]] resolve to a file at wiki/a/b/x/y.md (or any depth).
+    """
+    suffix_set: set[str] = set()
+    for top in ("raw", "wiki"):
+        top_dir = root / top
+        if not top_dir.is_dir():
+            continue
+        for p in top_dir.rglob("*"):
+            if not p.is_file():
+                continue
+            parts = p.relative_to(root).parts
+            for i in range(len(parts)):
+                suffix = "/".join(parts[i:])
+                suffix_set.add(suffix.translate(CURLY_TO_STRAIGHT))
+    return suffix_set
+
+
 def has_orphan_false_in_frontmatter(content: str) -> bool:
     """Return True if YAML frontmatter contains 'orphan: false'."""
     lines = content.splitlines()
@@ -677,8 +734,61 @@ def remove_stub_from_frontmatter(file_path: Path) -> bool:
     return False
 
 
+def add_stub_to_frontmatter(file_path: Path) -> bool:
+    """Add 'stub: true' to the file's YAML frontmatter. Returns True if changed."""
+    content = file_path.read_text(encoding="utf-8", errors="replace")
+    if has_stub_in_frontmatter(content):
+        return False
+    lines = content.splitlines(keepends=True)
+    if lines and lines[0].strip() == "---":
+        for i, line in enumerate(lines[1:], 1):
+            if line.strip() in ("---", "..."):
+                lines.insert(i, "stub: true\n")
+                file_path.write_text(''.join(lines), encoding="utf-8")
+                return True
+        return False  # unclosed frontmatter
+    else:
+        file_path.write_text("---\nstub: true\n---\n" + content, encoding="utf-8")
+        return True
+
+
+_STUB_WORD_THRESHOLD = 5
+
+
+def _body_word_count(content: str) -> int:
+    """Count prose words in body text, excluding frontmatter, headers, and link-only lines."""
+    lines = content.splitlines()
+    in_fm = False
+    fm_done = False
+    count = 0
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if i == 0 and s == "---":
+            in_fm = True
+            continue
+        if in_fm:
+            if s in ("---", "..."):
+                in_fm = False
+                fm_done = True
+            continue
+        if not fm_done:
+            continue
+        if s.startswith("#"):
+            continue
+        if re.match(r'^[-*+]\s*\[\[', s) or s.startswith("[["):
+            continue
+        if not s:
+            continue
+        count += len(s.split())
+    return count
+
+
 def check_stubs(root: Path, quiet: bool) -> dict:
-    """Find wiki pages (wiki/*/*.md) with 'stub: true' in frontmatter."""
+    """Find wiki pages (wiki/*/*.md) that look like stubs but lack 'stub: true'.
+
+    Pages already marked 'stub: true' are suppressed (acknowledged stubs).
+    Flags pages whose body prose word count falls below _STUB_WORD_THRESHOLD.
+    """
     wiki_dir = root / "wiki"
     if not wiki_dir.is_dir():
         return {"stubs": [], "summary": {"wiki_pages_checked": 0, "stubs_found": 0}}
@@ -694,6 +804,8 @@ def check_stubs(root: Path, quiet: bool) -> dict:
         except OSError:
             continue
         if has_stub_in_frontmatter(content):
+            continue  # already acknowledged as a stub
+        if _body_word_count(content) < _STUB_WORD_THRESHOLD:
             stubs.append(str(md_file.relative_to(root)))
 
     return {
@@ -751,7 +863,10 @@ def check_orphans(root: Path, quiet: bool) -> dict:
         stem_index.setdefault(p.stem, []).append(p)
 
     # Build backlink map: resolved_path -> set of source_rel (non-index sources only)
+    # Also track which wiki pages have outgoing wikilinks.
     backlinks: dict[str, set[str]] = {}
+    has_outgoing: set[str] = set()  # wiki page paths that contain at least one outgoing wikilink
+    wiki_page_strs = {str(p) for p in wiki_pages}
     scanned = 0
     for md_file in sorted(root.rglob("*.md")):
         rel = md_file.relative_to(root)
@@ -781,14 +896,18 @@ def check_orphans(root: Path, quiet: bool) -> dict:
             resolved = resolve_wikilink_to_path(target, root, stem_index)
             if resolved is not None:
                 backlinks.setdefault(str(resolved), set()).add(str(rel))
+            # Record that this wiki page has at least one outgoing link
+            if str(md_file) in wiki_page_strs:
+                has_outgoing.add(str(md_file))
 
     if not quiet:
         print(f"\r  {scanned} files scanned for backlinks — done.        ", file=sys.stderr)
 
+    # A true orphan has no incoming links AND no outgoing links.
     orphans = [
         str(p.relative_to(root))
         for p in wiki_pages
-        if not backlinks.get(str(p))
+        if not backlinks.get(str(p)) and str(p) not in has_outgoing
     ]
 
     return {
@@ -951,6 +1070,7 @@ def check_vault(root: Path, args) -> dict:
 
     stem_index = build_stem_index(root)
     norm_index = build_normalized_index(root)
+    path_suffix_set = build_path_suffix_set(root)
     md_files = sorted(p for p in root.rglob("*.md") if not should_skip_md(p, root))
 
     for md_file in md_files:
@@ -992,7 +1112,7 @@ def check_vault(root: Path, args) -> dict:
 
             # Resolve
             if link_type == "wikilink" or (link_type == "image" and "[[" in raw):
-                ok = resolve_wikilink(target, root, stem_index)
+                ok = resolve_wikilink(target, root, stem_index, path_suffix_set)
             else:
                 ok = resolve_mdlink(target, md_file, root, stem_index)
 
@@ -1196,7 +1316,7 @@ def format_text(result: dict) -> str:
         lines.append(f"STUB CHECK: {st_s.get('wiki_pages_checked', '?')} pages checked, "
                      f"{st_s.get('stubs_found', len(st_))} stub(s) found.")
         if st_:
-            lines.append("STUBS (stub: true in frontmatter):")
+            lines.append("STUBS (thin pages not yet acknowledged with stub: true):")
             for s in st_:
                 lines.append(f"  {s}")
         else:
@@ -1327,10 +1447,10 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         except Exception as e:
             return f"error: {e}"
 
-    def do_remove_stub(i: int) -> str:
+    def do_mark_stub_acknowledged(i: int) -> str:
         try:
-            changed = remove_stub_from_frontmatter(root / all_items[i]["file"])
-            return "unstubbed" if changed else "already not a stub"
+            changed = add_stub_to_frontmatter(root / all_items[i]["file"])
+            return "marked as stub" if changed else "already marked as stub"
         except Exception as e:
             return f"error: {e}"
 
@@ -1425,7 +1545,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         win.keypad(True)
         scroll = 0
         sep = "─" * (pop_w - 2)
-        hint = "[ d=delete   k=keep stub (remove stub: true)   ↑↓=prev/next   PgUp/PgDn=scroll   h=help   Enter/q=close ]"
+        hint = "[ d=delete   k=acknowledge as stub (add stub: true)   ↑↓=prev/next   PgUp/PgDn=scroll   h=help   Enter/q=close ]"
 
         while True:
             win.erase()
@@ -1671,10 +1791,171 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                         selected = candidate
                         break
 
+    def show_search_dialog(stdscr, broken_target: str = "") -> "Path | None":
+        """Search for a replacement link by regex across filenames in raw/ and wiki/.
+        Default search text is the stem of broken_target (filename only, no directories).
+        Returns path relative to root, or None if cancelled."""
+        search_text = Path(broken_target).name if broken_target else ""
+
+        top_dirs = [root / name for name in ("wiki", "raw") if (root / name).is_dir()]
+        all_files: list[Path] = []
+        for td in top_dirs:
+            for p in sorted(td.rglob("*")):
+                if p.is_file() and not p.name.startswith("."):
+                    all_files.append(p.relative_to(root))
+
+        def do_search(pattern: str) -> list[Path]:
+            if not pattern:
+                return []
+            try:
+                rx = re.compile(pattern, re.IGNORECASE)
+            except re.error:
+                return []
+            return [p for p in all_files if rx.search(p.name)]
+
+        results: list[Path] = do_search(search_text)
+        result_sel = 0
+
+        height, width = stdscr.getmaxyx()
+        pop_w = min(max(60, width - 6), width - 2)
+        pop_h = min(max(13, height - 4), height - 2)
+        pop_y = max(0, (height - pop_h) // 2)
+        pop_x = max(0, (width - pop_w) // 2)
+
+        win = _curses.newwin(pop_h, pop_w, pop_y, pop_x)
+        win.keypad(True)
+        _curses.curs_set(1)
+
+        while True:
+            if result_sel < 0:
+                result_sel = 0
+            if results and result_sel >= len(results):
+                result_sel = len(results) - 1
+
+            win.erase()
+            win.box()
+            title = " Search for link "
+            try:
+                win.addstr(0, max(1, (pop_w - len(title)) // 2), title)
+            except _curses.error:
+                pass
+
+            # Row 1: original broken link
+            if broken_target:
+                label = "broken: "
+                try:
+                    win.addstr(1, 2, label, _curses.A_DIM)
+                    win.addstr(1, 2 + len(label), broken_target[:pop_w - 4 - len(label)],
+                               _curses.color_pair(5) | _curses.A_BOLD)
+                except _curses.error:
+                    pass
+
+            # Row 2: search input
+            field_w = max(10, pop_w - 6)
+            display_text = search_text[-field_w:] if len(search_text) > field_w else search_text
+            try:
+                win.addstr(2, 2, "> ")
+                win.addstr(2, 4, display_text.ljust(field_w)[:field_w])
+            except _curses.error:
+                pass
+
+            # Row 3: nav hint
+            nav = "type to filter   ↑↓ navigate results   Enter=select   Esc=cancel"
+            try:
+                win.addstr(3, max(1, (pop_w - len(nav)) // 2), nav[:pop_w - 2], _curses.A_DIM)
+            except _curses.error:
+                pass
+
+            # Row 4: separator with match count
+            n_res = len(results)
+            if search_text:
+                count_label = f" {n_res} match{'es' if n_res != 1 else ''} "
+            else:
+                count_label = " type to search "
+            sep_fill = "─" * (pop_w - 2)
+            mid = max(0, (pop_w - 2 - len(count_label)) // 2)
+            sep_line = (sep_fill[:mid] + count_label + sep_fill)[:pop_w - 2]
+            try:
+                win.addstr(4, 1, sep_line)
+            except _curses.error:
+                pass
+
+            # Rows 5..pop_h-2: results
+            list_h = pop_h - 6
+            inner_w = pop_w - 4
+
+            if not results:
+                try:
+                    if not search_text:
+                        msg = "Type to search..."
+                    else:
+                        try:
+                            re.compile(search_text)
+                            msg = "No matches."
+                        except re.error:
+                            msg = "Invalid regex."
+                    win.addstr(5, 2, msg[:inner_w], _curses.A_DIM)
+                except _curses.error:
+                    pass
+            else:
+                scroll = max(0, result_sel - list_h + 1) if result_sel >= list_h else 0
+                for row in range(list_h):
+                    idx = scroll + row
+                    if idx >= len(results):
+                        break
+                    rel = str(results[idx])
+                    attr = _curses.A_REVERSE if idx == result_sel else _curses.A_NORMAL
+                    try:
+                        win.addstr(5 + row, 2, rel[:inner_w], attr)
+                    except _curses.error:
+                        pass
+
+            # Position cursor at end of search input (row 2)
+            cursor_x = min(4 + len(display_text), pop_w - 2)
+            try:
+                win.move(2, cursor_x)
+            except _curses.error:
+                pass
+
+            win.refresh()
+            key = win.getch()
+
+            if key == 27:  # Escape
+                break
+            elif key in (10, 13):  # Enter — select highlighted result
+                if results and 0 <= result_sel < len(results):
+                    _curses.curs_set(0)
+                    del win
+                    stdscr.touchwin()
+                    stdscr.refresh()
+                    return results[result_sel]
+            elif key == _curses.KEY_UP:
+                if result_sel > 0:
+                    result_sel -= 1
+            elif key == _curses.KEY_DOWN:
+                if results and result_sel < len(results) - 1:
+                    result_sel += 1
+            elif key in (8, 127, _curses.KEY_BACKSPACE):
+                if search_text:
+                    search_text = search_text[:-1]
+                    results = do_search(search_text)
+                    result_sel = 0
+            elif 32 <= key <= 126:  # printable ASCII — append to search
+                search_text += chr(key)
+                results = do_search(search_text)
+                result_sel = 0
+
+        _curses.curs_set(0)
+        del win
+        stdscr.touchwin()
+        stdscr.refresh()
+        return None
+
     def do_find_replace(i: int, new_rel: Path) -> str:
         """Replace the broken link at index i with a link to new_rel (relative to root)."""
         entry = broken_links[i]
         old_target = entry["target"]
+        old_file = entry["file"]
         is_wiki = entry["type"] == "wikilink" or (entry["type"] == "image" and "[[" in entry["raw"])
         try:
             if is_wiki:
@@ -1686,6 +1967,14 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                 count = replace_mdlink_target_in_file(root / entry["file"], old_target, new_target)
             if count:
                 entry["target"] = new_target
+                # fix_wikilinks_in_file replaces all occurrences in the file at once.
+                # Mark any other unresolved entries with the same file+target as resolved
+                # so they don't show up as failed "no match" when the cursor reaches them.
+                for j, other in enumerate(broken_links):
+                    if j != i and states[j] is None and other["file"] == old_file and other["target"] == old_target:
+                        other["target"] = new_target
+                        states[j] = "replaced"
+                        messages[j] = f"→ {new_rel.stem}"
                 return "replaced"
             return "no match — may already be changed"
         except Exception as e:
@@ -1750,7 +2039,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         pop_x = max(0, (width - pop_w) // 2)
 
         sep = "─" * (pop_w - 2)
-        hint = "[ ↑/↓ prev/next   d=delete   b=mark broken   p=plain text   f=find link   h=help   Enter/q=close ]"
+        hint = "[ ↑/↓ prev/next   d=delete   b=mark broken   p=plain text   n=navigate   s=search   h=help   Enter/q=close ]"
 
         win = _curses.newwin(pop_h, pop_w, pop_y, pop_x)
         win.keypad(True)
@@ -1814,8 +2103,11 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             elif key in (ord("p"), ord("P")):
                 action = "r"
                 break
-            elif key in (ord("f"), ord("F")):
-                action = "f"
+            elif key in (ord("n"), ord("N")):
+                action = "n"
+                break
+            elif key in (ord("s"), ord("S")):
+                action = "s"
                 break
             elif key in (ord("h"), ord("H")):
                 show_help(stdscr)
@@ -1841,7 +2133,8 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             "  d              Delete the broken link from the file",
             "  b              Rewrite as [[broken-link|…]]",
             "  p              Strip [[ ]] brackets — leave plain text",
-            "  f              Open file browser to pick a replacement",
+            "  n              Open file browser to navigate and pick a replacement",
+            "  s              Search files in raw/ and wiki/ by regex for a replacement",
             "",
             "ORPHAN PAGE ACTIONS  (when an orphan page is selected)",
             "  d              Delete the orphan page file from disk",
@@ -1849,12 +2142,12 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             "",
             "STUB PAGE ACTIONS  (when a stub page is selected)",
             "  d              Delete the stub page file from disk",
-            "  k              Keep stub, remove 'stub: true' from frontmatter",
+            "  k              Acknowledge as stub (add 'stub: true' to frontmatter)",
             "",
             "DETAIL / PREVIEW POPUP  (opened with Enter)",
             "  ↑ / ↓          Prev / next item (links); scroll (orphans)",
             "  PgUp / PgDn    Scroll content (orphans)",
-            "  d  b  p  f  k  Same actions as in the main list",
+            "  d  b  p  n  s  k  Same actions as in the main list",
             "  h              Show this help",
             "  Enter / q      Close popup",
         ]
@@ -1958,9 +2251,9 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             if sel_kind == "orphan":
                 hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   k=keep as orphan   h=help   q=quit"
             elif sel_kind == "stub":
-                hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   k=keep stub   h=help   q=quit"
+                hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   k=acknowledge stub   h=help   q=quit"
             else:
-                hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   b=mark broken   p=plain text   f=find link   h=help   q=quit"
+                hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   b=mark broken   p=plain text   n=navigate   s=search   h=help   q=quit"
             stdscr.addstr(1, 0, hint[:width - 1])
             stdscr.addstr(2, 0, ("─" * (width - 1))[:width - 1])
 
@@ -2013,23 +2306,25 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                         pass
                     continue
                 x = 0
+                resolved = state is not None
+                dim = _curses.A_DIM
                 if is_orphan or is_stub:
                     file_w = max(1, avail - _fixed)
                     segments = [
                         (prefix,                        state_attr),
-                        (f"{idx + 1:3d}",               _curses.color_pair(2)),
+                        (f"{idx + 1:3d}",               dim if resolved else _curses.color_pair(2)),
                         ("  ",                          _curses.A_NORMAL),
-                        (item['file'][:file_w],         _curses.color_pair(6) | _curses.A_BOLD),
+                        (item['file'][:file_w],         dim if resolved else _curses.color_pair(6) | _curses.A_BOLD),
                     ]
                 else:
                     fp = truncate_path(item['file'], max_len=_col_file_w, prefix_len=_col_file_w // 2).ljust(_col_file_w)
                     segments = [
                         (prefix,                                   state_attr),
-                        (f"{idx + 1:3d}",                         _curses.color_pair(2)),
+                        (f"{idx + 1:3d}",                         dim if resolved else _curses.color_pair(2)),
                         ("  ",                                     _curses.A_NORMAL),
-                        (fp,                                       _curses.color_pair(6) | _curses.A_BOLD),
+                        (fp,                                       dim if resolved else _curses.color_pair(6) | _curses.A_BOLD),
                         ("  ",                                     _curses.A_NORMAL),
-                        (item['target'][:_col_link_w],            _curses.color_pair(5) | _curses.A_BOLD),
+                        (item['target'][:_col_link_w],            dim if resolved else _curses.color_pair(5) | _curses.A_BOLD),
                     ]
                 for text, attr in segments:
                     if x >= avail or not text:
@@ -2101,9 +2396,9 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                             states[idx] = "deleted" if res == "deleted" else None
                             messages[idx] = "File deleted." if res == "deleted" else res
                         elif action == "k":
-                            res = do_remove_stub(idx)
-                            states[idx] = "kept" if res == "unstubbed" else None
-                            messages[idx] = "stub: true removed." if res == "unstubbed" else res
+                            res = do_mark_stub_acknowledged(idx)
+                            states[idx] = "kept" if res == "marked as stub" else None
+                            messages[idx] = "stub: true added." if res == "marked as stub" else res
                         elif action == "next":
                             if idx < n - 1:
                                 idx += 1; selected = idx
@@ -2126,8 +2421,14 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                             res = do_delink(idx)
                             states[idx] = "delinked" if res == "delinked" else None
                             messages[idx] = "Brackets removed (plain text)." if res == "delinked" else res
-                        elif action == "f":
+                        elif action == "n":
                             new_rel = show_file_browser(stdscr, item.get("target", ""))
+                            if new_rel is not None:
+                                res = do_find_replace(idx, new_rel)
+                                states[idx] = "replaced" if res == "replaced" else None
+                                messages[idx] = f"→ {new_rel.stem}" if res == "replaced" else res
+                        elif action == "s":
+                            new_rel = show_search_dialog(stdscr, item.get("target", ""))
                             if new_rel is not None:
                                 res = do_find_replace(idx, new_rel)
                                 states[idx] = "replaced" if res == "replaced" else None
@@ -2140,7 +2441,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                             if idx > 0:
                                 idx -= 1; selected = idx
                             continue
-                    if action in ("d", "b", "r", "k") or (action == "f" and states[idx] is not None):
+                    if action in ("d", "b", "r", "k") or (action in ("n", "s") and states[idx] is not None):
                         next_idx = next((i for i in range(idx + 1, n) if states[i] is None), None)
                         if next_idx is not None:
                             idx = next_idx; selected = idx
@@ -2165,26 +2466,49 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                         states[selected] = "kept" if res in ("kept", "already kept") else None
                         messages[selected] = res
                     elif all_items[selected]["_kind"] == "stub":
-                        res = do_remove_stub(selected)
-                        states[selected] = "kept" if res == "unstubbed" else None
-                        messages[selected] = "stub: true removed." if res == "unstubbed" else res
+                        res = do_mark_stub_acknowledged(selected)
+                        states[selected] = "kept" if res == "marked as stub" else None
+                        messages[selected] = "stub: true added." if res == "marked as stub" else res
             elif key in (ord("b"), ord("B")):
                 if states[selected] is None and all_items[selected]["_kind"] == "link":
                     res = do_broken(selected)
                     states[selected] = "broken" if res == "broken" else None
                     messages[selected] = "Marked [[broken-link|…]]." if res == "broken" else res
+                    if states[selected] is not None:
+                        next_idx = next((i for i in range(selected + 1, n) if states[i] is None), None)
+                        if next_idx is not None:
+                            selected = next_idx
             elif key in (ord("p"), ord("P")):
                 if states[selected] is None and all_items[selected]["_kind"] == "link":
                     res = do_delink(selected)
                     states[selected] = "delinked" if res == "delinked" else None
                     messages[selected] = "Brackets removed (plain text)." if res == "delinked" else res
-            elif key in (ord("f"), ord("F")):
+                    if states[selected] is not None:
+                        next_idx = next((i for i in range(selected + 1, n) if states[i] is None), None)
+                        if next_idx is not None:
+                            selected = next_idx
+            elif key in (ord("n"), ord("N")):
                 if states[selected] is None and all_items[selected]["_kind"] == "link":
                     new_rel = show_file_browser(stdscr, all_items[selected].get("target", ""))
                     if new_rel is not None:
                         res = do_find_replace(selected, new_rel)
                         states[selected] = "replaced" if res == "replaced" else None
                         messages[selected] = f"→ {new_rel.stem}" if res == "replaced" else res
+                        if states[selected] is not None:
+                            next_idx = next((i for i in range(selected + 1, n) if states[i] is None), None)
+                            if next_idx is not None:
+                                selected = next_idx
+            elif key in (ord("s"), ord("S")):
+                if states[selected] is None and all_items[selected]["_kind"] == "link":
+                    new_rel = show_search_dialog(stdscr, all_items[selected].get("target", ""))
+                    if new_rel is not None:
+                        res = do_find_replace(selected, new_rel)
+                        states[selected] = "replaced" if res == "replaced" else None
+                        messages[selected] = f"→ {new_rel.stem}" if res == "replaced" else res
+                        if states[selected] is not None:
+                            next_idx = next((i for i in range(selected + 1, n) if states[i] is None), None)
+                            if next_idx is not None:
+                                selected = next_idx
 
     _curses.wrapper(curses_main)
 
@@ -2473,7 +2797,7 @@ def run_scan_with_dialog(root: Path, args) -> dict:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="check-broken-links.py",
+        prog="wiki-lint-check.py",
         description=(
             "Scan Markdown files for broken internal and external links.\n"
             "Output is structured JSON (default) or human-readable text, "

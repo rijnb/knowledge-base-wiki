@@ -7,8 +7,8 @@ description: Use when creating or structuring a new Wiki page — decisions, sys
 
 ## Formatting rules
 
-- **Wikilink in body text:** bare slugs — `[[elastic-map]]`
-- **Wikilink in `_index.md` entries:** vault-relative — `[[wiki/systems/elastic-map]]`
+- **Wikilink in body text:** bare WikiLinks — `[[Elastic Map]]`
+- **Wikilink in `_index.md` entries:** vault-relative — `[[wiki/systems/Elastic Map]]`
 - Never mix formats
 - Link sections use bullet lists, not comma-separated inline
 - Empty link sections are omitted entirely (e.g. no `## Related decisions` if there are none)
@@ -20,7 +20,7 @@ description: Use when creating or structuring a new Wiki page — decisions, sys
     - item-2
   ```
 
-## `wiki/index.md`
+## wiki/index.md
 
 Links to section indexes only. Never add individual page entries here.
 
@@ -42,7 +42,7 @@ Topics:
 * [[wiki/systems/_index|Systems]] — our products, platforms, and services
 ```
 
-## `wiki/<type>/_index.md`
+## wiki/<type>/_index.md
 
 One per section. Alphabetically sorted. Add one line per new page; update summaries when materially changed.
 
@@ -62,7 +62,7 @@ date: YYYY-MM-DD HH:mm:ss
 [[wiki/index|← Index]]
 ```
 
-## `wiki/decisions/<slug>.md`
+## wiki/decisions/<Page Name>.md
 
 ```markdown
 ---
@@ -94,7 +94,7 @@ people:
 
 **Rule:** `## Concern` describes the problem only — no solution references. Solutions belong in `## Options`, `## Decision`, `## Rationale`.
 
-## `wiki/systems/<slug>.md`
+## wiki/systems/<Page Name>.md
 
 ```markdown
 ---
@@ -117,7 +117,7 @@ status: active | deprecated | planned
 - [[...link...]]
 ```
 
-## `wiki/people/<slug>.md`
+## wiki/people/<Page Name>.md
 
 ```markdown
 ---
@@ -136,7 +136,7 @@ type: person | team
 - [[...link...]]
 ```
 
-## `wiki/concepts/<slug>.md`
+## wiki/concepts/<Page Name>.md
 
 ```markdown
 ---
@@ -160,7 +160,7 @@ tags: []
 - [[...link...]]
 ```
 
-## `wiki/competition/<slug>.md`
+## wiki/competition/<Page Name>.md
 
 ```markdown
 ---
@@ -178,7 +178,7 @@ type: competitor
 - [[...link...]]
 ```
 
-## `wiki/conversations/<slug>.md`
+## wiki/conversations/<Page Name>.md
 
 ```markdown
 ---
@@ -191,7 +191,7 @@ type: conversation
 - [[...link...]]
 ```
 
-## `wiki/projects/<slug>.md`
+## wiki/projects/<Page Name>.md
 
 ```markdown
 ---
@@ -215,7 +215,7 @@ started: YYYY-MM-DD HH:mm:ss
 - [[...link...]]
 ```
 
-## `wiki/problems/<slug>.md`
+## wiki/problems/<Page Name>.md
 
 ```markdown
 ---
