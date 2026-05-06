@@ -10,10 +10,12 @@ description: Use when the user asks for a health check, lint, audit, or wants to
 Run this command first — it auto-fixes trivial WikiLink mismatches and reports what remains broken:
 
 ```bash
-python3 scripts/wiki-lint-check.py --fix
+python3 scripts/wiki-lint-check.py --output json --fix-simple-errors 
+python3 scripts/wiki-lint-check.py --output json --fix-orphans 
 ```
 
-- `--fix` repairs WikiLinks where a unique normalized match exists (e.g. colons vs underscores in filenames). These are applied immediately without requiring user confirmation.
+- `--fix-simple-errors` repairs WikiLinks where a unique normalized match exists (e.g. colons vs underscores in filenames). These are applied immediately without requiring user confirmation.
+- `--fix-orphans` repairs orphaned pages by replacing matching plain text WikiLink names in files with an actual link.
 - Report how many links were fixed, and list any remaining broken links for the user to review manually.
 - If there are problems left, suggest the user to run:
 ```bash

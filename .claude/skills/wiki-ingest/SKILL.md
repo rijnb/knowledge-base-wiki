@@ -1,6 +1,6 @@
 ---
 name: wiki-ingest
-description: Use when the user asks to ingest, import, or process one or more notes; mentions a raw note file path; provides a Confluence URL or page title; or says "ingest note", "ingest notes", "ingest new notes", or "ingest files". NOT for Slack — use wiki-slack-ingest instead.
+description: Use when the user asks to ingest, import, or process one or more notes; mentions a raw note file path; provides a Confluence URL or page title; or says "ingest note", "ingest notes", "ingest new notes", or "ingest files". NOT for Slack messages — use wiki-ingest-slack instead.
 ---
 
 # Knowledge Base - Ingest

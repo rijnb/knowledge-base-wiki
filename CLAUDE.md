@@ -4,8 +4,8 @@ Before your start, read the file `config/personal_info.md` (it may not exist, wh
 Use the information from that file to make your responses more relevant to me.
 
 Use the appropriate `wiki` skill for each action:
+- **Fetch slack** (fetch channels and DMs) — `wiki-fetch-slack` skill
 - **Ingest** (notes, Confluence, start bulk) — `wiki-ingest` skill
-- **Ingest Slack** (fetch channels and DMs) — `wiki-slack-ingest` skill
 - **Ingest next batch** (parallel sessions) — `wiki-ingest-next-batch` skill
 - **Finalize ingest** (merge logs, rebuild indexes) — `wiki-finalize-ingest` skill
 - **Query** — `wiki-query` skill (default: use this when the user asks any question)

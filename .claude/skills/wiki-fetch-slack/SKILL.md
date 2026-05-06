@@ -1,23 +1,11 @@
 ---
-name: wiki-slack-ingest
+name: wiki-fetch-slack
 description: Use when the user asks to fetch Slack, ingest Slack, sync Slack channels, or process Slack messages into the knowledge base.
 ---
 
 # Wiki — Slack Ingest
 
 Fetch Slack threads and DMs configured in `config/personal_info.md` and write them as Markdown files to `raw/slack/`. After fetching, tell the user to run `scripts/wiki-ingest-loop.sh` to ingest them into the wiki.
-
-## Step 0: Check for active import batches
-
-Before writing any files, check if an active ingest is already in progress:
-
-```bash
-ls .import/batch-import-*.txt 2>/dev/null | head -1
-```
-
-If any batch-import files exist, stop immediately and tell the user:
-
-> "An active import batch was detected. Complete or clear it first (run `finalize ingest` or `/wiki-clear-ingest-batches`), then re-run Slack fetch."
 
 ## Step 1: Read config
 
@@ -90,13 +78,13 @@ For each thread:
 
 1. Convert the root message timestamp to `YYYY-MM-DD HH_mm_ss` format (replace `:` with `_`). This is `thread_ts`.
 2. Convert the latest reply timestamp the same way. This is `latest_reply_ts`.
-3. Filename: `<thread_ts>-reply-<latest_reply_ts>.md`
+3. Filename: `<thread_ts> - reply - <latest_reply_ts>.md`
 
 Note: filenames use underscores (`HH_mm_ss`); frontmatter `latest_reply_ts` and `fetched` fields use colons (`HH:mm:ss`).
 
-Check for an existing file in the directory whose name starts with `<thread_ts>-reply-`:
+Check for an existing file in the directory whose name starts with `<thread_ts> - reply`:
 - **Not found** → write new file
-- **Found, filename already ends with `-reply-<latest_reply_ts>.md`** → skip (unchanged)
+- **Found, filename already ends with `reply - <latest_reply_ts>.md`** → skip (unchanged)
 - **Found, filename ends with a different reply ts** → delete old file, write new file
 
 File format:
@@ -106,29 +94,29 @@ File format:
 source: slack
 channel: "#architecture-decisions"
 thread_url: <permalink from MCP response; omit field if not available>
-fetched: YYYY-MM-DD HH:mm:ss  # local time
+fetched: YYYY-MM-DD HH:mm:ss # local time
 latest_reply_ts: "YYYY-MM-DD HH:mm:ss"
 mode: <resolved mode: signal, all, or the topic string>
 ---
 
-**@username** — YYYY-MM-DD HH:mm
+**@username** — YYYY-MM-DD HH:mm:ss
 <root message text>
 
-**@username** — YYYY-MM-DD HH:mm
+**@username** — YYYY-MM-DD HH:mm:ss
 <reply text>
 ```
 
-For DMs, use `channel: "DM: Alice van Dijk"` in the frontmatter.
+For direct messages (DMs), use `channel: "DM: Alice van Dijk"` in the frontmatter.
 
 ### Loose messages file
 
 Collect all messages in the source that are not part of any thread. Apply the same mode filter as for threads: `all` passes everything through, a topic string applies the strict inclusion filter, and `signal` applies the noise exclusion categories listed above. If any qualifying messages remain, write them to:
 
 ```
-raw/slack/<dir>/loose-YYYY-MM-DD.md
+raw/slack/<dir>/YYYY-MM-DD loose-message.md
 ```
 
-Use today's date. Overwrite if the file already exists for today.
+Use current date. Overwrite if the file already exists for today.
 
 ```
 ---
@@ -139,10 +127,10 @@ fetched: YYYY-MM-DD HH:mm:ss  # local time
 mode: <resolved mode: signal, all, or the topic string>
 ---
 
-**@username** — YYYY-MM-DD HH:mm
+**@username** — YYYY-MM-DD HH:mm:ss
 <message text>
 
-**@username** — YYYY-MM-DD HH:mm
+**@username** — YYYY-MM-DD HH:mm:ss
 <message text>
 ```
 
@@ -153,7 +141,7 @@ If there are no loose messages, do not create the file.
 - **Slack MCP unavailable or no Slack tools found**: report the error and stop — do not write any files.
 - **Channel not found or no access**: warn (e.g. "Could not access #channel-name — skipping") and continue with remaining sources.
 - **Thread fetch fails**: warn and skip that thread, continue with remaining threads.
-- **No new or updated threads across all sources**: report "Nothing to ingest from Slack — all threads are up to date." and stop cleanly.
+- **No new or updated threads across all sources**: report "Nothing to fetch from Slack — all threads are up to date." and stop cleanly.
 
 ## Step 4: Report and hand off
 

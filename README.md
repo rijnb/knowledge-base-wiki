@@ -44,8 +44,8 @@ These skills commands and natural-language triggers are available:
 
 | Command / phrase          | Description |
 | ----------------          | ----------- |
-| "ingest slack"            | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest-loop.sh` to ingest |
-| "ingest new notes:"       | Start a new ingest of raw notes (Session 1 — coordinator flow) |
+| "ingest new notes"        | Start a new ingest of raw notes (Session 1 — coordinator flow) |
+| "fetch slack"             | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest-loop.sh` to ingest |
 | "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
 | "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
 | "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
