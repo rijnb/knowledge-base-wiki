@@ -83,7 +83,7 @@ Options:
                              when current usage is strictly below this value.
   --max-errors N             Maximum number of LLM agent command errors before the script
                              exits (default: 5). Each error pauses for confirmation first.
-  --max-batches N            Maximum number of batches to process (default: 25).
+  --max-batches N            Maximum number of batches to process (default: 50).
                              The script exits cleanly after this many batches.
   --max-files-per-batch N    Maximum number of files per batch (default: 10 for claude,
                              3 for junie). Passed to wiki-create-import-batches.sh when
