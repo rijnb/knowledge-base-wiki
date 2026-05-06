@@ -72,15 +72,15 @@ After each ingestion, the system can automatically run a health check on the kno
 
 You can also run the basic health-check (which does not use the LLM) manually, by simply executing:
 ```
-scripts/wiki-lint-check.py --interactive
+scripts/wiki-lint-check.py
 ```
 
-The `--interactive` flag offers an easy-to-use UI to deal with:
+This opens an interactive TUI to deal with:
 - Broken links: these can be removed, flagged or simply replaced with plain text.
 - Orphaned pages: these can be deleted, or kept (marked with `orphan: false`).
 - Stub pages (that were identified by the LLM but never filled in): these can be deleted, or kept (no longer marked as `stub: true`).
 
-Using the `--interactive` option, you should be able to keep your knowledge base 100% free of false positive alerts so it's easy to see if the knowledge base is still sound or not.
+Using this interactive mode, you should be able to keep your knowledge base 100% free of false positive alerts so it's easy to see if the knowledge base is still sound or not. Use `--batch-mode` to suppress the TUI and get text/JSON output only.
 
 ## Getting started
 
@@ -136,13 +136,13 @@ To re-create the entire Wiki, you can simply remove the `wiki/` directory, `/cle
 
 The database is automatically checked for errors after ingesting new notes, but sometimes the errors cannot be fixed automatically. You are advised to sometimes run:
 ```
-./scripts/wiki-lint-check.py --format text
+./scripts/wiki-lint-check.py --batch-mode --format text
 ```
-This checks the consistency of your entire database. If you encounter problems, you can run:
+This checks the consistency of your entire database without opening the TUI. For interactive review, simply run:
 ```
-./scripts/wiki-lint-check.py --interactive
+./scripts/wiki-lint-check.py
 ```
-This provides a UI to deal with broken links by
+This provides a TUI to deal with broken links by
 - removing them, 
 - simply marking them as broken, or 
 - allowing you to search for the proper target link in `raw` and `wiki` and replacing it with that.

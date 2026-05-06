@@ -52,10 +52,10 @@ Present a table of all pages created/updated across all sessions (read from the 
 Use `AskUserQuestion` with `multiSelect: true`. Always run QMD before lint:
 
 - **All (recommended)** — lint + QMD text + vector embedding; supersedes individual selections
-- **Lint** — health check: orphans, contradictions, gaps
+- **Lint** — health check: orphans, contradictions, gaps 
 - **QMD text re-index** (`qmd update`) — fast, keywords only
 - **QMD vector embedding** (`qmd update && qmd embed`) — slow, ~2 GB models; supersedes text-only if both selected
 
 ## Step 6 - End message
 
-After running the lint check or QMD do not suggest to run finalize again. Do propose to run `scripts/lint-wiki-pages.py --interactive` if any problems were found during the lint check.
+After running the lint check or QMD do not suggest to run finalize again. Do propose to run `scripts/wiki-lint-check.py` if any problems were found during the lint check.

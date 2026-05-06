@@ -2828,6 +2828,9 @@ Examples:
   python3 wiki-lint-check.py --format text
   python3 wiki-lint-check.py --fix-simple-errors
 
+  # Batch mode (no TUI, output only):
+  python3 wiki-lint-check.py --batch-mode --format text
+
   # Combine options:
   python3 wiki-lint-check.py --external --include-images --skip-frontmatter --format text /path/to/vault
         """,
@@ -2902,11 +2905,12 @@ Examples:
         help="Suppress progress messages written to stderr",
     )
     parser.add_argument(
-        "--interactive",
+        "--batch-mode",
         action="store_true",
+        dest="batch_mode",
         help=(
-            "After scanning, open an interactive TUI to fix broken links one by one. "
-            "Use UP/DOWN to navigate, d to delete the link, b to mark it as [[broken-link|…]]."
+            "Disable the interactive TUI and output results in text/JSON format only. "
+            "By default, an interactive TUI opens after scanning to fix broken links one by one."
         ),
     )
     return parser, parser.parse_args()
@@ -2943,14 +2947,14 @@ def main():
         sys.exit(1)
 
     auto_fix_applied = False
-    if args.interactive:
+    if not args.batch_mode:
         auto_fix_applied = ask_run_auto_fixes()
         if auto_fix_applied:
             args.fix_simple_errors = True
             args.fix_orphans = True
 
     try:
-        if args.interactive:
+        if not args.batch_mode:
             result = run_scan_with_dialog(root, args)
         else:
             result = check_vault(root, args)
@@ -2965,7 +2969,7 @@ def main():
             print(msg, file=sys.stderr)
         sys.exit(1)
 
-    if not args.interactive:
+    if args.batch_mode:
         if getattr(args, "fix_simple_errors", False):
             result["broken_links"] = [b for b in result["broken_links"] if "suggested_fix" in b or b.get("fm_deleted")]
             result["summary"]["broken"] = len(result["broken_links"])
@@ -2992,7 +2996,7 @@ def main():
         or result.get("stub_summary", {}).get("stubs_found", 0) > 0
     )
 
-    if args.interactive:
+    if not args.batch_mode:
         broken_for_review = result["broken_links"]
         if auto_fix_applied:
             broken_for_review = [b for b in broken_for_review if not b.get("fixed") and not b.get("fm_deleted")]
@@ -3002,8 +3006,8 @@ def main():
     else:
         print(format_text(result))
 
-    if not args.interactive and has_issues:
-        print("\nTip: run with --interactive to review and fix issues one by one.", file=sys.stderr)
+    if args.batch_mode and has_issues:
+        print("\nTip: run without --batch-mode to review and fix issues interactively.", file=sys.stderr)
 
     # Exit code: 0 = clean, 1 = issues found, 2 = errors
     if result.get("errors"):
