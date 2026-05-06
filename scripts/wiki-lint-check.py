@@ -1955,6 +1955,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         """Replace the broken link at index i with a link to new_rel (relative to root)."""
         entry = broken_links[i]
         old_target = entry["target"]
+        old_file = entry["file"]
         is_wiki = entry["type"] == "wikilink" or (entry["type"] == "image" and "[[" in entry["raw"])
         try:
             if is_wiki:
@@ -1966,6 +1967,14 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                 count = replace_mdlink_target_in_file(root / entry["file"], old_target, new_target)
             if count:
                 entry["target"] = new_target
+                # fix_wikilinks_in_file replaces all occurrences in the file at once.
+                # Mark any other unresolved entries with the same file+target as resolved
+                # so they don't show up as failed "no match" when the cursor reaches them.
+                for j, other in enumerate(broken_links):
+                    if j != i and states[j] is None and other["file"] == old_file and other["target"] == old_target:
+                        other["target"] = new_target
+                        states[j] = "replaced"
+                        messages[j] = f"→ {new_rel.stem}"
                 return "replaced"
             return "no match — may already be changed"
         except Exception as e:
@@ -2297,23 +2306,25 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                         pass
                     continue
                 x = 0
+                resolved = state is not None
+                dim = _curses.A_DIM
                 if is_orphan or is_stub:
                     file_w = max(1, avail - _fixed)
                     segments = [
                         (prefix,                        state_attr),
-                        (f"{idx + 1:3d}",               _curses.color_pair(2)),
+                        (f"{idx + 1:3d}",               dim if resolved else _curses.color_pair(2)),
                         ("  ",                          _curses.A_NORMAL),
-                        (item['file'][:file_w],         _curses.color_pair(6) | _curses.A_BOLD),
+                        (item['file'][:file_w],         dim if resolved else _curses.color_pair(6) | _curses.A_BOLD),
                     ]
                 else:
                     fp = truncate_path(item['file'], max_len=_col_file_w, prefix_len=_col_file_w // 2).ljust(_col_file_w)
                     segments = [
                         (prefix,                                   state_attr),
-                        (f"{idx + 1:3d}",                         _curses.color_pair(2)),
+                        (f"{idx + 1:3d}",                         dim if resolved else _curses.color_pair(2)),
                         ("  ",                                     _curses.A_NORMAL),
-                        (fp,                                       _curses.color_pair(6) | _curses.A_BOLD),
+                        (fp,                                       dim if resolved else _curses.color_pair(6) | _curses.A_BOLD),
                         ("  ",                                     _curses.A_NORMAL),
-                        (item['target'][:_col_link_w],            _curses.color_pair(5) | _curses.A_BOLD),
+                        (item['target'][:_col_link_w],            dim if resolved else _curses.color_pair(5) | _curses.A_BOLD),
                     ]
                 for text, attr in segments:
                     if x >= avail or not text:
@@ -2483,6 +2494,10 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                         res = do_find_replace(selected, new_rel)
                         states[selected] = "replaced" if res == "replaced" else None
                         messages[selected] = f"→ {new_rel.stem}" if res == "replaced" else res
+                        if states[selected] is not None:
+                            next_idx = next((i for i in range(selected + 1, n) if states[i] is None), None)
+                            if next_idx is not None:
+                                selected = next_idx
             elif key in (ord("s"), ord("S")):
                 if states[selected] is None and all_items[selected]["_kind"] == "link":
                     new_rel = show_search_dialog(stdscr, all_items[selected].get("target", ""))
@@ -2490,6 +2505,10 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                         res = do_find_replace(selected, new_rel)
                         states[selected] = "replaced" if res == "replaced" else None
                         messages[selected] = f"→ {new_rel.stem}" if res == "replaced" else res
+                        if states[selected] is not None:
+                            next_idx = next((i for i in range(selected + 1, n) if states[i] is None), None)
+                            if next_idx is not None:
+                                selected = next_idx
 
     _curses.wrapper(curses_main)
 
