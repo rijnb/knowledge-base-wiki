@@ -205,6 +205,10 @@ The LLM can convert PDFs to text, but that's quite expensive. If you have `pdfto
 brew install poppler
 ```
 
+### Tip: Install Amphetamine (to avoid your Mac going to sleep)
+
+Long ingest runs may cause your Mac to fall asleep when waiting for your Claude grace-period to pass ("the 5h window"). You may want to install a tool like Amphetamine from the AppStore to keep your Mac awake during the night...
+
 ### Running Claude within Obsidian
 
 You can run Claude from within Obsidian using the Claudian plugin. Install the plugin simply by asking Claude to do so with the following prompt:
