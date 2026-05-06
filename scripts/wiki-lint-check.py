@@ -223,6 +223,19 @@ def resolve_wikilink(target: str, root: Path, all_md_stems: dict[str, list[Path]
             if (root / (target + ext)).exists():
                 return True
 
+    # If the target contains a directory component (e.g. "x/y"), also search
+    # under the top-level "wiki/" and "raw/" collections — a link [[x/y]] is
+    # valid when wiki/x/y.md or raw/x/y.md exists, regardless of where the
+    # linking file lives.
+    if candidate.parent != Path("."):
+        for top in ("wiki", "raw"):
+            if (root / top / target).exists():
+                return True
+            if not has_known_ext:
+                for ext in (".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"):
+                    if (root / top / (target + ext)).exists():
+                        return True
+
     # Fuzzy match: bare stem against all known markdown files.
     # Use the full name as the lookup key when there is no recognized extension,
     # so that "v1.2" matches "v1.2.md" rather than looking up "v1".
@@ -246,6 +259,16 @@ def resolve_wikilink_to_path(target: str, root: Path, stem_index: dict[str, list
         exact_md = root / (target + ".md")
         if exact_md.exists():
             return exact_md
+
+    # If the target has a directory component, also look under wiki/ and raw/.
+    if candidate.parent != Path("."):
+        for top in ("wiki", "raw"):
+            if (root / top / target).exists():
+                return root / top / target
+            if not has_known_ext:
+                p = root / top / (target + ".md")
+                if p.exists():
+                    return p
 
     stem = candidate.stem if has_known_ext else candidate.name
     matches = stem_index.get(stem, [])
@@ -970,8 +993,6 @@ def check_vault(root: Path, args) -> dict:
             # Resolve
             if link_type == "wikilink" or (link_type == "image" and "[[" in raw):
                 ok = resolve_wikilink(target, root, stem_index)
-                if not ok and Path(target).parent != Path("."):
-                    ok = (md_file.parent / target).exists()
             else:
                 ok = resolve_mdlink(target, md_file, root, stem_index)
 
