@@ -1,6 +1,6 @@
 ---
 name: wiki-ingest
-description: Use when the user asks to ingest, import, or process one or more notes; mentions a raw note file path; provides a Confluence URL or page title; or says "ingest note", "ingest notes", "ingest new notes", or "ingest files".
+description: Use when the user asks to ingest, import, or process one or more notes; mentions a raw note file path; provides a Confluence URL or page title; or says "ingest note", "ingest notes", "ingest new notes", or "ingest files". NOT for Slack — use wiki-slack-ingest instead.
 ---
 
 # Knowledge Base - Ingest
@@ -52,6 +52,11 @@ fetched: YYYY-MM-DD HH:mm:ss
 - Continue with per-note ingestion for that file (as a single-file session — write to `.import/batch-log-1.jsonl`, then immediately tell the user to run `finalize ingest`).
 
 **Refresh:** "refresh this Confluence page" → re-fetch, overwrite cache, diff vs previous, flag changes affecting existing Wiki pages.
+
+## Slack ingestion
+
+For Slack channels and DMs, use the `wiki-slack-ingest` skill instead of this one.
+Trigger phrases: "fetch Slack", "ingest Slack", "sync Slack channels".
 
 ## wiki/log.jsonl format
 
