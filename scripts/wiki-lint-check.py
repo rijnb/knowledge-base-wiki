@@ -197,7 +197,12 @@ def replace_mdlink_target_in_file(file_path: Path, old_target: str, new_target: 
     return n
 
 
-def resolve_wikilink(target: str, root: Path, all_md_stems: dict[str, list[Path]]) -> bool:
+def resolve_wikilink(
+    target: str,
+    root: Path,
+    all_md_stems: dict[str, list[Path]],
+    path_suffix_set: "set[str] | None" = None,
+) -> bool:
     """
     Resolve an Obsidian wikilink against the vault root.
     Wikilinks can be:
@@ -206,6 +211,10 @@ def resolve_wikilink(target: str, root: Path, all_md_stems: dict[str, list[Path]
       - a full path with ext:    wiki/concepts/foo.md
     Also checks .png/.jpg/.jpeg/.gif/.svg/.pdf for embedded files.
     If the target has no recognized extension, .md is assumed (Obsidian default).
+
+    [[x/y]] is valid if x/y is found anywhere under raw/ or wiki/ (any depth).
+    [[x]] is valid if x is found anywhere under raw/ or wiki/.
+
     Returns True if the target resolves to an existing file.
     """
     candidate = Path(target)
@@ -242,6 +251,23 @@ def resolve_wikilink(target: str, root: Path, all_md_stems: dict[str, list[Path]
     stem = candidate.stem if has_known_ext else candidate.name
     if stem in all_md_stems:
         return True
+
+    # Broad suffix search: [[x/y]] is valid if any file under raw/ or wiki/
+    # has a path that ends with x/y (at any depth).  Handles cases like
+    # [[_resources/foo/bar.pdf]] where the file lives at raw/notes/_resources/foo/bar.pdf,
+    # and bare names like [[foo.pdf]] where the file lives at raw/notes/foo.pdf.
+    if path_suffix_set is not None:
+        # Strip a leading "./" that Obsidian sometimes emits for relative embeds,
+        # then normalize curly quotes to straight so both sides match.
+        normalized = target
+        if normalized.startswith("./"):
+            normalized = normalized[2:]
+        normalized = normalized.translate(CURLY_TO_STRAIGHT)
+        if normalized in path_suffix_set:
+            return True
+        if not has_known_ext:
+            if (normalized + ".md") in path_suffix_set:
+                return True
 
     return False
 
@@ -585,6 +611,36 @@ def build_stem_index(root: Path) -> dict[str, list[Path]]:
         s = p.stem
         index.setdefault(s, []).append(p)
     return index
+
+
+def build_path_suffix_set(root: Path) -> set[str]:
+    """Build a set of all path suffixes for every file under raw/ and wiki/.
+
+    For a file at raw/notes/_resources/foo/bar.pdf this adds:
+      raw/notes/_resources/foo/bar.pdf
+      notes/_resources/foo/bar.pdf
+      _resources/foo/bar.pdf
+      foo/bar.pdf
+      bar.pdf
+
+    All entries are normalized (curly quotes → straight) so that a link
+    containing a straight apostrophe matches a filename with a curly quote.
+
+    This lets [[x/y]] resolve to a file at wiki/a/b/x/y.md (or any depth).
+    """
+    suffix_set: set[str] = set()
+    for top in ("raw", "wiki"):
+        top_dir = root / top
+        if not top_dir.is_dir():
+            continue
+        for p in top_dir.rglob("*"):
+            if not p.is_file():
+                continue
+            parts = p.relative_to(root).parts
+            for i in range(len(parts)):
+                suffix = "/".join(parts[i:])
+                suffix_set.add(suffix.translate(CURLY_TO_STRAIGHT))
+    return suffix_set
 
 
 def has_orphan_false_in_frontmatter(content: str) -> bool:
@@ -951,6 +1007,7 @@ def check_vault(root: Path, args) -> dict:
 
     stem_index = build_stem_index(root)
     norm_index = build_normalized_index(root)
+    path_suffix_set = build_path_suffix_set(root)
     md_files = sorted(p for p in root.rglob("*.md") if not should_skip_md(p, root))
 
     for md_file in md_files:
@@ -992,7 +1049,7 @@ def check_vault(root: Path, args) -> dict:
 
             # Resolve
             if link_type == "wikilink" or (link_type == "image" and "[[" in raw):
-                ok = resolve_wikilink(target, root, stem_index)
+                ok = resolve_wikilink(target, root, stem_index, path_suffix_set)
             else:
                 ok = resolve_mdlink(target, md_file, root, stem_index)
 
