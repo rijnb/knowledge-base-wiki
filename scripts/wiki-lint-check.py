@@ -27,7 +27,7 @@ Options:
   --external          Also check HTTP/HTTPS links (slow; requires network)
   --timeout N         Timeout in seconds for external requests (default: 5)
   --include-images    Also check embedded images (![[...]])
-  --format text|json  Output format: 'text' for human-readable, 'json' for AI (default: json)
+  --format text|json  Output format: 'text' for human-readable (default), 'json' for AI
   --quiet             Suppress progress messages on stderr
 
 ROOT_DIR defaults to the directory containing this script's parent.
@@ -535,6 +535,9 @@ def fix_curly_quotes(root: Path, quiet: bool) -> tuple[int, int, int]:
 def should_skip_md(path: Path, root: Path) -> bool:
     """Return True if this .md file should be excluded from scanning."""
     rel = path.relative_to(root)
+    # Only scan wiki/ and raw/ — ignore everything else (postponed/, scripts/, etc.)
+    if not rel.parts or rel.parts[0] not in ("wiki", "raw"):
+        return True
     # Skip files inside hidden directories (any parent component starting with '.')
     if any(part.startswith(".") for part in rel.parts[:-1]):
         return True
@@ -729,6 +732,8 @@ def check_orphans(root: Path, quiet: bool) -> dict:
     scanned = 0
     for md_file in sorted(root.rglob("*.md")):
         rel = md_file.relative_to(root)
+        if not rel.parts or rel.parts[0] not in ("wiki", "raw"):
+            continue
         if any(part.startswith(".") for part in rel.parts[:-1]):
             continue
         if md_file.name == "SKILL.md":
@@ -1010,18 +1015,20 @@ def check_vault(root: Path, args) -> dict:
             if n:
                 fixed_files += 1
                 fixed_links += n
+                if not args.quiet:
+                    rel = fp.relative_to(root)
+                    for old_t, new_t in deduped:
+                        print(f"  fix: {rel}: [[{old_t}]] → [[{new_t}]]", file=sys.stderr)
         for entry in broken:
             if "suggested_fix" in entry:
                 entry["fixed"] = True
-        if not args.quiet and fixed_links:
-            print(f"  Fixed {fixed_links} link(s) in {fixed_files} file(s).", file=sys.stderr)
 
         # Delete bullet lines in YAML frontmatter that contain unfixable broken wikilinks
         fm_targets_by_file: dict = {}
         for entry in broken:
             if entry.get("fixed") or not entry.get("in_frontmatter"):
                 continue
-            if entry["type"] == "wikilink" or (entry["type"] == "image" and "[[" in entry["raw"]):
+            if entry["raw"].startswith("[["):
                 fp = root / entry["file"]
                 fm_targets_by_file.setdefault(fp, []).append(entry["target"])
         fm_deleted_links = 0
@@ -1035,14 +1042,15 @@ def check_vault(root: Path, args) -> dict:
                 if changed:
                     fm_deleted_links += 1
                     file_changed = True
+                    if not args.quiet:
+                        rel = fp.relative_to(root)
+                        print(f"  fix (fm delete): {rel}: [[{target}]]", file=sys.stderr)
             if file_changed:
                 fm_deleted_files += 1
         for entry in broken:
             if not entry.get("fixed") and entry.get("in_frontmatter"):
-                if entry["type"] == "wikilink" or (entry["type"] == "image" and "[[" in entry["raw"]):
+                if entry["raw"].startswith("[["):
                     entry["fm_deleted"] = True
-        if not args.quiet and fm_deleted_links:
-            print(f"  Removed {fm_deleted_links} frontmatter broken link(s) in {fm_deleted_files} file(s).", file=sys.stderr)
 
         q_renamed, q_link_files, q_links = fix_curly_quotes(root, args.quiet)
         if not args.quiet and (q_renamed or q_links):
@@ -1056,7 +1064,7 @@ def check_vault(root: Path, args) -> dict:
         for entry in broken:
             if entry.get("fixed"):
                 continue
-            if entry["type"] == "wikilink" or (entry["type"] == "image" and "[[" in entry["raw"]):
+            if entry["raw"].startswith("[["):
                 fp = root / entry["file"]
                 targets_by_file.setdefault(fp, []).append(entry["target"])
         for fp, targets in targets_by_file.items():
@@ -1067,7 +1075,7 @@ def check_vault(root: Path, args) -> dict:
                 removed_files += 1
                 removed_links += n
         for entry in broken:
-            if not entry.get("fixed") and (entry["type"] == "wikilink" or (entry["type"] == "image" and "[[" in entry["raw"])):
+            if not entry.get("fixed") and entry["raw"].startswith("[["):
                 entry["removed"] = True
         if not args.quiet and removed_links:
             print(f"  Marked {removed_links} broken link(s) in {removed_files} file(s).", file=sys.stderr)
@@ -1130,7 +1138,8 @@ def format_text(result: dict) -> str:
             lines.append(f"{b['line']}: {b['file']}")
             lines.append(f"    type  : {b['type']}")
             lines.append(f"    reason: {b['reason']}")
-            lines.append(f"    raw   : {b['raw']}")
+            raw_display = b['raw'][2:] if b['raw'].startswith('[[') else b['raw']
+            lines.append(f"    raw   : {raw_display}")
             lines.append(f"    target: {b['target']}")
             if "suggested_fix" in b:
                 suffix = " (fixed)" if b.get("fixed") else " (use --fix-simple-errors to apply)"
@@ -1171,6 +1180,48 @@ def format_text(result: dict) -> str:
                 lines.append(f"  {s}")
         else:
             lines.append("No stub pages found.")
+
+    # Issues summary — shown at the end
+    has_issues = result["broken_links"] or result.get("orphans") or result.get("stubs")
+    if has_issues:
+        lines.append("")
+        lines.append("ISSUES SUMMARY:")
+        if result["broken_links"]:
+            by_type: dict = {}
+            for b in result["broken_links"]:
+                t = b["type"]
+                if t not in by_type:
+                    by_type[t] = {"found": 0, "fixed": 0, "remaining": 0}
+                by_type[t]["found"] += 1
+                if b.get("fixed") or b.get("fm_deleted"):
+                    by_type[t]["fixed"] += 1
+                else:
+                    by_type[t]["remaining"] += 1
+            total_fixed = sum(v["fixed"] for v in by_type.values())
+            total_remaining = sum(v["remaining"] for v in by_type.values())
+            lines.append(f"  broken links : {len(result['broken_links'])} found, {total_fixed} fixed, {total_remaining} remaining")
+            for t in sorted(by_type):
+                v = by_type[t]
+                lines.append(f"     {t:<10}: {v['found']} found, {v['fixed']} fixed, {v['remaining']} remaining")
+        if "orphans" in result:
+            os_s = result.get("orphan_summary", {})
+            fix = result.get("orphan_fix")
+            n_found = os_s.get("orphans_found", len(result["orphans"]))
+            if fix:
+                resolved = fix.get("orphans_resolved", 0)
+                ack = fix.get("orphans_acknowledged", 0)
+                remaining = n_found - resolved
+                detail = f"{resolved} resolved"
+                if ack:
+                    detail += f", {ack} acknowledged"
+                detail += f", {remaining} remaining"
+                lines.append(f"  orphans      : {n_found} found, {detail}")
+            else:
+                lines.append(f"  orphans      : {n_found} found")
+        if "stubs" in result:
+            st_s = result.get("stub_summary", {})
+            n_found = st_s.get("stubs_found", len(result["stubs"]))
+            lines.append(f"  stubs        : {n_found} found")
 
     return "\n".join(lines)
 
@@ -2462,8 +2513,8 @@ Examples:
     parser.add_argument(
         "--format",
         choices=["json", "text"],
-        default="json",
-        help="Output format: 'json' for AI (default), 'text' for humans",
+        default="text",
+        help="Output format: 'text' for humans (default), 'json' for AI",
     )
     parser.add_argument(
         "--skip-frontmatter",
