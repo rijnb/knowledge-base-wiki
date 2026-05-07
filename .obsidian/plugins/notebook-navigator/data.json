@@ -539,7 +539,8 @@
     "wiki/projects": "title-asc",
     "wiki/systems": "title-asc",
     "wiki/decisions": "title-asc",
-    "raw/notes": "title-desc"
+    "raw/notes": "title-desc",
+    "raw/scans": "title-desc"
   },
   "folderTreeSortOverrides": {},
   "folderAppearances": {

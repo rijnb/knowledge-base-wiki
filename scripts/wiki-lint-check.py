@@ -37,6 +37,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -247,11 +248,15 @@ def resolve_wikilink(
                         return True
 
     # Fuzzy match: bare stem against all known markdown files.
+    # Only apply when the target has no directory component — a full-path target
+    # like [[_resources/foo/bar.md]] must resolve by path, not by stem alone,
+    # otherwise any file named bar.md anywhere in the vault would silence the error.
     # Use the full name as the lookup key when there is no recognized extension,
     # so that "v1.2" matches "v1.2.md" rather than looking up "v1".
-    stem = candidate.stem if has_known_ext else candidate.name
-    if stem in all_md_stems:
-        return True
+    if candidate.parent == Path("."):
+        stem = candidate.stem if has_known_ext else candidate.name
+        if stem in all_md_stems:
+            return True
 
     # Broad suffix search: [[x/y]] is valid if any file under raw/ or wiki/
     # has a path that ends with x/y (at any depth).  Handles cases like
@@ -1454,6 +1459,13 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         except Exception as e:
             return f"error: {e}"
 
+    def do_edit(i: int) -> str:
+        try:
+            subprocess.Popen(["open", str(root / all_items[i]["file"])])
+            return "opened in editor"
+        except Exception as e:
+            return f"error: {e}"
+
     def show_orphan_preview(stdscr, entry: dict, idx: int) -> "str | None":
         """Show scrollable file contents for an orphan. Returns 'd', 'k', or None."""
         try:
@@ -1473,7 +1485,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         win.keypad(True)
         scroll = 0
         sep = "─" * (pop_w - 2)
-        hint = "[ d=delete   k=keep as orphan   ↑↓=prev/next   PgUp/PgDn=scroll   h=help   Enter/q=close ]"
+        hint = "[ d=delete   k=keep as orphan   e=edit   ↑↓=prev/next   PgUp/PgDn=scroll   h=help   Enter/q=close ]"
 
         while True:
             win.erase()
@@ -1518,6 +1530,9 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             elif key in (ord("k"), ord("K")):
                 del win; stdscr.touchwin(); stdscr.refresh()
                 return "k"
+            elif key in (ord("e"), ord("E")):
+                del win; stdscr.touchwin(); stdscr.refresh()
+                return "e"
             elif key in (ord("h"), ord("H")):
                 show_help(stdscr)
 
@@ -1545,7 +1560,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         win.keypad(True)
         scroll = 0
         sep = "─" * (pop_w - 2)
-        hint = "[ d=delete   k=acknowledge as stub (add stub: true)   ↑↓=prev/next   PgUp/PgDn=scroll   h=help   Enter/q=close ]"
+        hint = "[ d=delete   k=acknowledge as stub (add stub: true)   e=edit   ↑↓=prev/next   PgUp/PgDn=scroll   h=help   Enter/q=close ]"
 
         while True:
             win.erase()
@@ -1590,6 +1605,9 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             elif key in (ord("k"), ord("K")):
                 del win; stdscr.touchwin(); stdscr.refresh()
                 return "k"
+            elif key in (ord("e"), ord("E")):
+                del win; stdscr.touchwin(); stdscr.refresh()
+                return "e"
             elif key in (ord("h"), ord("H")):
                 show_help(stdscr)
 
@@ -2039,7 +2057,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         pop_x = max(0, (width - pop_w) // 2)
 
         sep = "─" * (pop_w - 2)
-        hint = "[ ↑/↓ prev/next   d=delete   b=mark broken   p=plain text   n=navigate   s=search   h=help   Enter/q=close ]"
+        hint = "[ ↑/↓ prev/next   d=delete   b=mark broken   p=plain text   n=navigate   s=search   e=edit   h=help   Enter/q=close ]"
 
         win = _curses.newwin(pop_h, pop_w, pop_y, pop_x)
         win.keypad(True)
@@ -2109,6 +2127,9 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             elif key in (ord("s"), ord("S")):
                 action = "s"
                 break
+            elif key in (ord("e"), ord("E")):
+                action = "e"
+                break
             elif key in (ord("h"), ord("H")):
                 show_help(stdscr)
                 win.touchwin()
@@ -2135,19 +2156,22 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             "  p              Strip [[ ]] brackets — leave plain text",
             "  n              Open file browser to navigate and pick a replacement",
             "  s              Search files in raw/ and wiki/ by regex for a replacement",
+            "  e              Open source file in default editor",
             "",
             "ORPHAN PAGE ACTIONS  (when an orphan page is selected)",
             "  d              Delete the orphan page file from disk",
             "  k              Keep orphan, add 'orphan: false' to frontmatter",
+            "  e              Open source file in default editor",
             "",
             "STUB PAGE ACTIONS  (when a stub page is selected)",
             "  d              Delete the stub page file from disk",
             "  k              Acknowledge as stub (add 'stub: true' to frontmatter)",
+            "  e              Open source file in default editor",
             "",
             "DETAIL / PREVIEW POPUP  (opened with Enter)",
             "  ↑ / ↓          Prev / next item (links); scroll (orphans)",
             "  PgUp / PgDn    Scroll content (orphans)",
-            "  d  b  p  n  s  k  Same actions as in the main list",
+            "  d  b  p  n  s  k  e  Same actions as in the main list",
             "  h              Show this help",
             "  Enter / q      Close popup",
         ]
@@ -2249,11 +2273,11 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
 
             sel_kind = all_items[selected]["_kind"] if n > 0 else "link"
             if sel_kind == "orphan":
-                hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   k=keep as orphan   h=help   q=quit"
+                hint = "ENTER=preview   d=delete   k=keep as orphan   e=edit   h=help   q=quit"
             elif sel_kind == "stub":
-                hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   k=acknowledge stub   h=help   q=quit"
+                hint = "ENTER=preview   d=delete   k=acknowledge stub   e=edit   h=help   q=quit"
             else:
-                hint = "UP/DOWN/PgUp/PgDn navigate   ENTER=preview   d=delete   b=mark broken   p=plain text   n=navigate   s=search   h=help   q=quit"
+                hint = "ENTER=preview   d=delete   b=mark broken   p=plain text   n=navigate   s=search   e=edit   h=help   q=quit"
             stdscr.addstr(1, 0, hint[:width - 1])
             stdscr.addstr(2, 0, ("─" * (width - 1))[:width - 1])
 
@@ -2381,6 +2405,8 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                             res = do_keep_orphan(idx)
                             states[idx] = "kept" if res in ("kept", "already kept") else None
                             messages[idx] = res
+                        elif action == "e":
+                            messages[idx] = do_edit(idx)
                         elif action == "next":
                             if idx < n - 1:
                                 idx += 1; selected = idx
@@ -2399,6 +2425,8 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                             res = do_mark_stub_acknowledged(idx)
                             states[idx] = "kept" if res == "marked as stub" else None
                             messages[idx] = "stub: true added." if res == "marked as stub" else res
+                        elif action == "e":
+                            messages[idx] = do_edit(idx)
                         elif action == "next":
                             if idx < n - 1:
                                 idx += 1; selected = idx
@@ -2433,6 +2461,8 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                                 res = do_find_replace(idx, new_rel)
                                 states[idx] = "replaced" if res == "replaced" else None
                                 messages[idx] = f"→ {new_rel.stem}" if res == "replaced" else res
+                        elif action == "e":
+                            messages[idx] = do_edit(idx)
                         elif action == "next":
                             if idx < n - 1:
                                 idx += 1; selected = idx
@@ -2509,6 +2539,8 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                             next_idx = next((i for i in range(selected + 1, n) if states[i] is None), None)
                             if next_idx is not None:
                                 selected = next_idx
+            elif key in (ord("e"), ord("E")):
+                messages[selected] = do_edit(selected)
 
     _curses.wrapper(curses_main)
 
