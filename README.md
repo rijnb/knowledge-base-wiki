@@ -48,8 +48,8 @@ After setup, put your notes in `raw/` and tell Claude: **"ingest new raw notes"*
 
 ```bash
 cd ~/my-knowledge-base && git pull
-./scripts/qmd-sync-collections.sh   # re-register any new subdirectories
-qmd update && qmd embed             # re-index if wiki pages changed
+./scripts/qmd-sync-collections.sh   # re-register and update any new subdirectories
+qmd embed                           # create embeddings if wiki pages changed
 ```
 
 ## Prerequisites
