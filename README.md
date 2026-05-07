@@ -15,6 +15,75 @@ The primary goal is **efficient decision intelligence**: understanding why decis
 - LLM does all writing, cross-referencing, and bookkeeping in `wiki/`.
 - Obsidian is the UI for entering/accessing notes and asking questions (e.g. through `Claudian`).
 
+## Quick Start
+
+```bash
+# 1. Clone this repo
+git clone <repo-url> ~/my-knowledge-base
+
+# 2. Create raw/ and wiki/ directories (these are not stored in git)
+cd ~/my-knowledge-base
+mkdir -p raw/{notes,clips,emails,transcripts,scans} wiki
+
+# 3. Install QMD (the semantic search engine)
+npm install -g bun
+npm install -g @tobilu/qmd
+
+# 4. Register all subdirectories as QMD collections and build the index
+./scripts/qmd-sync-collections.sh
+qmd update && qmd embed     # this can take a while on first run
+
+# 5. Install the QMD skill for Claude/Junie
+qmd skill install --global --yes
+
+# 6. Register QMD as a Claude Code MCP server (add to ~/.claude/claude_desktop_config.json)
+#    Or just ask Claude: "read this README.md and install QMD as an MCP server"
+
+# 7. Open this directory as an Obsidian vault: File → Open Folder as Vault
+```
+
+After setup, put your notes in `raw/` and tell Claude: **"ingest new raw notes"**.
+
+## Update
+
+```bash
+cd ~/my-knowledge-base && git pull
+./scripts/qmd-sync-collections.sh   # re-register any new subdirectories
+qmd update && qmd embed             # re-index if wiki pages changed
+```
+
+## Prerequisites
+
+**Required:**
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI) — or JetBrains Junie
+- [Node.js / npm](https://nodejs.org/) — for installing bun and qmd
+- [QMD](https://github.com/tobi/qmd) — local semantic search engine (`npm install -g @tobilu/qmd`)
+- [Obsidian](https://obsidian.md) — vault UI (free, Mac/Windows/Linux)
+- git
+
+**Optional:**
+- [pdftotext](https://poppler.freedesktop.org/) — faster/cheaper PDF extraction (`brew install poppler`); LLM vision is the fallback
+- [Obsidian Web Clipper](https://obsidian.md/clipper) — one-click web article saving to `raw/clips/`
+- [Claudian](https://github.com/YishenTu/claudian) — run Claude from within Obsidian (ask Claude to install it safely)
+- [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) (Mac App Store) — prevents Mac sleep during long overnight ingests
+
+## MCP Server Setup
+
+Register QMD as a MCP server in `~/.claude/claude_desktop_config.json` (or ask Claude to do it):
+
+```json
+{
+  "mcpServers": {
+    "qmd": {
+      "command": "qmd",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+---
+
 ## In a nutshell
 
 - **Create and collect notes:** 
@@ -82,39 +151,13 @@ This opens an interactive TUI to deal with:
 
 Using this interactive mode, you should be able to keep your knowledge base 100% free of false positive alerts so it's easy to see if the knowledge base is still sound or not. Use `--batch-mode` to suppress the TUI and get text/JSON output only.
 
-## Getting started
-
-This knowledge base setup uses a combination of Obsidian (front-end), LLM and QMD (database) to create that knowledge base. It consists of:
-
-- A `raw` directory, which is my territory: You put all my notes there; AI can only read this, not write.
-- A `wiki` directory, which is consolidated information about the raw notes; this is almost exclusively AI territory.
-
-After putting all your notes in the raw directories, the magic words for LLM are: “ingest new raw notes”. That will create the Wiki and update the semantic database (QMD). After that you can ask all sorts of questions to LLM and it can efficiently reason over 100s or 1000s of pages (I’m using 2700 pages now and it seems to work just fine).
-
-The keyword here is AI efficiency: if you have 10s of notes, you don’t need any of this. If you have 100s, you’re already burning tokens. If you have 1000s of notes, LLM won’t handle this well without a semantic database backing the search.
-
-The directory is readable as an Obsidian vault. This is on purpose. Obsidian makes it really easy to add Markdown notes and read them, or do simple searches. You can use a LLM CLI next to it to query the same directory. Alternatively, you can run the whole thing in VS Code. 
-
-I’ve tried to make this pretty user-friendly, so putting stuff in the ‘raw’ directory is as easy as:
-- Using Obsidian to create Markdown notes, and storing PDF or JPG attachments in the ‘\_resources’ directory (LLM will parse those and recognize handwriting and convert those to Markdown as well).
-- Using the Obsidian Web Clipper to automatically clip articles to ‘raw/clips’ (clipper template provided in repo); this means it’s just one Shift-Cmd-O press to store an article in the right location.
-- Using drag-and-drop from Outlook to the ‘raw/emails’ directory to store ‘.eml’ files (LLM will use the provided conversion script to create perfect Markdowns of these); putting an alias to the email directory on your desktop makes it easy to find that directory for drag-and-drop 😊.
-- Storing meeting transcripts (‘.vtt’) in ‘raw/transcripts’ (LLM will convert those to Markdown as well).
-
-### Ingesting notes for the first time
-
-If you have pre-existing notes and you want to ingest them into the knowledge base, make sure they are located in the correct `raw/*` directories first. See the directory structure below. Then run:
-```
-scripts/wiki-ingest-loop.sh [--agent claude|junie]
-```
-
-This starts the ingestion loop and tries to deal with rate limiting (e.g. the Claude 5-hour token limit).
+## Configuration
 
 ### Personalizing your setup
 
-You can provide personal info on who you are, what you do and what your focus is, in `config/personal_info.md`. This could be something like this:
+Provide personal info on who you are, what you do, and what your focus is, in `config/personal_info.md`:
 
-```
+```markdown
 # Personal Info
 My name is ...
 I am ...
@@ -126,96 +169,33 @@ I am ...
 
 If the file is missing, or it contains no info topics, default topics will be used.
 
-### Re-creating the Wiki from Scratch
-
-To re-create the entire Wiki, you can simply remove the `wiki/` directory, `/clear` the LLM conversations and ask it to `ingest new raw notes`. This will restart the entire ingestion process. Note that for large amounts of notes, this may be expensive and take a long time.
-
-**Important:* The ingesting notes is a relatively expensive operation (as the LLM necessasrily needs to relate many notes to distill and create Wiki topics). If you are using the knowledge base on multipl client you _can_ recreate the entire Wiki from scratch if you just share the `raw/` directory, but it may be more cost effective to simply share the `wiki/` directory as well. The file `wiki/log.jsonl` keeps track of which notes have been ingested, so anhy client can run ingestions to keep the Wiki up to date.
-
-### Checking Your Database
-
-The database is automatically checked for errors after ingesting new notes, but sometimes the errors cannot be fixed automatically. You are advised to sometimes run:
-```
-./scripts/wiki-lint-check.py --batch-mode --format text
-```
-This checks the consistency of your entire database without opening the TUI. For interactive review, simply run:
-```
-./scripts/wiki-lint-check.py
-```
-This provides a TUI to deal with broken links by
-- removing them, 
-- simply marking them as broken, or 
-- allowing you to search for the proper target link in `raw` and `wiki` and replacing it with that.
-Try it out. It's quite user-friendly.
-
-## Installation
-
-### Obsidian
-
-Download and install [Obsidian](https://obsidian.md) (free, Mac/Windows/Linux). Open this directory as a vault: **Open folder as vault** → select the repo root. Obsidian reads the `wiki/` pages with WikiLink navigation, graph view, and backlinks out of the box — no plugins required for basic use.
-
-For web clipping, install the [Obsidian Web Clipper](https://obsidian.md/clipper) browser extension and import `obsidian_webclipper_template.json` from this repo as a clipper template.
-
-### QMD
-
-QMD is the local semantic search engine that lets LLM query thousands of notes efficiently without reading every file.
-
-Install via Homebrew:
-
-```sh
-npm install -g bun
-npm install -g @tobilu/qmd
-```
-
-Register all `raw/` and `wiki/` subdirectories as QMD collections:
-
-```sh
-./scripts/qmd-sync-collections.sh
-```
-
-Then build the index (this can take a while!):
-
-```sh
-qmd update && qmd embed   
-```
-
-Register QMD as a MCP server (simply ask LLM to read this `README.md` and install it for you):
-
-```json
-{
-  "mcpServers": {
-    "qmd": {
-      "command": "qmd",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-Installing the LLM skill isn't needed - it's part of this repo. But if you want to do it manually (again):
-```sh
-qmd skill install --global --yes   # or omit --global if you want it local-omly
-```
-Re-run `qmd update` (and `qmd embed`) after each ingest to keep the index current. LLM will prompt you to do this at the end of every ingest.
-
-### Install `pdftotext`
-
-The LLM can convert PDFs to text, but that's quite expensive. If you have `pdftotext` installed, the ingest skill will first try that and only fall back to LLM vision if the result is not looking good (e.g. for handwritten notes). Install `pdftotext` using:
-```
-brew install poppler
-```
-
-### Tip: Install Amphetamine (to avoid your Mac going to sleep)
-
-Long ingest runs may cause your Mac to fall asleep when waiting for your Claude grace-period to pass ("the 5h window"). You may want to install a tool like Amphetamine from the AppStore to keep your Mac awake during the night...
-
 ### Running Claude within Obsidian
 
-You can run Claude from within Obsidian using the Claudian plugin. Install the plugin simply by asking Claude to do so with the following prompt:
+You can run Claude from within Obsidian using the Claudian plugin. Install it by asking Claude:
 ```
-Claude, I want you to install the following Obsidian plugin from Github. First, I want you to review ihe plugin
-and make sure it is safe to install. And if it is safe, install it. This is the repo: https://github.com/YishenTu/claudian
+Claude, I want you to install the following Obsidian plugin from Github. First, I want you to review
+the plugin and make sure it is safe to install. And if it is safe, install it.
+This is the repo: https://github.com/YishenTu/claudian
 ```
+
+## Re-creating the Wiki from Scratch
+
+To re-create the entire Wiki, remove the `wiki/` directory, `/clear` the LLM conversation and ask it to `ingest new raw notes`. Note that for large amounts of notes this may be expensive and take a long time.
+
+**Note:** The `wiki/log.jsonl` file tracks which notes have already been ingested. If you share the `wiki/` directory across machines, any client can run incremental ingestions without re-processing everything.
+
+## Checking Your Database
+
+The database is automatically checked for errors after ingesting new notes. To check manually:
+```bash
+# Basic check (no LLM, fast):
+./scripts/wiki-lint-check.py --batch-mode --format text
+
+# Interactive TUI (deal with broken links, orphans, stubs):
+./scripts/wiki-lint-check.py
+```
+
+---
 
 ## Directory structure (condensed)
 
