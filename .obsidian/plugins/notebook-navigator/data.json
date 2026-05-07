@@ -499,6 +499,11 @@
       "folder": true,
       "tag": false,
       "property": false
+    },
+    "config/personal_info.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
     }
   },
   "fileIcons": {
@@ -528,7 +533,8 @@
     "wiki/systems": "monitor",
     "raw/scans/transcribed": "whole-word",
     "raw/scans/_resources": "image",
-    "raw/notes/_resources": "image"
+    "raw/notes/_resources": "image",
+    "raw/slack": "message-square"
   },
   "folderColors": {},
   "folderBackgroundColors": {},
