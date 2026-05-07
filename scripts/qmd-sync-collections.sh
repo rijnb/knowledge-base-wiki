@@ -49,4 +49,8 @@ echo "=== Re-indexing ==="
 qmd update
 
 echo ""
-echo "Done. Run 'qmd embed' separately to refresh vector embeddings."
+echo "Done."
+echo ""
+echo "───────────────────────────────────────────────────────────────────────"
+echo "⚠️  You need to run 'qmd embed' separately to refresh vector embeddings."
+echo "───────────────────────────────────────────────────────────────────────"
