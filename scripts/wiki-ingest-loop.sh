@@ -590,6 +590,14 @@ run_phase_batches() {
         iteration=$(( iteration + 1 ))
         CURRENT_BATCH=$(( CURRENT_BATCH + 1 ))
 
+        if [ "$iteration" -gt "$total" ]; then
+            echo "WARN: Processed $iteration batches but only $total were expected." >&2
+            echo "      A claimed batch file in '.import/' may not have been removed." >&2
+            echo "      Stopping loop to avoid infinite loop." >&2
+            stopped_early=true
+            break
+        fi
+
         local remaining
         remaining=$(count_batch_files)
         echo ""

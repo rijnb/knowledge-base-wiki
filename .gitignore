@@ -1,4 +1,3 @@
-config/personal_info.md
 .claude/settings.local.json
 .claude/skills/qmd
 .agents/
@@ -6,6 +5,7 @@ config/personal_info.md
 .gitnexus/
 .idea/
 .junie/
+.worktrees/
 .obsidian/plugins/
 .obsidian/appearance.json
 .obsidian/community-plugins.json
@@ -17,8 +17,7 @@ config/personal_info.md
 .import/
 .output.txt
 scripts/__pycache__/
+config/personal_info.md
 docs/
 raw/
 wiki/
-scripts/.junie/
-.worktrees/
