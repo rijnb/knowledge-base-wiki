@@ -544,7 +544,6 @@
     "wiki/concepts": "title-asc",
     "wiki/projects": "title-asc",
     "wiki/systems": "title-asc",
-    "wiki/decisions": "title-asc",
     "raw/notes": "title-desc",
     "raw/scans": "title-desc"
   },

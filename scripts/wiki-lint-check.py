@@ -1388,7 +1388,9 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         print("No broken links, orphan pages, or stub pages found.")
         return
 
-    all_items = [{"_kind": "link", **b} for b in broken_links] + \
+    for b in broken_links:
+        b["_kind"] = "link"
+    all_items = broken_links + \
                 [{"_kind": "orphan", "file": o} for o in orphans] + \
                 [{"_kind": "stub", "file": s} for s in stubs]
     n = len(all_items)
@@ -2979,15 +2981,19 @@ def main():
         sys.exit(1)
 
     auto_fix_applied = False
-    if not args.batch_mode:
-        auto_fix_applied = ask_run_auto_fixes()
-        if auto_fix_applied:
-            args.fix_simple_errors = True
-            args.fix_orphans = True
-
     try:
         if not args.batch_mode:
             result = run_scan_with_dialog(root, args)
+            has_fixable = (
+                any("suggested_fix" in b for b in result["broken_links"])
+                or bool(result.get("orphans"))
+            )
+            if has_fixable:
+                auto_fix_applied = ask_run_auto_fixes()
+                if auto_fix_applied:
+                    args.fix_simple_errors = True
+                    args.fix_orphans = True
+                    result = run_scan_with_dialog(root, args)
         else:
             result = check_vault(root, args)
     except KeyboardInterrupt:

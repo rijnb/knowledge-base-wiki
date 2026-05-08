@@ -44,16 +44,16 @@ Then, for each Markdown file to ingest:
 - The top-level Wiki topic list is: competition, concepts, decisions, people, problems, projects, systems.
 - **Only use topics from that list.** Never create a `wiki/<dir>/` that is not one of those topics — not "systems", not "architecture", not anything else.
 - Topic definitions — use these to classify correctly and avoid cross-topic confusion:
-  - `competition` → external companies, products, or approaches competing with yours
+  - `competition` → external companies, external products, competitores, or approaches competing with yours
   - `concepts` → technology terms, standards, domain vocabulary, mental models (NOT your own systems)
   - `decisions` → recorded choices between alternatives, with rationale (even informal ones)
-  - `people` → named individuals (first+last) who are employees or appear in multiple sources
+  - `people` → named individuals (first+last name) who are employees or appear in multiple sources
   - `problems` → bugs, risks, blockers, failures, open questions requiring resolution
   - `projects` → named initiatives, programmes, workstreams (ongoing or completed)
   - `systems` → named products, platforms, services, tools owned or operated by your organisation
 - **Work through every topic in the order listed above — do not skip any topic.** For each topic, answer its extraction question and act on the result:
 
-  | Topic | Extraction question | Create a page when… |
+  | Topic | Extraction question | Create a page ONLY when… |
   |---|---|---|
   | `competition` | Does the note mention a competitor, their product, or a market comparison? | Yes, for every distinct competitor or competing product. |
   | `concepts` | Does the note introduce or rely on a technical term, standard, methodology, or domain-specific idea that is not already a named system? | Yes, for every distinct concept. |
