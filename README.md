@@ -30,8 +30,7 @@ npm install -g bun
 npm install -g @tobilu/qmd
 
 # 4. Register all subdirectories as QMD collections and build the index
-./scripts/qmd-sync-collections.sh
-qmd update && qmd embed     # this can take a while on first run
+./scripts/qmd-full-reindex.sh
 
 # 5. Install the QMD skill for Claude/Junie
 qmd skill install --global --yes
@@ -48,8 +47,7 @@ After setup, put your notes in `raw/` and tell Claude: **"ingest new raw notes"*
 
 ```bash
 cd ~/my-knowledge-base && git pull
-./scripts/qmd-sync-collections.sh   # re-register and update any new subdirectories
-qmd embed                           # create embeddings if wiki pages changed
+./scripts/qmd-full-reindex.sh   # re-register and update any new subdirectories
 ```
 
 ## Prerequisites
@@ -266,8 +264,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | ------ | ------- |
 | `wiki-remove-all-generated-files.sh` | Deletes all LLM-generated wiki files and batch state, resetting the wiki to a clean slate. Use when you want to re-ingest everything from scratch. |
 | `wiki-remove-large-attachments.py` | Interactive TUI for browsing and removing large Obsidian attachments. Navigate with ↑↓, press `d`/`D` to move files to `.trash/`. Useful for reclaiming disk space. |
-| `qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
-| `qmd-sync-collections.sh` | Adds all `raw/` and `wiki/` subdirectories as QMD collections (idempotent) and re-indexes them. Called by the `wiki-finalize-ingest` skill. |
+| `qmd-full-reindex.sh` | Reset and fully re-index the QMD database. |
 
 ### For use by skills (not normally run directly)
 
@@ -278,6 +275,8 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
 | `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories (Junie, Gemini, Codex, etc.) so all agents share the same skill set. |
+| `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
+| `system/qmd-sync-collections.sh` | Adds all `raw/` and `wiki/` subdirectories as QMD collections (idempotent) and re-indexes them. Called by the `wiki-finalize-ingest` skill. |
 
 ## Recognition
 

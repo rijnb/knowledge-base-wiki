@@ -3,7 +3,7 @@
 # Collection names use the full relative path with dashes: raw-clips, wiki-people, raw-scans-transcribed.
 set -euo pipefail
 
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 
 existing=$(qmd collection list 2>/dev/null | awk '/^[^ ]/ && NR>1 {print $1}')
 
