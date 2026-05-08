@@ -143,9 +143,9 @@ def build_root_index(wiki_dir: str, today: str, dry_run: bool, verbose: bool) ->
 def resolve_wiki_dir(cli_arg: str | None) -> str:
     if cli_arg:
         return os.path.abspath(cli_arg)
-    # Default: wiki/ is a sibling of the scripts/ directory
+    # Default: wiki/ is at the repo root (two levels above scripts/system/)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(os.path.dirname(script_dir), "wiki")
+    return os.path.join(os.path.dirname(os.path.dirname(script_dir)), "wiki")
 
 
 def main() -> None:
