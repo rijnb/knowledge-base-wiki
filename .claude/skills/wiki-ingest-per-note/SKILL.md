@@ -12,10 +12,10 @@ description: Use when about to process individual notes during Wiki ingestion â€
 
 For each file you need to ingest, first use a sub-agent to convert it and any of its attachments if needed:
 - **`.vtt` transcripts** in `raw/transcripts/`:
-  - run `python3 scripts/convert-vtt-to-md.py --input-dir raw/transcripts --output-dir raw/transcripts/converted`.
+  - run `python3 scripts/system/convert-vtt-to-md.py --input-dir raw/transcripts --output-dir raw/transcripts/converted`.
   - Ingest only `.md` files.
 - **`.eml` emails** in `raw/emails/`:
-  - run `python3 scripts/convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted`.
+  - run `python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted`.
   - Ingest only `.md` files.
 - **pdf** in `raw/<section>` or in a `_resources` directory:
   1. Check if `<file_dir>/converted/<filename>.md` exists â€” if so, skip.

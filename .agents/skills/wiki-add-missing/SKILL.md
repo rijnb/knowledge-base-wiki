@@ -118,7 +118,7 @@ Do not modify any other content of those pages.
 Run the index-page script from the project root to rebuild all topic indexes:
 
 ```bash
-python3 scripts/wiki-create-index-pages.py
+python3 scripts/system/wiki-create-index-pages.py
 ```
 
 ---

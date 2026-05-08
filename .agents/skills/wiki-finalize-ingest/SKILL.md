@@ -30,7 +30,7 @@ Then delete all `.import/batch-log-*.jsonl` and any remaining `.import/batch-imp
 Run the index-page script from the project root:
 
 ```bash
-python3 scripts/wiki-create-index-pages.py
+python3 scripts/system/wiki-create-index-pages.py
 ```
 
 This rebuilds `wiki/index.md` and all `wiki/<topic>/_index.md` files.

@@ -558,9 +558,9 @@ run_phase_convert() {
 #   *  Anything else is treated as a fatal error and aborts the script.
 run_phase_partition() {
     echo "=== Phase 1 - PARTITION: partitioning new notes into batches ==="
-    echo "Running scripts/wiki-create-import-batches.sh..."
+    echo "Running scripts/system/wiki-create-import-batches.sh..."
     set +e
-    bash "$PROJECT_DIR/scripts/wiki-create-import-batches.sh" --max-files-per-batch "$MAX_FILES_PER_BATCH"
+    bash "$PROJECT_DIR/scripts/system/wiki-create-import-batches.sh" --max-files-per-batch "$MAX_FILES_PER_BATCH"
     local rc=$?
     set -e
 
@@ -687,6 +687,22 @@ run_phase_finalize() {
         echo "────────────────────────────────────────────────────────────────────"
         confirm_after_error "/wiki-finalize-ingest"
     fi
+    echo ""
+    echo "=== Phase 4 - POST-PROCESS: lint check and QMD sync ==="
+    echo "Running wiki-lint-check.py..."
+    set +e
+    python3 "$PROJECT_DIR/scripts/system/wiki-lint-check.py" -- batch-mode --fix-simple-errors --fix-orphans --format text
+    local lint_rc=$?
+    set -e
+    [ "$lint_rc" -ne 0 ] && echo "WARN: wiki-lint-check.py exited with status $lint_rc" >&2
+
+    echo "Running qmd-sync-collections.sh..."
+    set +e
+    bash "$PROJECT_DIR/scripts/system/qmd-sync-collections.sh"
+    local sync_rc=$?
+    set -e
+    [ "$sync_rc" -ne 0 ] && echo "WARN: qmd-sync-collections.sh exited with status $sync_rc" >&2
+
     echo ""
     echo "────────────────────────────────────────────────────────────────────"
     echo "Pipeline complete.  Current time: $(date '+%H:%M:%S')"

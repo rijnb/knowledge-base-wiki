@@ -39,7 +39,7 @@ fi
 find "$ROOT/wiki" -mindepth 1 ! -name ".gitkeep" -delete
 find "$ROOT/.import" -mindepth 1 ! -name ".gitkeep" -delete
 find "$ROOT/raw" -name converted -type d -exec rm -rf "{}" \;
-"$SCRIPT_DIR/qmd-reset-collections.sh" --force
+"$SCRIPT_DIR/system/qmd-reset-collections.sh" --force
 
 echo "Done; comverted/, wiki/ and .import/ removed; QMD reset."
 echo "Run prompt 'ingest new notes' in the LLM to recreate the wiki."
