@@ -604,7 +604,7 @@ run_phase_batches() {
         if [ "$MAX_BATCHES_EXPLICIT" = true ]; then
             echo "=== Phase 2 - INGEST BATCHES: batch $CURRENT_BATCH of $effective_total  ($remaining total batches remaining) ==="
         else
-            echo "=== Phase 2 - INGEST BATCHES: batch $iteration of $total  ($remaining remaining, loop $CURRENT_BATCH/$MAX_BATCHES) ==="
+            echo "=== Phase 2 - INGEST BATCHES: batch $iteration of $total  ($remaining remaining, loop $CURRENT_BATCH/$effective_total) ==="
         fi
 
         local usage_before
