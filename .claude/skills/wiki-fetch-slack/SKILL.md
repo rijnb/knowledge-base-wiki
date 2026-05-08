@@ -53,9 +53,19 @@ Process each row in the config table in order.
 
 Create the directory if it does not exist.
 
-**DM resolution:** For `@`-prefixed rows, use the Slack MCP to search for the person by display name or real name. If the tool returns multiple matches, use the closest exact match. If no match is found or the lookup is ambiguous, warn ("Could not resolve @Person Name to a Slack user — skipping") and skip that row. Do not guess.
+**Look up cached state:** Before resolving IDs or fetching, find the most recent `slack-fetch` entry for this source in `wiki/log.jsonl`:
+- With jq: `jq 'select(.type == "slack-fetch" and .source == "<dir>")' wiki/log.jsonl | tail -1`
+- Fallback (no jq): `grep '"slack-fetch"' wiki/log.jsonl | grep '"<dir>"' | tail -1`
 
-**Fetch:** Use the Slack MCP to get all messages in the source that had activity within the fetch window (from the start of day, N calendar days ago, to now). Separate threads from loose (unthreaded) messages.
+From that entry extract:
+- `id` — cached channel or user ID (use directly; skip MCP resolution if present)
+- `date` — use as fetch window start (fall back to start of day N calendar days ago if absent)
+
+**ID resolution:** Only resolve via MCP if no cached `id` was found above.
+- For `#`-prefixed rows: look up the channel by name.
+- For `@`-prefixed rows: search for the person by display name or real name. If the tool returns multiple matches, use the closest exact match. If no match is found or the lookup is ambiguous, warn ("Could not resolve @Person Name to a Slack user — skipping") and skip that row. Do not guess.
+
+**Fetch:** Use the Slack MCP to get all messages in the source that had activity within the fetch window (from the determined window start to now). Separate threads from loose (unthreaded) messages.
 
 **Apply mode filter:** For each thread, apply the filter based on the source's resolved mode:
 
@@ -73,6 +83,8 @@ Create the directory if it does not exist.
   - **Thread override:** if the root message looks like noise but the replies contain substantive discussion (decisions, problem-solving, design questions, feature discussions), keep the entire thread. The filter evaluates the thread as a whole, not just the opening message. When in doubt — include.
 
 ### Thread files
+
+Copy each message's text exactly as returned by the Slack MCP — character for character. Do not edit, summarize, paraphrase, shorten, or remove anything. Preserve typos, emoji, informal language, code blocks, formatting, and links exactly as they appear.
 
 For each thread:
 
@@ -110,6 +122,8 @@ For direct messages (DMs), use `channel: "DM: Alice van Dijk"` in the frontmatte
 
 ### Loose messages file
 
+Copy each message's text exactly as returned by the Slack MCP — character for character. Do not edit, summarize, paraphrase, shorten, or remove anything. Preserve typos, emoji, informal language, code blocks, formatting, and links exactly as they appear.
+
 Collect all messages in the source that are not part of any thread. Apply the same mode filter as for threads: `all` passes everything through, a topic string applies the strict inclusion filter, and `signal` applies the noise exclusion categories listed above. If any qualifying messages remain, write them to:
 
 ```
@@ -135,6 +149,14 @@ mode: <resolved mode: signal, all, or the topic string>
 ```
 
 If there are no loose messages, do not create the file.
+
+**Record fetch in log:** After successfully writing all files for this source, append one line to `wiki/log.jsonl`:
+
+```json
+{"date": "YYYY-MM-DD HH:mm:ss", "type": "slack-fetch", "source": "<dir>", "id": "<channel or user id>", "window_start": "YYYY-MM-DD HH:mm:ss"}
+```
+
+`date` is the local time the fetch completed. `window_start` is the actual start of the window used. `id` is the resolved channel or user ID. Only append if the source completed without error — do not append if it was skipped due to a channel-not-found or MCP error.
 
 ## Error handling
 
