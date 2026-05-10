@@ -29,6 +29,7 @@ MAX_ERRORS=5
 MAX_BATCHES=50
 MAX_BATCHES_EXPLICIT=false
 MAX_FILES_PER_BATCH=""
+WAIT_BETWEEN_BATCHES=60
 ERROR_COUNT=0
 CURRENT_BATCH=0
 AGENT=claude
@@ -67,7 +68,7 @@ check_dependencies() {
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--help]
+Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--wait-between-batches N] [--help]
 
 Autonomous wiki ingestion pipeline. Runs /wiki-ingest (if needed), then loops
 /wiki-ingest-next-batch until all batches are done, then finalizes. Pauses
@@ -88,6 +89,8 @@ Options:
   --max-files-per-batch N    Maximum number of files per batch (default: 10 for claude,
                              3 for junie). Passed to wiki-create-import-batches.sh when
                              partitioning notes.
+  --wait-between-batches N   Seconds to wait between batches (default: 60). The countdown
+                             can be skipped with Enter or cancelled with ESC.
   --help                     Show this help and exit.
 
 Data sources (in order of preference):
@@ -124,6 +127,9 @@ while [[ $# -gt 0 ]]; do
         --max-files-per-batch)
             [[ "$2" =~ ^[0-9]+$ ]] || { echo "--max-files-per-batch must be a non-negative integer" >&2; exit 1; }
             MAX_FILES_PER_BATCH="$2"; shift 2 ;;
+        --wait-between-batches)
+            [[ "$2" =~ ^[0-9]+$ ]] || { echo "--wait-between-batches must be a non-negative integer" >&2; exit 1; }
+            WAIT_BETWEEN_BATCHES="$2"; shift 2 ;;
         --help|-h)             usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
@@ -431,7 +437,7 @@ BANNER
     echo "  Phase 3  /wiki-finalize-ingest"
     echo ""
     printf "Pauses 30 min if 5-hour usage ≥ %s%%.\n" "$THRESHOLD"
-    printf "Max batches: %s  |  Max errors: %s  |  Max files/batch: %s\n" "$MAX_BATCHES" "$MAX_ERRORS" "$MAX_FILES_PER_BATCH"
+    printf "Max batches: %s  |  Max errors: %s  |  Max files/batch: %s  |  Wait between batches: %ss\n" "$MAX_BATCHES" "$MAX_ERRORS" "$MAX_FILES_PER_BATCH" "$WAIT_BETWEEN_BATCHES"
     echo ""
 }
 
@@ -668,7 +674,7 @@ run_phase_batches() {
             return 2
         fi
 
-        if ! wait_with_cancel 60 "$wait_label"; then
+        if ! wait_with_cancel "$WAIT_BETWEEN_BATCHES" "$wait_label"; then
             stopped_early=true
             break
         fi
