@@ -524,7 +524,7 @@ run_phase_convert() {
 
     echo "Converting VTT transcripts..."
     set +e
-    python3 "$scripts_dir/convert-vtt-to-md.py" \
+    python3 "$scripts_dir/system/convert-vtt-to-md.py" \
         --input-dir  "$PROJECT_DIR/raw/transcripts" \
         --output-dir "$PROJECT_DIR/raw/transcripts/converted"
     local vtt_rc=$?
@@ -533,7 +533,7 @@ run_phase_convert() {
 
     echo "Converting EML emails..."
     set +e
-    python3 "$scripts_dir/convert-eml-to-md.py" \
+    python3 "$scripts_dir/system/convert-eml-to-md.py" \
         --input-dir  "$PROJECT_DIR/raw/emails" \
         --output-dir "$PROJECT_DIR/raw/emails/converted"
     local eml_rc=$?
