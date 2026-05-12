@@ -563,9 +563,6 @@
     "wiki/systems": {
       "previewRows": 3
     },
-    "wiki/projects": {
-      "previewRows": 3
-    },
     "wiki/decisions": {
       "previewRows": 3
     }

@@ -47,15 +47,16 @@ from pathlib import Path
 # Link extraction
 # ---------------------------------------------------------------------------
 
-# Matches [[target]], [[target|alias]], [[target#anchor|alias]] — Obsidian wikilinks.
-# Captures only the target portion (before any | or # delimiter).
+# Matches [[target]], [[target|alias]] — Obsidian wikilinks.
+# Captures only the target portion (before any | delimiter).
 # A single ']' that is NOT followed by another ']' is allowed inside the target
 # (e.g. [[example [1] of a note]]), while ']]' ends the link.
-# '"' is excluded to prevent false positives on JSON-like nested structures (e.g. [["a","b"]]).
+# Double quotes and '#' are permitted inside targets (e.g. [[raw/some/link/This is "A Valid" Note.md]],
+# [[notes/Issue #42 follow-up]]); '#' is no longer treated as an anchor separator at the regex level.
 # '\|' (backslash-pipe) is also treated as a separator, as required inside markdown tables.
-RE_WIKILINK = re.compile(r'(?<!!)\[\[((?:[^\]|#\n\\"]|\\(?!\|)|\](?!\]))+)')
+RE_WIKILINK = re.compile(r'(?<!!)\[\[((?:[^\]|\n\\]|\\(?!\|)|\](?!\]))+)')
 # Matches ![[target]] — Obsidian image embeds (same bracket rule applies)
-RE_IMAGE_EMBED = re.compile(r'!\[\[((?:[^\]|#\n\\"]|\\(?!\|)|\](?!\]))+)')
+RE_IMAGE_EMBED = re.compile(r'!\[\[((?:[^\]|\n\\]|\\(?!\|)|\](?!\]))+)')
 # Matches [text](target) — standard markdown links; skips http/https separately
 RE_MDLINK = re.compile(r'(?<!!)\[[^\]]*\]\(([^)#\n]+?)(?:#[^)]*)?\)')
 # Matches ![alt](target) — standard markdown images
@@ -585,6 +586,116 @@ def fix_curly_quotes(root: Path, quiet: bool) -> tuple[int, int, int]:
             link_count += counter[0]
 
     return renamed, link_files, link_count
+
+
+# Wrap bare/backticked raw/ paths in wiki/ files with [[...]] wikilinks.
+_RAW_PATH = r'raw/[^\n`\[\]]+?\.md'
+RE_BACKTICKED_RAW = re.compile(rf'`({_RAW_PATH})`')
+RE_BULLET_LINE = re.compile(r'^(\s*[-*+]\s+)(.*)$')
+RE_RAW_AT_START = re.compile(rf'^({_RAW_PATH})(?=\s|$)')
+RE_SOURCE_LEAD_BARE = re.compile(rf'^(\s*\*?Source:\*?\s+)({_RAW_PATH})(?=\s|$|\*)')
+
+
+def fix_raw_references(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int]:
+    """Wrap backticked or bare raw/ paths in wiki/ files with [[...]] wikilinks.
+
+    Three passes per line (outside YAML frontmatter and fenced code blocks):
+      1. Universal: any `` `raw/x.md` `` (backticked) → `[[raw/x.md]]`, anywhere.
+      2. Bullet bare: at the start of a bullet item's content, a bare `raw/x.md`
+         (followed by whitespace/end) is wrapped — trailing annotation preserved.
+      3. Source bare: on a `Source:` line (with optional `*` italics around
+         `Source:`), a bare `raw/x.md` is wrapped — trailing content preserved.
+
+    Only modifies files inside wiki/. When dry_run=True, scans without writing —
+    useful for detection-only passes. Returns
+    (files_changed_or_pending, total_replacements_or_pending).
+    """
+    files_changed = 0
+    total_changes = 0
+    for md_file in sorted(root.rglob("*.md")):
+        if should_skip_md(md_file, root):
+            continue
+        rel = md_file.relative_to(root)
+        if not rel.parts or rel.parts[0] != "wiki":
+            continue
+        try:
+            content = md_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "raw/" not in content:
+            continue
+
+        lines = content.splitlines(keepends=True)
+
+        fm_end = 0
+        if lines and lines[0].strip() == "---":
+            for i, line in enumerate(lines[1:], 1):
+                if line.strip() in ("---", "..."):
+                    fm_end = i + 1
+                    break
+
+        in_code_block = False
+        changes = 0
+        new_lines = []
+        for i, line in enumerate(lines):
+            if i < fm_end:
+                new_lines.append(line)
+                continue
+
+            if line.endswith("\r\n"):
+                newline = "\r\n"
+                body = line[:-2]
+            elif line.endswith("\n"):
+                newline = "\n"
+                body = line[:-1]
+            else:
+                newline = ""
+                body = line
+
+            stripped = body.lstrip()
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                in_code_block = not in_code_block
+                new_lines.append(line)
+                continue
+            if in_code_block:
+                new_lines.append(line)
+                continue
+
+            # Pass 1: universal — wrap any `raw/x.md` (backticked) with [[...]].
+            new_body, n_bt = RE_BACKTICKED_RAW.subn(r'[[\1]]', body)
+            line_changes = n_bt
+
+            # Pass 2: bullet line with bare raw/x.md at start of content.
+            bullet_m = RE_BULLET_LINE.match(new_body)
+            if bullet_m:
+                prefix, rest = bullet_m.group(1), bullet_m.group(2)
+                pm = RE_RAW_AT_START.match(rest)
+                if pm:
+                    new_body = prefix + f"[[{pm.group(1)}]]" + rest[pm.end():]
+                    line_changes += 1
+            else:
+                # Pass 3: Source: line with a bare raw/x.md (path may have trailing content).
+                sm = RE_SOURCE_LEAD_BARE.match(new_body)
+                if sm:
+                    lead, path = sm.group(1), sm.group(2)
+                    new_body = lead + f"[[{path}]]" + new_body[sm.end():]
+                    line_changes += 1
+
+            if line_changes:
+                new_lines.append(new_body + newline)
+                changes += line_changes
+            else:
+                new_lines.append(line)
+
+        if changes:
+            if not dry_run:
+                md_file.write_text("".join(new_lines), encoding="utf-8")
+                if not quiet:
+                    print(f"  Raw refs: {rel} ({changes} change(s))", file=sys.stderr)
+            files_changed += 1
+            total_changes += changes
+
+    return files_changed, total_changes
 
 
 def should_skip_md(path: Path, root: Path) -> bool:
@@ -1144,6 +1255,13 @@ def check_vault(root: Path, args) -> dict:
     if not args.quiet:
         print(f"\r  {total_files} files scanned — done.        ", file=sys.stderr)
 
+    raw_refs_pending = 0
+    raw_refs_pending_files = 0
+    if not getattr(args, "fix_simple_errors", False):
+        raw_refs_pending_files, raw_refs_pending = fix_raw_references(
+            root, quiet=True, dry_run=True
+        )
+
     fixed_links = 0
     fixed_files = 0
     if getattr(args, "fix_simple_errors", False):
@@ -1203,6 +1321,11 @@ def check_vault(root: Path, args) -> dict:
             print(f"  Curly quotes: {q_renamed} file(s) renamed, "
                   f"{q_links} link(s) updated in {q_link_files} file(s).", file=sys.stderr)
 
+        raw_files_changed, raw_changes = fix_raw_references(root, args.quiet)
+        if not args.quiet and raw_changes:
+            print(f"  Raw references: {raw_changes} reference(s) wikilinked in "
+                  f"{raw_files_changed} file(s).", file=sys.stderr)
+
     removed_links = 0
     removed_files = 0
     if getattr(args, "remove_broken_links", False):
@@ -1242,14 +1365,21 @@ def check_vault(root: Path, args) -> dict:
             summary["quote_renamed_files"] = q_renamed
             summary["quote_updated_links"] = q_links
             summary["quote_updated_link_files"] = q_link_files
+        if raw_changes:
+            summary["raw_refs_wikilinked"] = raw_changes
+            summary["raw_refs_files_changed"] = raw_files_changed
     if getattr(args, "remove_broken_links", False):
         summary["removed_links"] = removed_links
         summary["removed_files"] = removed_files
+    if raw_refs_pending:
+        summary["raw_refs_pending"] = raw_refs_pending
+        summary["raw_refs_pending_files"] = raw_refs_pending_files
 
     return {
         "broken_links": broken,
         "summary": summary,
         "errors": errors,
+        "raw_refs_pending": raw_refs_pending,
     }
 
 
@@ -1268,6 +1398,10 @@ def format_text(result: dict) -> str:
         lines.append(f"Removed {s['fm_deleted_links']} frontmatter broken link(s) in {s['fm_deleted_files']} file(s).")
     if s.get("removed_links"):
         lines.append(f"Marked {s['removed_links']} broken link(s) in {s['removed_files']} file(s).")
+    if s.get("raw_refs_wikilinked"):
+        lines.append(f"Wikilinked {s['raw_refs_wikilinked']} raw/ reference(s) in {s['raw_refs_files_changed']} file(s).")
+    elif s.get("raw_refs_pending"):
+        lines.append(f"Raw/ references to wikilink: {s['raw_refs_pending']} in {s['raw_refs_pending_files']} file(s) (use --fix-simple-errors to apply).")
     lines.append("")
 
     if result["errors"]:
@@ -2585,7 +2719,7 @@ def ask_run_auto_fixes() -> bool:
         content = [
             "Apply automatic fixes before interactive review?",
             "",
-            "  fix-simple-errors  — repair normalizable broken links",
+            "  fix-simple-errors  — repair normalizable broken links + wikilink raw/ refs",
             "  fix-orphans        — link plain-text references in wiki/",
             "",
             "Only remaining issues will appear in the interactive TUI.",
@@ -2987,6 +3121,7 @@ def main():
             has_fixable = (
                 any("suggested_fix" in b for b in result["broken_links"])
                 or bool(result.get("orphans"))
+                or result.get("raw_refs_pending", 0) > 0
             )
             if has_fixable:
                 auto_fix_applied = ask_run_auto_fixes()
