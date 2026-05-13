@@ -419,7 +419,7 @@ BANNER
     if [ "$needs_ingest" = true ]; then
         echo "  ► FRESH INGEST — starting from scratch"
         echo ""
-        echo "  Phase 0  convert raw files         (VTT transcripts → MD, EML emails → MD)"
+        echo "  Phase 0  convert raw files         (VTT transcripts → MD, EML/HTML emails → MD)"
         echo "  Phase 1  partition new notes       (wiki-create-import-batches.sh — may exit early if nothing to ingest)"
         echo "  Phase 2  /wiki-ingest-next-batch   (batch count determined after phase 1)"
     else
@@ -545,6 +545,15 @@ run_phase_convert() {
     local eml_rc=$?
     set -e
     [ "$eml_rc" -ne 0 ] && { echo "WARN: convert-eml-to-md.py exited with status $eml_rc" >&2; had_error=true; }
+
+    echo "Converting HTML emails..."
+    set +e
+    python3 "$scripts_dir/system/convert-html-to-md.py" \
+        --input-dir  "$PROJECT_DIR/raw/emails" \
+        --output-dir "$PROJECT_DIR/raw/emails/converted"
+    local html_rc=$?
+    set -e
+    [ "$html_rc" -ne 0 ] && { echo "WARN: convert-html-to-md.py exited with status $html_rc" >&2; had_error=true; }
 
     echo ""
     if [ "$had_error" = true ]; then
