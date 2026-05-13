@@ -92,7 +92,7 @@ The email integration uses Microsoft Power Automate to save emails to a OneDrive
 	- User produces raw notes and stores them in the `raw/notes` directory.
 	- User uses the Obsidian Web Clipper to store notes in `raw/clips`.
 	- User stores `.vtt` meeting transcripts in `raw/transcripts`.
-	- User asks "fetch mail" to copy emails from the configured OneDrive inbox to `raw/emails/`, or drags `.eml`/`.html` files there manually.
+	- User asks "fetch mail" to copy emails from the configured inbox to `raw/emails/`, or drags `.eml`/`.html` files there manually.
 	- User stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
 	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/`.
 
@@ -118,7 +118,7 @@ These skills commands and natural-language triggers are available:
 | ----------------          | ----------- |
 | "ingest new notes"        | Start a new ingest of raw notes (Session 1 — coordinator flow) |
 | "fetch slack"             | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest-loop.sh` to ingest |
-| "fetch mail"              | Copy emails from configured OneDrive inbox to `raw/emails/`, then run `wiki-ingest-loop.sh` to ingest |
+| "fetch mail"              | Copy emails from configured inbox to `raw/emails/`, then run `wiki-ingest-loop.sh` to ingest |
 | "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
 | "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
 | "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
@@ -188,19 +188,6 @@ Add a `# Slack` section to `config/personal_info.md` to configure which channels
 - **Days** — how many calendar days back to fetch conversation updates (default: 7)
 - **Mode** — `signal` filters out noise (absences, bot messages, bare acks); `all` includes everything; any other text is treated as a topic filter (only threads directly about that topic are included)
 
-### Configuring email fetch
-
-Add an `# Email` section to `config/personal_info.md` to configure where "fetch mail" copies files from:
-
-```markdown
-# Email
-| Setting | Value |
-|---|---|
-| Inbox | /path/to/your/onedrive/inbox |
-```
-
-Set `Inbox` to the local path of the OneDrive folder that contains your exported email files (`.html` and `.eml`). Files are copied to `raw/emails/` and deleted from the inbox on each fetch.
-
 ### Capturing emails automatically with Microsoft Power Automate
 
 You can use [Microsoft Power Automate](https://make.powerautomate.com/) to automatically save incoming emails as `.html` files so they are picked up by the ingestion pipeline.
@@ -218,6 +205,19 @@ Create a flow with these steps:
      ```
 
 The resulting filename looks like `2026-05-13T08_32_05+00_00.html` — the date is extracted from it automatically. The `FROM`, `TO`, `CC`, `BCC`, and `SUBJECT` fields become YAML frontmatter; `BODY` is converted from HTML to Markdown. Once the OneDrive folder syncs to your local disk, ask "fetch mail" to pull the files into `raw/emails/` and drain the inbox.
+
+### Configuring email fetch
+
+Add an `# Email` section to `config/personal_info.md` to configure where "fetch mail" copies files from:
+
+```markdown
+# Email
+| Setting | Value                        |
+|---------|------------------------------|
+| Inbox   | /path/to/your/onedrive/inbox |
+```
+
+Set `Inbox` to the local path of the folder that contains your exported email files (`.html` and `.eml`) from for example, the Power Automate flow. Files are copied to `raw/emails/` and deleted from the inbox on each fetch.
 
 ### Running Claude within Obsidian
 
