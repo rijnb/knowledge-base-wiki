@@ -174,11 +174,11 @@ If the file is missing, or it contains no info topics, default topics will be us
 
 Add a `# Slack` section to `config/personal_info.md` to configure which channels and DMs to fetch:
 
-| Channel / DM            | Days | Mode   
-|-------------------------|——----|——------
-| #architecture-decisions | 14   | signal
-| #team-platform          | all  |
-| @Alice van Dijk         | 7    | software design decisions
+| Channel / DM            | Days | Mode                      |
+|-------------------------|------|---------------------------|
+| #architecture-decisions | 14   | signal                    |
+| #team-platform          |      | all                       |
+| @Alice van Dijk         | 7    | software design decisions |
 
 - `#channel-name` — a public or private Slack channel
 - `@Person Name` — a direct message thread with that person
