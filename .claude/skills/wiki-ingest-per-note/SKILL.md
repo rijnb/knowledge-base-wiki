@@ -17,6 +17,9 @@ For each file you need to ingest, first use a sub-agent to convert it and any of
 - **`.eml` emails** in `raw/emails/`:
   - run `python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted`.
   - Ingest only `.md` files.
+- **`.html` emails** in `raw/emails/`:
+  - run `python3 scripts/system/convert-html-to-md.py --input-dir raw/emails --output-dir raw/emails/converted`.
+  - Ingest only `.md` files.
 - **pdf** in `raw/<section>` or in a `_resources` directory:
   1. Check if `<file_dir>/converted/<filename>.md` exists — if so, skip.
   2. Convert it to Markdown using `pdftotext`:
