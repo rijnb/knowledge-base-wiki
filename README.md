@@ -155,6 +155,16 @@ This opens an interactive TUI to deal with:
 
 Using this interactive mode, you should be able to keep your knowledge base 100% free of false positive alerts so it's easy to see if the knowledge base is still sound or not. Use `--batch-mode` to suppress the TUI and get text/JSON output only.
 
+### Pro-tip 3: run `qmd-full-reindex.sh` to re-index the semantic database
+
+After running ingestion of notes (e.g. by `scripts/wiki-ingest-loop.sh`), you are advised to run:
+```
+scripts/qmd-full-reindex.sh
+```
+This makes sure the sematic database (QMD) is fully up-to-date again. The LLM skill `wiki-query` makes use of the semantic database, so make sure it's up-to-date.
+
+Instead of running a full re-index, you can also execute `qmd embed`. This is useful if you only ingested a couple of new notes, for example.
+
 ## Configuration
 
 ### Personalizing your setup
