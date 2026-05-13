@@ -195,10 +195,10 @@ Create a flow with these steps:
 2. **Action:** *Get emails (V3)* — to retrieve the full email details
 3. **Action:** *Get email (V3)* — to get the email body
 4. **Action:** *Create file* (OneDrive for Business) — save to your `raw/emails/` folder (or a watched inbox folder that syncs there)
-   - **File name:** `@{triggerOutputs()?['body/receivedDateTime']}.html`
+   - **File name:** `@{outputs('Get_email_(V2)')?['body/receivedDateTime']}.html`
    - **File content:**
      ```
-     FROM:@{triggerOutputs()?['body/from']},TO:@{triggerOutputs()?['body/to']},CC:@{triggerOutputs()?['body/cc']},BCC:@{triggerOutputs()?['body/bcc']},SUBJECT:@{triggerOutputs()?['body/subject']},BODY:@{triggerOutputs()?['body/body']}
+     FROM:@{outputs('Get_email_(V2)')?['body/from']},TO:@{outputs('Get_email_(V2)')?['body/toRecipients']},CC:@{outputs('Get_email_(V2)')?['body/ccRecipients']},BCC:@{outputs('Get_email_(V2)')?['body/bccRecipients']},SUBJECT:@{outputs('Get_email_(V2)')?['body/subject']},BODY:@{outputs('Get_email_(V2)')?['body/body']}
      ```
 
 The resulting filename looks like `2026-05-13T08_32_05+00_00.html` — the ingestion pipeline extracts the date from it automatically. The `FROM`, `TO`, `CC`, `BCC`, and `SUBJECT` fields are written into YAML frontmatter; `BODY` is converted from HTML to Markdown.
