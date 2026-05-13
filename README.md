@@ -90,13 +90,13 @@ The Slack integration is managed via your claude.ai organization. Authorize it y
 	- User produces raw notes and stores them in the `raw/notes` directory.
 	- User uses the Obsidian Web Clipper to store notes in `raw/clips`.
 	- User stores `.vtt` meeting transcripts in `raw/transcripts`.
-	- User drags `.eml` emails to `raw/emails`.
+	- User drags `.eml` emails or saves `.html` email exports to `raw/emails`.
 	- User stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
 	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/`.
 
 - **Ingest notes:**
 	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.loop.sh`.
-	- LLM converts non-Markdown inputs: `.vtt` transcripts → `raw/transcripts/converted/`, `.eml` emails → `raw/emails/converted/`, `.pdf/.jpg` scans → `raw/scans/converted/`.
+	- LLM converts non-Markdown inputs: `.vtt` transcripts → `raw/transcripts/converted/`, `.eml`/`.html` emails → `raw/emails/converted/`, `.pdf/.jpg` scans → `raw/scans/converted/`.
 	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
 	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `_index.md` files, and run post-processing (QMD re-index + health check).
    
@@ -185,6 +185,24 @@ Add a `# Slack` section to `config/personal_info.md` to configure which channels
 - **Days** — how many calendar days back to fetch conversation updates (default: 7)
 - **Mode** — `signal` filters out noise (absences, bot messages, bare acks); `all` includes everything; any other text is treated as a topic filter (only threads directly about that topic are included)
 
+### Capturing emails automatically with Microsoft Power Automate
+
+You can use [Microsoft Power Automate](https://make.powerautomate.com/) to automatically save incoming emails as `.html` files so they are picked up by the ingestion pipeline.
+
+Create a flow with these steps:
+
+1. **Trigger:** *When a new email arrives (V3)*
+2. **Action:** *Get emails (V3)* — to retrieve the full email details
+3. **Action:** *Get email (V3)* — to get the email body
+4. **Action:** *Create file* (OneDrive for Business) — save to your `raw/emails/` folder (or a watched inbox folder that syncs there)
+   - **File name:** `@{triggerOutputs()?['body/receivedDateTime']}.html`
+   - **File content:**
+     ```
+     FROM:@{triggerOutputs()?['body/from']},TO:@{triggerOutputs()?['body/to']},CC:@{triggerOutputs()?['body/cc']},BCC:@{triggerOutputs()?['body/bcc']},SUBJECT:@{triggerOutputs()?['body/subject']},BODY:@{triggerOutputs()?['body/body']}
+     ```
+
+The resulting filename looks like `2026-05-13T08_32_05+00_00.html` — the ingestion pipeline extracts the date from it automatically. The `FROM`, `TO`, `CC`, `BCC`, and `SUBJECT` fields are written into YAML frontmatter; `BODY` is converted from HTML to Markdown.
+
 ### Running Claude within Obsidian
 
 You can run Claude from within Obsidian using the Claudian plugin. Install it by asking Claude:
@@ -223,7 +241,7 @@ The database is automatically checked for errors after ingesting new notes. To c
 ├── raw/
 │   ├── clips/           ← web articles and saved pages (web clipper)
 │   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)
-│   ├── emails/          ← email threads (.eml)
+│   ├── emails/          ← email threads (.eml or .html exports)
 │   │   └── converted/   ← LLM generated: emails converted to Markdown
 │   ├── scans/           ← handwritten pages, whiteboards
 │   │   └── converted/   ← LLM generated: scans converted to Markdown
@@ -292,6 +310,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest-loop.sh` and the `wiki-ingest` skill. |
 | `system/wiki-create-index-pages.py` | Rebuilds `_index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
+| `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
 | `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories (Junie, Gemini, Codex, etc.) so all agents share the same skill set. |
 | `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
