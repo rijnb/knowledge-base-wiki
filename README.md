@@ -64,7 +64,6 @@ cd ~/my-knowledge-base && git pull
 - [Obsidian Web Clipper](https://obsidian.md/clipper) — one-click web article saving to `raw/clips/`
 - [Claudian](https://github.com/YishenTu/claudian) — run Claude from within Obsidian (ask Claude to install it safely)
 - [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) (Mac App Store) — prevents Mac sleep during long overnight ingests
-- **Slack MCP server** — required for `fetch slack`; connect Claude Code to your Slack workspace via an MCP server (see [MCP Server Setup](#mcp-server-setup) below)
 
 ## MCP Server Setup
 
@@ -80,6 +79,8 @@ Register QMD as a MCP server in `~/.claude/claude_desktop_config.json` (or ask C
   }
 }
 ```
+
+For `fetch slack`, the Slack integration is managed via your claude.ai organization. Ask your admin to enable it, then authorize it yourself at **claude.ai → Settings → Integrations**. Once authorized, the Slack tools are available automatically in all Claude sessions — no local configuration needed.
 
 ---
 
@@ -173,15 +174,15 @@ If the file is missing, or it contains no info topics, default topics will be us
 
 Add a `# Slack` section to `config/personal_info.md` to configure which channels and DMs to fetch:
 
-| Channel / DM | Days | Mode |
-|---|---|---|
-| #architecture-decisions | 14 | signal |
-| #team-platform | | all |
-| @Alice van Dijk | 7 | software design decisions |
+| Channel / DM            | Days | Mode   
+|-------------------------|——----|——------
+| #architecture-decisions | 14   | signal
+| #team-platform          | all  |
+| @Alice van Dijk         | 7    | software design decisions
 
 - `#channel-name` — a public or private Slack channel
 - `@Person Name` — a direct message thread with that person
-- **Days** — how many calendar days back to fetch (default: 7)
+- **Days** — how many calendar days back to fetch conversation updates (default: 7)
 - **Mode** — `signal` filters out noise (absences, bot messages, bare acks); `all` includes everything; any other text is treated as a topic filter (only threads directly about that topic are included)
 
 ### Running Claude within Obsidian
