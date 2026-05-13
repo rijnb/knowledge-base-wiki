@@ -48,7 +48,7 @@ Then stop.
 
 For each file in the list:
 
-1. Check if a file with the same name already exists in `raw/emails/`. If so, skip it (count as skipped).
+1. Check if a file with the same name already exists in `raw/emails/`. If so, skip it (count as skipped) and move on to the next file — do not stop.
 2. Copy the file to `raw/emails/` and delete the original immediately after the successful copy:
 
 ```bash
