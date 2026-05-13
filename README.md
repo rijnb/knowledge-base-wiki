@@ -23,7 +23,7 @@ git clone <repo-url> ~/my-knowledge-base
 
 # 2. Create raw/ and wiki/ directories (these are not stored in git)
 cd ~/my-knowledge-base
-mkdir -p raw/{notes,clips,emails,transcripts,scans} wiki
+mkdir -p raw/{notes,clips,emails,transcripts,scans,slack} wiki
 
 # 3. Install QMD (the semantic search engine)
 npm install -g bun
@@ -64,6 +64,7 @@ cd ~/my-knowledge-base && git pull
 - [Obsidian Web Clipper](https://obsidian.md/clipper) — one-click web article saving to `raw/clips/`
 - [Claudian](https://github.com/YishenTu/claudian) — run Claude from within Obsidian (ask Claude to install it safely)
 - [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) (Mac App Store) — prevents Mac sleep during long overnight ingests
+- **Slack MCP server** — required for `fetch slack`; connect Claude Code to your Slack workspace via an MCP server (see [MCP Server Setup](#mcp-server-setup) below)
 
 ## MCP Server Setup
 
@@ -90,6 +91,7 @@ Register QMD as a MCP server in `~/.claude/claude_desktop_config.json` (or ask C
 	- User stores `.vtt` meeting transcripts in `raw/transcripts`.
 	- User drags `.eml` emails to `raw/emails`.
 	- User stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
+	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/`.
 
 - **Ingest notes:**
 	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.loop.sh`.
@@ -167,6 +169,21 @@ I am ...
 
 If the file is missing, or it contains no info topics, default topics will be used.
 
+### Configuring Slack sources
+
+Add a `# Slack` section to `config/personal_info.md` to configure which channels and DMs to fetch:
+
+| Channel / DM | Days | Mode |
+|---|---|---|
+| #architecture-decisions | 14 | signal |
+| #team-platform | | all |
+| @Alice van Dijk | 7 | software design decisions |
+
+- `#channel-name` — a public or private Slack channel
+- `@Person Name` — a direct message thread with that person
+- **Days** — how many calendar days back to fetch (default: 7)
+- **Mode** — `signal` filters out noise (absences, bot messages, bare acks); `all` includes everything; any other text is treated as a topic filter (only threads directly about that topic are included)
+
 ### Running Claude within Obsidian
 
 You can run Claude from within Obsidian using the Claudian plugin. Install it by asking Claude:
@@ -210,6 +227,7 @@ The database is automatically checked for errors after ingesting new notes. To c
 │   ├── scans/           ← handwritten pages, whiteboards
 │   │   └── converted/   ← LLM generated: scans converted to Markdown
 │   ├── notes/           ← notes, 1:1s, and people-specific files
+│   ├── slack/           ← Slack channel and DM threads (fetched by "fetch slack")
 │   └── transcripts/     ← meeting and conversation transcripts (.vtt)
 │       └── converted/   ← LLM generated: transcripts converted to Markdown
 ├── wiki/
