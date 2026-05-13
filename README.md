@@ -82,6 +82,8 @@ Register QMD as a MCP server in `~/.claude/claude_desktop_config.json` (or ask C
 
 The Slack integration is managed via your claude.ai organization. Authorize it yourself at **claude.ai → Settings → Connectors**. Once authorized, the Slack tools are available automatically in all Claude sessions — no local configuration needed.
 
+The email integration uses Microsoft Power Automate to save emails to a OneDrive folder, which syncs to your local disk. Ask "fetch mail" to copy files from that folder into `raw/emails/` and queue them for ingestion.
+
 ---
 
 ## In a nutshell
@@ -90,7 +92,7 @@ The Slack integration is managed via your claude.ai organization. Authorize it y
 	- User produces raw notes and stores them in the `raw/notes` directory.
 	- User uses the Obsidian Web Clipper to store notes in `raw/clips`.
 	- User stores `.vtt` meeting transcripts in `raw/transcripts`.
-	- User drags `.eml` emails or saves `.html` email exports to `raw/emails`.
+	- User asks "fetch mail" to copy emails from the configured OneDrive inbox to `raw/emails/`, or drags `.eml`/`.html` files there manually.
 	- User stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
 	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/`.
 
@@ -116,6 +118,7 @@ These skills commands and natural-language triggers are available:
 | ----------------          | ----------- |
 | "ingest new notes"        | Start a new ingest of raw notes (Session 1 — coordinator flow) |
 | "fetch slack"             | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest-loop.sh` to ingest |
+| "fetch mail"              | Copy emails from configured OneDrive inbox to `raw/emails/`, then run `wiki-ingest-loop.sh` to ingest |
 | "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
 | "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
 | "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
@@ -185,6 +188,19 @@ Add a `# Slack` section to `config/personal_info.md` to configure which channels
 - **Days** — how many calendar days back to fetch conversation updates (default: 7)
 - **Mode** — `signal` filters out noise (absences, bot messages, bare acks); `all` includes everything; any other text is treated as a topic filter (only threads directly about that topic are included)
 
+### Configuring email fetch
+
+Add an `# Email` section to `config/personal_info.md` to configure where "fetch mail" copies files from:
+
+```markdown
+# Email
+| Setting | Value |
+|---|---|
+| Inbox | /path/to/your/onedrive/inbox |
+```
+
+Set `Inbox` to the local path of the OneDrive folder that contains your exported email files (`.html` and `.eml`). Files are copied to `raw/emails/` and deleted from the inbox on each fetch.
+
 ### Capturing emails automatically with Microsoft Power Automate
 
 You can use [Microsoft Power Automate](https://make.powerautomate.com/) to automatically save incoming emails as `.html` files so they are picked up by the ingestion pipeline.
@@ -194,14 +210,14 @@ Create a flow with these steps:
 1. **Trigger:** *When a new email arrives (V3)*
 2. **Action:** *Get emails (V3)* — to retrieve the full email details
 3. **Action:** *Get email (V3)* — to get the email body
-4. **Action:** *Create file* (OneDrive for Business) — save to your `raw/emails/` folder (or a watched inbox folder that syncs there)
+4. **Action:** *Create file* (OneDrive for Business) — save to a dedicated OneDrive inbox folder (e.g. `KnowledgeSystem/inbox`). This folder syncs to your local disk; configure its local path in `config/personal_info.md` and ask "fetch mail" to copy files to `raw/emails/`.
    - **File name:** `@{outputs('Get_email_(V2)')?['body/receivedDateTime']}.html`
    - **File content:**
      ```
      FROM:@{outputs('Get_email_(V2)')?['body/from']},TO:@{outputs('Get_email_(V2)')?['body/toRecipients']},CC:@{outputs('Get_email_(V2)')?['body/ccRecipients']},BCC:@{outputs('Get_email_(V2)')?['body/bccRecipients']},SUBJECT:@{outputs('Get_email_(V2)')?['body/subject']},BODY:@{outputs('Get_email_(V2)')?['body/body']}
      ```
 
-The resulting filename looks like `2026-05-13T08_32_05+00_00.html` — the ingestion pipeline extracts the date from it automatically. The `FROM`, `TO`, `CC`, `BCC`, and `SUBJECT` fields are written into YAML frontmatter; `BODY` is converted from HTML to Markdown.
+The resulting filename looks like `2026-05-13T08_32_05+00_00.html` — the date is extracted from it automatically. The `FROM`, `TO`, `CC`, `BCC`, and `SUBJECT` fields become YAML frontmatter; `BODY` is converted from HTML to Markdown. Once the OneDrive folder syncs to your local disk, ask "fetch mail" to pull the files into `raw/emails/` and drain the inbox.
 
 ### Running Claude within Obsidian
 
