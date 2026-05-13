@@ -48,14 +48,16 @@ Then stop.
 
 For each file in the list:
 
-1. Check if a file with the same name already exists in `raw/emails/`. If so, skip it (count as skipped) and move on to the next file — do not stop.
-2. Copy the file to `raw/emails/` and delete the original immediately after the successful copy:
+1. If a file with the same name already exists in `raw/emails/`, skip the copy (count as skipped) but still delete the original from the inbox — it is already safe in `raw/emails/`.
+2. Otherwise, copy the file to `raw/emails/` first, then delete the original:
 
 ```bash
 cp "<inbox_path>/<filename>" "raw/emails/<filename>" && rm "<inbox_path>/<filename>"
 ```
 
 If the copy fails, warn ("Could not copy <filename> — skipping") and leave the original in the inbox. Do not delete a file whose copy failed.
+
+In all cases where the file ends up in `raw/emails/` (whether copied now or already present), delete it from the inbox.
 
 ## Step 5: Log
 
