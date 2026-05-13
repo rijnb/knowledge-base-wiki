@@ -80,7 +80,7 @@ Register QMD as a MCP server in `~/.claude/claude_desktop_config.json` (or ask C
 }
 ```
 
-For `fetch slack`, the Slack integration is managed via your claude.ai organization. Ask your admin to enable it, then authorize it yourself at **claude.ai → Settings → Integrations**. Once authorized, the Slack tools are available automatically in all Claude sessions — no local configuration needed.
+The Slack integration is managed via your claude.ai organization. Authorize it yourself at **claude.ai → Settings → Connectors**. Once authorized, the Slack tools are available automatically in all Claude sessions — no local configuration needed.
 
 ---
 
