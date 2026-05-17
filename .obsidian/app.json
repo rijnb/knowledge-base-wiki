@@ -1,7 +1,7 @@
 {
   "alwaysUpdateLinks": true,
-  "readableLineLength": false,
-  "propertiesInDocument": "hidden",
+  "readableLineLength": true,
+  "propertiesInDocument": "source",
   "spellcheck": false,
   "newFileLocation": "folder",
   "newFileFolderPath": "raw/notes",
@@ -41,5 +41,6 @@
     "wiki/index.md",
     "_index.md"
   ],
-  "showLineNumber": true
+  "showLineNumber": true,
+  "defaultViewMode": "preview"
 }

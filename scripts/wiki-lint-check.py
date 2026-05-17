@@ -230,10 +230,15 @@ def resolve_wikilink(
     # If no recognized extension, try appending .md and other known types.
     # This handles bare names like "my-note", paths like "wiki/concepts/foo",
     # and names with dots that aren't file extensions (e.g. "2024.05.15").
+    # Also try appending .md when the target has a known extension but the exact
+    # file doesn't exist — e.g. [[foo.png]] resolves to foo.png.md.
     if not has_known_ext:
         for ext in (".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"):
             if (root / (target + ext)).exists():
                 return True
+    else:
+        if (root / (target + ".md")).exists():
+            return True
 
     # If the target contains a directory component (e.g. "x/y"), also search
     # under the top-level "wiki/" and "raw/" collections — a link [[x/y]] is
@@ -247,6 +252,9 @@ def resolve_wikilink(
                 for ext in (".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"):
                     if (root / top / (target + ext)).exists():
                         return True
+            else:
+                if (root / top / (target + ".md")).exists():
+                    return True
 
     # Fuzzy match: bare stem against all known markdown files.
     # Only apply when the target has no directory component — a full-path target
@@ -272,9 +280,8 @@ def resolve_wikilink(
         normalized = normalized.translate(CURLY_TO_STRAIGHT)
         if normalized in path_suffix_set:
             return True
-        if not has_known_ext:
-            if (normalized + ".md") in path_suffix_set:
-                return True
+        if (normalized + ".md") in path_suffix_set:
+            return True
 
     return False
 
@@ -326,9 +333,18 @@ def resolve_mdlink(target: str, source_file: Path, root: Path, all_md_stems: dic
     if p.exists():
         return True
 
+    # Also check target + ".md" — e.g. foo.png resolves to foo.png.md
+    p_md = (source_file.parent / (target + ".md")).resolve()
+    if p_md.exists():
+        return True
+
     # Also try treating as root-relative
     p2 = (root / target).resolve()
     if p2.exists():
+        return True
+
+    p2_md = (root / (target + ".md")).resolve()
+    if p2_md.exists():
         return True
 
     return False
@@ -2113,7 +2129,12 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         is_wiki = entry["type"] == "wikilink" or (entry["type"] == "image" and "[[" in entry["raw"])
         try:
             if is_wiki:
-                new_target = str(new_rel.with_suffix(""))
+                # Strip the .md suffix only when the stem has no second extension
+                # (e.g. foo.md → foo, but xxx.png.md → xxx.png.md, image.png → image.png).
+                if new_rel.suffix == ".md" and "." not in new_rel.stem:
+                    new_target = str(new_rel.with_suffix(""))
+                else:
+                    new_target = str(new_rel)
                 count = fix_wikilinks_in_file(root / entry["file"], [(old_target, new_target)])
             else:
                 source_dir = (root / entry["file"]).parent

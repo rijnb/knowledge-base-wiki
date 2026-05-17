@@ -165,6 +165,10 @@ This makes sure the sematic database (QMD) is fully up-to-date again. The LLM sk
 
 Instead of running a full re-index, you can also execute `qmd embed`. This is useful if you only ingested a couple of new notes, for example.
 
+### Pro-tip 4: Storing draft notes (not for ingestion yet)
+
+You can store notes in `/drafts` while you're working on then and you don't want them ingested yet. Move them manually to `/raw/notes` once you think they are ready for ingestion. Then run `scripts/wiki-ingest-loop.sh`.
+
 ## Configuration
 
 ### Personalizing your setup
