@@ -1,7 +1,18 @@
 #!/usr/bin/env bash
-# Adds all subdirs from raw/ and wiki/ as QMD collections (idempotent), then re-indexes.
+# Adds all subdirs from raw/ and wiki/ as QMD collections (idempotent), then re-indexes and embeds.
 # Collection names use the full relative path with dashes: raw-clips, wiki-people, raw-scans-transcribed.
+#
+# Usage: qmd-sync-collections.sh [--skip-embed]
+#   --skip-embed  Skip the vector embedding step (text re-index only).
 set -euo pipefail
+
+SKIP_EMBED=false
+for arg in "$@"; do
+  case "$arg" in
+    --skip-embed) SKIP_EMBED=true ;;
+    *) echo "ERROR: unknown arg: $arg" >&2; exit 2 ;;
+  esac
+done
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -49,8 +60,13 @@ echo "=== Re-indexing ==="
 qmd update
 
 echo ""
+if ! $SKIP_EMBED; then
+  echo "=== Embedding (vector embeddings) ==="
+  qmd embed
+  echo ""
+else
+  echo "=== Embedding: skipped (--skip-embed) ==="
+  echo ""
+fi
+
 echo "Done."
-echo ""
-echo "───────────────────────────────────────────────────────────────────────"
-echo "⚠️  You need to run 'qmd embed' separately to refresh vector embeddings."
-echo "───────────────────────────────────────────────────────────────────────"
