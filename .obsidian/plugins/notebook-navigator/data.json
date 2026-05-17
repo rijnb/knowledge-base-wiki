@@ -634,7 +634,8 @@
     "templates",
     "draft",
     "raw",
-    "wiki"
+    "wiki",
+    "_resources"
   ],
   "rootTagOrder": [],
   "rootPropertyOrder": []

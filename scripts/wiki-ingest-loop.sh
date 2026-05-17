@@ -521,12 +521,63 @@ confirm_after_error() {
 
 ND_NOTHING_TO_INGEST=3
 
+# Rename files in raw/ whose names contain characters that break shell scripts,
+# Python path handling, or Markdown link syntax. Runs before any conversion.
+sanitize_raw_filenames() {
+    echo "Sanitizing raw/ filenames..."
+    local raw_dir="$PROJECT_DIR/raw"
+    python3 - "$raw_dir" << 'PYEOF'
+import os, sys
+
+raw_dir = sys.argv[1]
+BAD = set([
+    "'", '"',
+    '!', '#', '$', '%', '&', '*', '<', '>', '?', '/', '\\', '|',
+])
+
+def sanitize_char(c):
+    if c in BAD:
+        return '_'
+    if ord(c) > 127:  # any non-ASCII (including curly quotes, accented letters, etc.)
+        return '_'
+    return c
+
+def strip_whitespace_before_ext(fname):
+    # "foo .txt" -> "foo.txt"; "foo  .tar.gz" -> "foo.tar.gz"
+    stem, dot, ext = fname.rpartition('.')
+    if not dot:
+        return fname
+    return stem.rstrip() + dot + ext
+
+count = 0
+for dirpath, dirnames, filenames in os.walk(raw_dir, topdown=False):
+    for fname in filenames:
+        new_fname = ''.join(sanitize_char(c) for c in fname)
+        new_fname = strip_whitespace_before_ext(new_fname)
+        if new_fname != fname:
+            old_path = os.path.join(dirpath, fname)
+            new_path = os.path.join(dirpath, new_fname)
+            os.rename(old_path, new_path)
+            print(f'  Renamed: {fname} -> {new_fname}')
+            count += 1
+
+print(f'Sanitized {count} filename(s).')
+PYEOF
+}
+
 # Convert raw VTT and EML files to Markdown before partitioning.
 # Errors are non-fatal: a failed conversion is reported but the pipeline continues.
 run_phase_convert() {
     echo "=== Phase 0 - CONVERT RAW FILES: converting raw files to Markdown ==="
     local scripts_dir="$PROJECT_DIR/scripts"
     local had_error=false
+
+    set +e
+    sanitize_raw_filenames
+    local san_rc=$?
+    set -e
+    [ "$san_rc" -ne 0 ] && { echo "WARN: filename sanitization exited with status $san_rc" >&2; had_error=true; }
+    echo ""
 
     echo "Converting VTT transcripts..."
     set +e

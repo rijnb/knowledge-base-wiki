@@ -10,6 +10,7 @@ from ..resolve import (
     build_normalized_index,
     check_external,
     find_normalized_match,
+    find_whitespace_before_ext_match,
     resolve_mdlink,
     resolve_wikilink,
 )
@@ -98,6 +99,8 @@ def check_vault(root: Path, args) -> dict:
                     entry["in_frontmatter"] = True
                 if link_type == "wikilink" or (link_type == "image" and "[[" in raw):
                     fix = find_normalized_match(target, root, norm_index)
+                    if not fix:
+                        fix = find_whitespace_before_ext_match(target, root, path_suffix_set)
                     if fix:
                         entry["suggested_fix"] = fix
                 broken.append(entry)

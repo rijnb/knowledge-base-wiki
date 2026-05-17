@@ -12,7 +12,9 @@ from .paths import should_skip_md
 KNOWN_EXTENSIONS = {".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"}
 
 # Characters that are often replaced by '_' when a title becomes a filename.
-_PROBLEMATIC_CHARS = re.compile(r'[_:?*|"<>\\]')
+# Includes '_' itself (so file stems normalize the same as their original titles),
+# plus straight/curly quotes and any non-ASCII codepoint.
+_PROBLEMATIC_CHARS = re.compile(r'''[_:!#$%&*<>?/\\|'"]|[^\x00-\x7f]''')
 
 
 def normalize_name(name: str) -> str:
@@ -20,7 +22,8 @@ def normalize_name(name: str) -> str:
 
     Replaces '_' and chars typically substituted with '_' in filenames with a
     space, then collapses whitespace. This makes '[[foo: bar]]', '[[foo bar]]',
-    and the file 'foo_ bar.md' all map to the same key.
+    '[[foo's bar?]]', '[[café]]', and files 'foo_ bar.md' / 'foo_s bar_.md' /
+    'caf_.md' all map to the same key.
     """
     return re.sub(r'\s+', ' ', _PROBLEMATIC_CHARS.sub(' ', name)).strip().lower()
 
@@ -60,6 +63,60 @@ def find_normalized_match(target: str, root: Path, norm_index: dict[str, list[Pa
     matches = norm_index.get(key, [])
     if len(matches) == 1:
         return matches[0].stem
+    return None
+
+
+def find_whitespace_before_ext_match(
+    target: str,
+    root: Path,
+    path_suffix_set: "set[str] | None" = None,
+) -> "str | None":
+    """If the broken link target has whitespace immediately before its extension
+    (e.g. 'foo .pdf', 'docs/bar  .md'), strip that whitespace and check whether
+    the resulting filename exists in the vault.
+
+    Returns the corrected link text on a unique match, else None. The returned
+    form preserves any directory component the original target had. For .md
+    targets without a directory component, the bare stem is returned (matching
+    Obsidian's wikilink convention).
+    """
+    candidate = Path(target)
+    suffix = candidate.suffix
+    if not suffix:
+        return None
+    stem = candidate.stem
+    stripped_stem = stem.rstrip()
+    if stripped_stem == stem or not stripped_stem:
+        return None  # no trailing whitespace before extension
+    fixed_name = stripped_stem + suffix
+    has_known_ext = suffix.lower() in KNOWN_EXTENSIONS
+
+    # Directory-qualified target: only accept a match at that exact subpath.
+    if candidate.parent != Path("."):
+        rel_fixed = candidate.parent / fixed_name
+        if (root / rel_fixed).exists():
+            return str(rel_fixed)
+        for top in ("wiki", "raw"):
+            if (root / top / rel_fixed).exists():
+                return str(rel_fixed)
+        if path_suffix_set is not None and str(rel_fixed) in path_suffix_set:
+            return str(rel_fixed)
+        return None
+
+    # Bare-name target: search vault-wide via the suffix index when available,
+    # else fall back to a glob. Require a unique match to avoid false fixes.
+    if path_suffix_set is not None:
+        if fixed_name in path_suffix_set:
+            if has_known_ext and suffix.lower() == ".md":
+                return Path(fixed_name).stem
+            return fixed_name
+        return None
+
+    matches = [p for p in root.rglob(fixed_name) if p.is_file()]
+    if len(matches) == 1:
+        if has_known_ext and suffix.lower() == ".md":
+            return matches[0].stem
+        return fixed_name
     return None
 
 
