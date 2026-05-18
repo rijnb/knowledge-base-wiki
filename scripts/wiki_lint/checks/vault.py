@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from ..fixers import fix_curly_quotes, fix_raw_references
+from ..fixers import fix_curly_quotes, fix_raw_references, prune_log
 from ..links import extract_links, is_external, strip_frontmatter
 from ..paths import VaultIndex
 from ..resolve import (
@@ -113,10 +113,12 @@ def check_vault(root: Path, args) -> dict:
 
     raw_refs_pending = 0
     raw_refs_pending_files = 0
+    log_pruned_pending = 0
     if not getattr(args, "fix_simple_errors", False):
         raw_refs_pending_files, raw_refs_pending = fix_raw_references(
             root, quiet=True, dry_run=True
         )
+        _, log_pruned_pending, _ = prune_log(root, quiet=True, dry_run=True)
 
     fixed_links = 0
     fixed_files = 0
@@ -124,6 +126,7 @@ def check_vault(root: Path, args) -> dict:
     fm_deleted_files = 0
     q_renamed = q_link_files = q_links = 0
     raw_files_changed = raw_changes = 0
+    log_pruned_kept = log_pruned_skipped = log_pruned_malformed = 0
     if getattr(args, "fix_simple_errors", False):
         fixes_by_file: dict = {}
         for entry in broken:
@@ -184,6 +187,13 @@ def check_vault(root: Path, args) -> dict:
             print(f"  Raw references: {raw_changes} reference(s) wikilinked in "
                   f"{raw_files_changed} file(s).", file=sys.stderr)
 
+        log_pruned_kept, log_pruned_skipped, log_pruned_malformed = prune_log(root, args.quiet)
+        if not args.quiet and (log_pruned_skipped or log_pruned_malformed):
+            print(f"  Pruned log.jsonl: kept {log_pruned_kept}, "
+                  f"dropped {log_pruned_skipped} (missing file), "
+                  f"{log_pruned_malformed} malformed. "
+                  f"Backup at wiki/log.jsonl.bak.", file=sys.stderr)
+
     removed_links = 0
     removed_files = 0
     if getattr(args, "remove_broken_links", False):
@@ -226,16 +236,24 @@ def check_vault(root: Path, args) -> dict:
         if raw_changes:
             summary["raw_refs_wikilinked"] = raw_changes
             summary["raw_refs_files_changed"] = raw_files_changed
+        if log_pruned_skipped or log_pruned_malformed:
+            summary["log_pruned_kept"] = log_pruned_kept
+            summary["log_pruned_dropped"] = log_pruned_skipped
+            if log_pruned_malformed:
+                summary["log_pruned_malformed"] = log_pruned_malformed
     if getattr(args, "remove_broken_links", False):
         summary["removed_links"] = removed_links
         summary["removed_files"] = removed_files
     if raw_refs_pending:
         summary["raw_refs_pending"] = raw_refs_pending
         summary["raw_refs_pending_files"] = raw_refs_pending_files
+    if log_pruned_pending:
+        summary["log_pruned_pending"] = log_pruned_pending
 
     return {
         "broken_links": broken,
         "summary": summary,
         "errors": errors,
         "raw_refs_pending": raw_refs_pending,
+        "log_pruned_pending": log_pruned_pending,
     }

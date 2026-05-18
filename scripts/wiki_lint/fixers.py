@@ -1,6 +1,8 @@
-"""Whole-vault sweeps: curly-quote normalization and raw/ reference wikilinking."""
+"""Whole-vault sweeps: curly-quote normalization, raw/ reference wikilinking, and log pruning."""
 
+import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -199,3 +201,56 @@ def fix_raw_references(root: Path, quiet: bool, dry_run: bool = False) -> tuple[
             total_changes += changes
 
     return files_changed, total_changes
+
+
+def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int, int]:
+    """Drop entries from wiki/log.jsonl whose 'file' field no longer exists.
+
+    Paths are resolved relative to `root` (the vault root, parent of wiki/).
+    When dry_run is False, the original log is backed up to wiki/log.jsonl.bak
+    (overwritten on each run) and log.jsonl is rewritten in place. When
+    dry_run is True, the file is only scanned and no backup or rewrite happens.
+
+    Returns (kept, dropped, malformed). If the log file does not exist, returns
+    (0, 0, 0) without raising.
+    """
+    log_path = root / "wiki" / "log.jsonl"
+    if not log_path.exists():
+        return 0, 0, 0
+
+    kept_lines: list[str] = []
+    kept = dropped = malformed = 0
+    with log_path.open("r", encoding="utf-8") as src:
+        for lineno, raw in enumerate(src, start=1):
+            line = raw.rstrip("\n")
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError as e:
+                malformed += 1
+                if not quiet and not dry_run:
+                    print(f"  log.jsonl line {lineno}: malformed JSON ({e}); skipping",
+                          file=sys.stderr)
+                continue
+            file_field = entry.get("file")
+            if not file_field:
+                dropped += 1
+                continue
+            if (root / file_field).exists():
+                kept_lines.append(line)
+                kept += 1
+            else:
+                dropped += 1
+
+    if dry_run:
+        return kept, dropped, malformed
+
+    backup_path = log_path.with_suffix(log_path.suffix + ".bak")
+    shutil.copy2(log_path, backup_path)
+
+    with log_path.open("w", encoding="utf-8") as dst:
+        for line in kept_lines:
+            dst.write(line + "\n")
+
+    return kept, dropped, malformed

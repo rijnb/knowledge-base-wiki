@@ -29,7 +29,7 @@ def ask_run_auto_fixes() -> bool:
         content = [
             "Apply automatic fixes before interactive review?",
             "",
-            "  fix-simple-errors  — repair normalizable broken links + wikilink raw/ refs",
+            "  fix-simple-errors  — repair normalizable broken links, wikilink raw/ refs, prune log.jsonl",
             "  fix-orphans        — link plain-text references in wiki/",
             "",
             "Only remaining issues will appear in the interactive TUI.",

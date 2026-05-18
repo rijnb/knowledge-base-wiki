@@ -105,9 +105,11 @@ Examples:
         action="store_true",
         dest="fix_simple_errors",
         help=(
-            "Rewrite broken WikiLinks where a unique normalized match is found. "
-            "Characters like ':' are often replaced by '_' in filenames or omitted "
-            "in link text; this flag repairs such mismatches in-place."
+            "Rewrite broken WikiLinks where a unique normalized match is found "
+            "(characters like ':' are often replaced by '_' in filenames or omitted "
+            "in link text); normalize curly quotes; wikilink bare/backticked raw/ "
+            "references; and prune wiki/log.jsonl in place (backup at "
+            "wiki/log.jsonl.bak), dropping entries whose 'file' no longer exists."
         ),
     )
     parser.add_argument(
@@ -174,6 +176,7 @@ def main():
                 any("suggested_fix" in b for b in result["broken_links"])
                 or bool(result.get("orphans"))
                 or result.get("raw_refs_pending", 0) > 0
+                or result.get("log_pruned_pending", 0) > 0
             )
             if has_fixable:
                 auto_fix_applied = ask_run_auto_fixes()
