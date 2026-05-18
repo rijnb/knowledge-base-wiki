@@ -203,13 +203,30 @@ def fix_raw_references(root: Path, quiet: bool, dry_run: bool = False) -> tuple[
     return files_changed, total_changes
 
 
+def _union_preserve_order(*lists: list) -> list:
+    seen: set = set()
+    out: list = []
+    for lst in lists:
+        if not isinstance(lst, list):
+            continue
+        for item in lst:
+            key = item if isinstance(item, (str, int, float, bool, type(None))) else repr(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
 def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int, int, int]:
     """Drop entries from wiki/log.jsonl whose 'file' field no longer exists,
     and collapse duplicate entries that share the same 'file' value.
 
     For duplicates, the entry with the latest 'date' (lexicographic on the
-    ISO-style timestamp, falling back to last-seen position) is kept and the
-    others are counted as duplicates_dropped.
+    ISO-style timestamp, falling back to last-seen position) is kept; its
+    'pages_created' and 'pages_updated' lists are merged with those from every
+    other duplicate (order-preserving union) so no page references are lost.
+    The merged-away entries are counted as duplicates_dropped.
 
     Paths are resolved relative to `root` (the vault root, parent of wiki/).
     When dry_run is False, the original log is backed up to wiki/log.jsonl.bak
@@ -223,7 +240,7 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
     if not log_path.exists():
         return 0, 0, 0, 0
 
-    best_by_file: dict[str, tuple[str, int, str]] = {}
+    best_by_file: dict[str, dict] = {}
     dropped = malformed = duplicates = 0
     with log_path.open("r", encoding="utf-8") as src:
         for lineno, raw in enumerate(src, start=1):
@@ -248,13 +265,45 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
             date_field = entry.get("date", "")
             prev = best_by_file.get(file_field)
             if prev is None:
-                best_by_file[file_field] = (date_field, lineno, line)
+                best_by_file[file_field] = {
+                    "date": date_field,
+                    "lineno": lineno,
+                    "entry": entry,
+                    "pages_created": list(entry.get("pages_created") or []),
+                    "pages_updated": list(entry.get("pages_updated") or []),
+                }
             else:
                 duplicates += 1
-                if (date_field, lineno) > (prev[0], prev[1]):
-                    best_by_file[file_field] = (date_field, lineno, line)
+                if (date_field, lineno) > (prev["date"], prev["lineno"]):
+                    merged_created = _union_preserve_order(
+                        prev["pages_created"], entry.get("pages_created") or []
+                    )
+                    merged_updated = _union_preserve_order(
+                        prev["pages_updated"], entry.get("pages_updated") or []
+                    )
+                    best_by_file[file_field] = {
+                        "date": date_field,
+                        "lineno": lineno,
+                        "entry": entry,
+                        "pages_created": merged_created,
+                        "pages_updated": merged_updated,
+                    }
+                else:
+                    prev["pages_created"] = _union_preserve_order(
+                        prev["pages_created"], entry.get("pages_created") or []
+                    )
+                    prev["pages_updated"] = _union_preserve_order(
+                        prev["pages_updated"], entry.get("pages_updated") or []
+                    )
 
-    kept_lines = [ld for (_, _, ld) in sorted(best_by_file.values(), key=lambda v: v[1])]
+    kept_lines: list[str] = []
+    for slot in sorted(best_by_file.values(), key=lambda v: v["lineno"]):
+        entry = dict(slot["entry"])
+        if "pages_created" in entry or slot["pages_created"]:
+            entry["pages_created"] = slot["pages_created"]
+        if "pages_updated" in entry or slot["pages_updated"]:
+            entry["pages_updated"] = slot["pages_updated"]
+        kept_lines.append(json.dumps(entry, ensure_ascii=False))
     kept = len(kept_lines)
 
     if dry_run:
