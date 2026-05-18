@@ -6,7 +6,6 @@ import urllib.request
 from pathlib import Path
 
 from .links import CURLY_TO_STRAIGHT, is_external
-from .paths import should_skip_md
 
 
 KNOWN_EXTENSIONS = {".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"}
@@ -26,17 +25,6 @@ def normalize_name(name: str) -> str:
     'caf_.md' all map to the same key.
     """
     return re.sub(r'\s+', ' ', _PROBLEMATIC_CHARS.sub(' ', name)).strip().lower()
-
-
-def build_normalized_index(root: Path) -> dict[str, list[Path]]:
-    """Map normalize_name(stem) -> list of .md paths, for fuzzy wikilink matching."""
-    index: dict[str, list[Path]] = {}
-    for p in root.rglob("*.md"):
-        if should_skip_md(p, root):
-            continue
-        key = normalize_name(p.stem)
-        index.setdefault(key, []).append(p)
-    return index
 
 
 def find_normalized_match(target: str, root: Path, norm_index: dict[str, list[Path]]) -> "str | None":
@@ -94,10 +82,10 @@ def find_whitespace_before_ext_match(
     # Directory-qualified target: only accept a match at that exact subpath.
     if candidate.parent != Path("."):
         rel_fixed = candidate.parent / fixed_name
-        if (root / rel_fixed).exists():
+        if (root / rel_fixed).is_file():
             return str(rel_fixed)
         for top in ("wiki", "raw"):
-            if (root / top / rel_fixed).exists():
+            if (root / top / rel_fixed).is_file():
                 return str(rel_fixed)
         if path_suffix_set is not None and str(rel_fixed) in path_suffix_set:
             return str(rel_fixed)
@@ -143,8 +131,11 @@ def resolve_wikilink(
     candidate = Path(target)
     has_known_ext = candidate.suffix.lower() in KNOWN_EXTENSIONS
 
-    # Try exact path first
-    if (root / target).exists():
+    # Try exact path first.
+    # Path() collapses repeated/trailing slashes, so [[raw/notes]],
+    # [[raw/notes/]], and [[raw//notes/]] all resolve to the same target.
+    exact = root / target
+    if exact.is_file() or exact.is_dir():
         return True
 
     # If no recognized extension, try appending .md and other known types.
@@ -154,10 +145,10 @@ def resolve_wikilink(
     # file doesn't exist — e.g. [[foo.png]] resolves to foo.png.md.
     if not has_known_ext:
         for ext in (".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"):
-            if (root / (target + ext)).exists():
+            if (root / (target + ext)).is_file():
                 return True
     else:
-        if (root / (target + ".md")).exists():
+        if (root / (target + ".md")).is_file():
             return True
 
     # If the target contains a directory component (e.g. "x/y"), also search
@@ -166,14 +157,15 @@ def resolve_wikilink(
     # linking file lives.
     if candidate.parent != Path("."):
         for top in ("wiki", "raw"):
-            if (root / top / target).exists():
+            top_target = root / top / target
+            if top_target.is_file() or top_target.is_dir():
                 return True
             if not has_known_ext:
                 for ext in (".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"):
-                    if (root / top / (target + ext)).exists():
+                    if (root / top / (target + ext)).is_file():
                         return True
             else:
-                if (root / top / (target + ".md")).exists():
+                if (root / top / (target + ".md")).is_file():
                     return True
 
     # Fuzzy match: bare stem against all known markdown files.
@@ -212,22 +204,22 @@ def resolve_wikilink_to_path(target: str, root: Path, stem_index: dict[str, list
     has_known_ext = candidate.suffix.lower() in KNOWN_EXTENSIONS
 
     exact = root / target
-    if exact.exists():
+    if exact.is_file():
         return exact
 
     if not has_known_ext:
         exact_md = root / (target + ".md")
-        if exact_md.exists():
+        if exact_md.is_file():
             return exact_md
 
     # If the target has a directory component, also look under wiki/ and raw/.
     if candidate.parent != Path("."):
         for top in ("wiki", "raw"):
-            if (root / top / target).exists():
+            if (root / top / target).is_file():
                 return root / top / target
             if not has_known_ext:
                 p = root / top / (target + ".md")
-                if p.exists():
+                if p.is_file():
                     return p
 
     stem = candidate.stem if has_known_ext else candidate.name
@@ -250,21 +242,21 @@ def resolve_mdlink(target: str, source_file: Path, root: Path, all_md_stems: dic
         pass
 
     p = (source_file.parent / target).resolve()
-    if p.exists():
+    if p.is_file():
         return True
 
     # Also check target + ".md" — e.g. foo.png resolves to foo.png.md
     p_md = (source_file.parent / (target + ".md")).resolve()
-    if p_md.exists():
+    if p_md.is_file():
         return True
 
     # Also try treating as root-relative
     p2 = (root / target).resolve()
-    if p2.exists():
+    if p2.is_file():
         return True
 
     p2_md = (root / (target + ".md")).resolve()
-    if p2_md.exists():
+    if p2_md.is_file():
         return True
 
     return False

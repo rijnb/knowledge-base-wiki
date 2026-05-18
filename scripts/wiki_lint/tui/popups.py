@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .colors import PAIR_BROKEN_LINK
 from .help import show_help
+from .keys import is_bare_escape
 
 
 def read_source_context(entry: dict, root: Path, context: int = 2) -> list:
@@ -127,9 +128,13 @@ def show_popup(stdscr, entry: dict, idx: int, total: int, root: Path) -> "str | 
     action = None
     while True:
         key = win.getch()
-        if key in (10, 13, ord("q"), ord("Q"), 27):
+        if key in (10, 13, ord("q"), ord("Q")):
             break
-        elif key == curses.KEY_UP:
+        if key == 27:
+            if is_bare_escape(win):
+                break
+            continue  # consumed escape sequence (Option+Arrow, etc.)
+        if key == curses.KEY_UP:
             action = "prev"
             break
         elif key == curses.KEY_DOWN:

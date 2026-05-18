@@ -6,6 +6,7 @@ from pathlib import Path
 from ..checks.orphans import check_orphans, fix_orphans
 from ..checks.stubs import check_stubs
 from ..checks.vault import check_vault
+from .keys import is_bare_escape
 
 
 def ask_run_auto_fixes() -> bool:
@@ -104,9 +105,14 @@ def ask_run_auto_fixes() -> bool:
             elif key in (10, 13):        # Enter — confirm highlighted button
                 result[0] = (selected == 0)
                 break
-            elif key in (ord('n'), ord('N'), 27):  # N or Esc = No
+            elif key in (ord('n'), ord('N')):  # N = No
                 result[0] = False
                 break
+            elif key == 27:  # Esc = No, but only for a bare Esc keypress
+                if is_bare_escape(win):
+                    result[0] = False
+                    break
+                # otherwise it was an Option/Alt sequence — swallow and keep dialog open
             elif key in (curses.KEY_LEFT, curses.KEY_RIGHT, 9):  # arrow / Tab
                 selected = 1 - selected
 

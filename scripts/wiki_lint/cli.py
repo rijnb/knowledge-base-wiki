@@ -36,8 +36,8 @@ Examples:
   # Include external HTTP link checks:
   python3 wiki-lint-check.py --external --timeout 10
 
-  # Include image embeds in checks:
-  python3 wiki-lint-check.py --include-images
+  # Skip image embeds in checks (they're checked by default):
+  python3 wiki-lint-check.py --no-include-images
 
   # Skip frontmatter links (e.g. author: [[Name]] in raw/clips):
   python3 wiki-lint-check.py --skip-frontmatter
@@ -50,7 +50,7 @@ Examples:
   python3 wiki-lint-check.py --batch-mode --format text
 
   # Combine options:
-  python3 wiki-lint-check.py --external --include-images --skip-frontmatter --format text /path/to/vault
+  python3 wiki-lint-check.py --external --skip-frontmatter --format text /path/to/vault
         """,
     )
     parser.add_argument(
@@ -72,9 +72,11 @@ Examples:
         help="Timeout in seconds for external HTTP requests (default: 5)",
     )
     parser.add_argument(
-        "--include-images",
-        action="store_true",
-        help="Also check embedded image links (![[...]] and ![alt](...))",
+        "--no-include-images",
+        action="store_false",
+        dest="include_images",
+        default=True,
+        help="Skip image embed checks (![[...]] and ![alt](...)). Embeds are checked by default.",
     )
     parser.add_argument(
         "--format",

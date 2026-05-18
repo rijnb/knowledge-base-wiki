@@ -4,6 +4,7 @@ import curses
 from pathlib import Path
 
 from .colors import PAIR_BROKEN_LINK
+from .keys import is_bare_escape
 
 
 def show_file_browser(stdscr, root: Path, broken_target: str = "") -> "Path | None":
@@ -134,11 +135,13 @@ def show_file_browser(stdscr, root: Path, broken_target: str = "") -> "Path | No
         win.refresh()
         key = win.getch()
 
-        if key == 27:  # Escape
-            del win
-            stdscr.touchwin()
-            stdscr.refresh()
-            return None
+        if key == 27:  # Escape — or the start of an Alt/Option sequence
+            if is_bare_escape(win):
+                del win
+                stdscr.touchwin()
+                stdscr.refresh()
+                return None
+            continue  # consumed escape sequence — keep browsing
         elif key == curses.KEY_UP:
             if selected > 0:
                 selected -= 1

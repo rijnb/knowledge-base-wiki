@@ -2,6 +2,8 @@
 
 import curses
 
+from .keys import is_bare_escape
+
 
 HELP_LINES = [
     "NAVIGATION",
@@ -89,9 +91,13 @@ def show_help(stdscr) -> None:
 
         win.refresh()
         key = win.getch()
-        if key in (10, 13, 27, ord("q"), ord("Q"), ord("h"), ord("H")):
+        if key in (10, 13, ord("q"), ord("Q"), ord("h"), ord("H")):
             break
-        elif key == curses.KEY_UP:
+        if key == 27:
+            if is_bare_escape(win):
+                break
+            continue  # consumed escape sequence (Option+Arrow, etc.)
+        if key == curses.KEY_UP:
             scroll = max(0, scroll - 1)
         elif key == curses.KEY_DOWN:
             scroll = min(max(0, len(HELP_LINES) - rows_avail), scroll + 1)

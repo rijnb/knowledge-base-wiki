@@ -20,6 +20,7 @@ from .colors import (
     init_pairs,
 )
 from .help import show_help
+from .keys import is_bare_escape
 from .popups import show_popup
 from .previews import show_preview
 from .search import show_search_dialog
@@ -169,8 +170,12 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             redraw()
             key = stdscr.getch()
 
-            if key in (ord("q"), ord("Q"), 27):
+            if key in (ord("q"), ord("Q")):
                 break
+            elif key == 27:
+                if is_bare_escape(stdscr):
+                    break
+                continue  # consumed escape sequence (Option+Arrow, etc.)
             elif key in (ord("h"), ord("H")):
                 show_help(stdscr)
             elif key == curses.KEY_UP:

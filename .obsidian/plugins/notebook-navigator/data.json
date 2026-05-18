@@ -588,6 +588,9 @@
     },
     "wiki/decisions": {
       "previewRows": 3
+    },
+    "wiki/conversations": {
+      "titleRows": 2
     }
   },
   "tagIcons": {},

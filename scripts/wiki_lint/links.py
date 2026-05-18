@@ -14,9 +14,10 @@ RE_WIKILINK = re.compile(r'(?<!!)\[\[((?:[^\]|\n\\]|\\(?!\|)|\](?!\]))+)')
 # Matches ![[target]] — Obsidian image embeds (same bracket rule applies)
 RE_IMAGE_EMBED = re.compile(r'!\[\[((?:[^\]|\n\\]|\\(?!\|)|\](?!\]))+)')
 # Matches [text](target) — standard markdown links; skips http/https separately
-RE_MDLINK = re.compile(r'(?<!!)\[[^\]]*\]\(([^)#\n]+?)(?:#[^)]*)?\)')
+# Target allows one level of balanced parens (e.g. URLs/paths like `foo_(mail).resources/x`).
+RE_MDLINK = re.compile(r'(?<!!)\[[^\]]*\]\(((?:[^()#\n]|\([^()\n]*\))+?)(?:#[^)]*)?\)')
 # Matches ![alt](target) — standard markdown images
-RE_MDIMAGE = re.compile(r'!\[[^\]]*\]\(([^)#\n]+?)(?:#[^)]*)?\)')
+RE_MDIMAGE = re.compile(r'!\[[^\]]*\]\(((?:[^()#\n]|\([^()\n]*\))+?)(?:#[^)]*)?\)')
 
 
 CURLY_TO_STRAIGHT = str.maketrans({

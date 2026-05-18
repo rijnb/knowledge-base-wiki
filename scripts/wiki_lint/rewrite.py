@@ -13,12 +13,14 @@ _BARE_LINE_RE = re.compile(
 )
 
 
-def fix_wikilinks_in_file(file_path: Path, fixes: list) -> int:
-    """Replace wikilink targets in-place; returns the number of substitutions made."""
+def fix_wikilinks_in_file(file_path: Path, fixes: list, embed: bool = False) -> int:
+    """Replace wikilink targets in-place; returns the number of substitutions made.
+    When embed=True, matches ![[target...]] embeds instead of plain [[target...]] links."""
     content = file_path.read_text(encoding="utf-8", errors="replace")
     count = 0
+    lookbehind = '(?<=!)' if embed else '(?<!!)'
     for old_target, new_target in fixes:
-        pattern = re.compile(r'(?<!!)\[\[' + re.escape(old_target) + r'(?=[\]|#\n]| #)')
+        pattern = re.compile(lookbehind + r'\[\[' + re.escape(old_target) + r'(?=[\]|#\n]| #)')
         content, n = pattern.subn(f'[[{new_target}', content)
         count += n
     if count:
@@ -26,11 +28,16 @@ def fix_wikilinks_in_file(file_path: Path, fixes: list) -> int:
     return count
 
 
-def replace_mdlink_target_in_file(file_path: Path, old_target: str, new_target: str) -> int:
-    """Replace a markdown link target in-place; returns substitution count."""
+def replace_mdlink_target_in_file(file_path: Path, old_target: str, new_target: str, embed: bool = False) -> int:
+    """Replace a markdown link target in-place; returns substitution count.
+    When embed=True, matches ![alt](target) image embeds instead of plain links."""
     content = file_path.read_text(encoding="utf-8", errors="replace")
-    pattern = re.compile(r'(?<!!)\[([^\]]*)\]\(' + re.escape(old_target) + r'(?: ?#[^)]*)?\)')
-    new_content, n = pattern.subn(lambda m: f'[{m.group(1)}]({new_target})', content)
+    bracket_prefix = '!' if embed else ''
+    lookbehind = '' if embed else '(?<!!)'
+    pattern = re.compile(
+        lookbehind + re.escape(bracket_prefix) + r'\[([^\]]*)\]\(' + re.escape(old_target) + r'(?: ?#[^)]*)?\)'
+    )
+    new_content, n = pattern.subn(lambda m: f'{bracket_prefix}[{m.group(1)}]({new_target})', content)
     if n:
         file_path.write_text(new_content, encoding="utf-8")
     return n
@@ -63,14 +70,17 @@ def mark_broken_wikilinks_in_file(file_path: Path, targets: list) -> int:
     return count
 
 
-def delete_wikilink_in_file(file_path: Path, target: str):
-    """Remove [[target...]] from file, collapsing surrounding whitespace.
-    If the resulting line is empty or just a bare list marker, the whole line is dropped.
-    Returns (changed, removed_linenos) where removed_linenos are 1-indexed lines that
-    were fully deleted (so callers can adjust line numbers in sibling entries)."""
+def delete_wikilink_in_file(file_path: Path, target: str, embed: bool = False):
+    """Remove [[target...]] (or ![[target...]] when embed=True) from file, collapsing
+    surrounding whitespace. If the resulting line is empty or just a bare list marker,
+    the whole line is dropped. Returns (changed, removed_linenos) where removed_linenos
+    are 1-indexed lines that were fully deleted (so callers can adjust line numbers in
+    sibling entries)."""
     content = file_path.read_text(encoding='utf-8', errors='replace')
+    bracket_prefix = '!' if embed else ''
+    lookbehind = '' if embed else '(?<!!)'
     link_pat = re.compile(
-        r'( ?)(?<!!)\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|[^\]]*)?\]\]( ?)'
+        r'( ?)' + lookbehind + re.escape(bracket_prefix) + r'\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|[^\]]*)?\]\]( ?)'
     )
 
     lines = content.splitlines(keepends=True)
@@ -98,33 +108,63 @@ def delete_wikilink_in_file(file_path: Path, target: str):
     return changed, removed_linenos
 
 
-def delink_wikilink_in_file(file_path: Path, target: str) -> int:
-    """Strip [[ ]] brackets from wikilinks, leaving plain text.
-    Path prefix and extension are also removed when no alias is present.
-    [[x/y/z]] → z,  [[x/y/z|alias]] → alias
-    [[target#heading]] → target,  [[target#heading|alias]] → alias
+def delink_wikilink_in_file(file_path: Path, target: str, embed: bool = False) -> int:
+    """Strip [[ ]] (or ![[ ]] when embed=True) brackets from wikilinks, leaving plain text.
+    For regular wikilinks, path prefix and extension are removed when no alias is present
+    ([[x/y/z]] → z). For embeds, the filename keeps its extension ([[x/y/z.gpx]] → z.gpx)
+    since the extension is meaningful for the embedded file type.
     Returns substitution count."""
     content = file_path.read_text(encoding='utf-8', errors='replace')
-    pattern = re.compile(
-        r'(?<!!)\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
-    )
-    stem = Path(target).stem  # strips any path prefix and extension: x/y/z.md → z
-    def _repl(m, _stem=stem):
+    if embed:
+        pattern = re.compile(
+            r'!\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
+        )
+        fallback = Path(target).name  # keep extension for embedded files
+    else:
+        pattern = re.compile(
+            r'(?<!!)\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
+        )
+        fallback = Path(target).stem  # x/y/z.md → z
+    def _repl(m, _fb=fallback):
         alias = m.group(1)
-        return alias if alias is not None else _stem
+        return alias if alias is not None else _fb
     new_content, n = pattern.subn(_repl, content)
     if n:
         file_path.write_text(new_content, encoding='utf-8')
     return n
 
 
-def delete_mdlink_in_file(file_path: Path, target: str):
+def delink_mdlink_in_file(file_path: Path, target: str, embed: bool = False) -> int:
+    """Strip [text](target) (or ![alt](target) when embed=True) to plain text.
+    The link/image is replaced by its visible text (the part inside the brackets);
+    if that text is empty, the filename portion of the target is used as a fallback.
+    Returns substitution count."""
+    content = file_path.read_text(encoding='utf-8', errors='replace')
+    bracket_prefix = '!' if embed else ''
+    lookbehind = '' if embed else '(?<!!)'
+    pattern = re.compile(
+        lookbehind + re.escape(bracket_prefix) + r'\[([^\]]*)\]\(' + re.escape(target) + r'(?: ?#[^)]*)?\)'
+    )
+    fallback = Path(target).name
+    def _repl(m, _fb=fallback):
+        text = m.group(1)
+        return text if text else _fb
+    new_content, n = pattern.subn(_repl, content)
+    if n:
+        file_path.write_text(new_content, encoding='utf-8')
+    return n
+
+
+def delete_mdlink_in_file(file_path: Path, target: str, embed: bool = False):
     """Remove [text](target) standard markdown links from file.
+    When embed=True, matches ![alt](target) image links instead.
     If the resulting line is bare, the whole line is dropped.
     Returns (changed, removed_linenos)."""
     content = file_path.read_text(encoding='utf-8', errors='replace')
+    bracket_prefix = '!' if embed else ''
+    lookbehind = '' if embed else '(?<!!)'
     link_pat = re.compile(
-        r'( ?)(?<!!)\[[^\]]*\]\(' + re.escape(target) + r'(?: ?#[^)]*)?\)( ?)'
+        r'( ?)' + lookbehind + re.escape(bracket_prefix) + r'\[[^\]]*\]\(' + re.escape(target) + r'(?: ?#[^)]*)?\)( ?)'
     )
 
     lines = content.splitlines(keepends=True)
@@ -152,11 +192,15 @@ def delete_mdlink_in_file(file_path: Path, target: str):
     return changed, removed_linenos
 
 
-def mark_as_broken_link_in_file(file_path: Path, target: str) -> bool:
-    """Rewrite [[target]] → [[broken-link|target]] in file. Returns True if changed."""
+def mark_as_broken_link_in_file(file_path: Path, target: str, embed: bool = False) -> bool:
+    """Rewrite [[target]] (or ![[target]] when embed=True) → [[broken-link|target]].
+    Embeds lose their leading '!' since a broken-link placeholder is not embeddable.
+    Returns True if changed."""
     content = file_path.read_text(encoding="utf-8", errors="replace")
+    bracket_prefix = '!' if embed else ''
+    lookbehind = '' if embed else '(?<!!)'
     pattern = re.compile(
-        r'(?<!!)\[\[(' + re.escape(target) + r')( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
+        lookbehind + re.escape(bracket_prefix) + r'\[\[(' + re.escape(target) + r')( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
     )
     def _replacer(m, _t=target):
         alias_part = m.group(3)

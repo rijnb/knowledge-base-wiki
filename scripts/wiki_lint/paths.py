@@ -1,5 +1,6 @@
 """Path filters, indexes, and string-shortening helpers."""
 
+import os
 from pathlib import Path
 
 from .links import CURLY_TO_STRAIGHT
@@ -36,42 +37,53 @@ def should_skip_md(path: Path, root: Path) -> bool:
     return False
 
 
-def build_stem_index(root: Path) -> dict[str, list[Path]]:
-    """Build a map from filename stem → list of matching paths (for fuzzy wikilink resolution)."""
-    index: dict[str, list[Path]] = {}
-    for p in root.rglob("*.md"):
-        if should_skip_md(p, root):
-            continue
-        s = p.stem
-        index.setdefault(s, []).append(p)
-    return index
+class VaultIndex:
+    """Single-pass walk of raw/ and wiki/ that produces every lookup a vault
+    scan needs:
 
+      md_files        — sorted list of .md files that pass should_skip_md;
+                        what check_vault iterates.
+      stem_index      — filename stem → matching paths (fuzzy wikilink match).
+      norm_index      — normalize_name(stem) → matching paths (fuzzy match
+                        across filename-substituted characters).
+      path_suffix_set — every "/"-joined trailing path component of every
+                        file under raw/ and wiki/, curly-quote normalized;
+                        lets [[x/y]] resolve to any file ending in x/y.
 
-def build_path_suffix_set(root: Path) -> set[str]:
-    """Build a set of all path suffixes for every file under raw/ and wiki/.
-
-    For a file at raw/notes/_resources/foo/bar.pdf this adds:
-      raw/notes/_resources/foo/bar.pdf
-      notes/_resources/foo/bar.pdf
-      _resources/foo/bar.pdf
-      foo/bar.pdf
-      bar.pdf
-
-    All entries are normalized (curly quotes → straight) so that a link
-    containing a straight apostrophe matches a filename with a curly quote.
-
-    This lets [[x/y]] resolve to a file at wiki/a/b/x/y.md (or any depth).
+    Replaces what used to be three separate rglob traversals plus a fourth
+    walk inside check_vault — substantial perf win on iCloud-backed vaults.
     """
-    suffix_set: set[str] = set()
-    for top in ("raw", "wiki"):
-        top_dir = root / top
-        if not top_dir.is_dir():
-            continue
-        for p in top_dir.rglob("*"):
-            if not p.is_file():
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.md_files: list[Path] = []
+        self.stem_index: dict[str, list[Path]] = {}
+        self.norm_index: dict[str, list[Path]] = {}
+        self.path_suffix_set: set[str] = set()
+        self._build()
+
+    def _build(self):
+        # Local import — resolve imports should_skip_md from this module,
+        # so importing normalize_name at module load creates a cycle.
+        from .resolve import normalize_name
+
+        root = self.root
+        for top in ("raw", "wiki"):
+            top_dir = root / top
+            if not top_dir.is_dir():
                 continue
-            parts = p.relative_to(root).parts
-            for i in range(len(parts)):
-                suffix = "/".join(parts[i:])
-                suffix_set.add(suffix.translate(CURLY_TO_STRAIGHT))
-    return suffix_set
+            for dirpath, _dirnames, filenames in os.walk(top_dir):
+                base = Path(dirpath)
+                for fname in filenames:
+                    p = base / fname
+                    rel_parts = p.relative_to(root).parts
+                    for i in range(len(rel_parts)):
+                        self.path_suffix_set.add(
+                            "/".join(rel_parts[i:]).translate(CURLY_TO_STRAIGHT)
+                        )
+                    if fname.endswith(".md") and not should_skip_md(p, root):
+                        self.md_files.append(p)
+                        stem = p.stem
+                        self.stem_index.setdefault(stem, []).append(p)
+                        self.norm_index.setdefault(normalize_name(stem), []).append(p)
+        self.md_files.sort()

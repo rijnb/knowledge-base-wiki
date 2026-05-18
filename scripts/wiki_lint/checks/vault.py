@@ -5,9 +5,8 @@ from pathlib import Path
 
 from ..fixers import fix_curly_quotes, fix_raw_references
 from ..links import extract_links, is_external, strip_frontmatter
-from ..paths import build_path_suffix_set, build_stem_index, should_skip_md
+from ..paths import VaultIndex
 from ..resolve import (
-    build_normalized_index,
     check_external,
     find_normalized_match,
     find_whitespace_before_ext_match,
@@ -38,10 +37,11 @@ def check_vault(root: Path, args) -> dict:
     if not args.quiet:
         print(f"Scanning {root} ...", file=sys.stderr)
 
-    stem_index = build_stem_index(root)
-    norm_index = build_normalized_index(root)
-    path_suffix_set = build_path_suffix_set(root)
-    md_files = sorted(p for p in root.rglob("*.md") if not should_skip_md(p, root))
+    vault = VaultIndex(root)
+    stem_index = vault.stem_index
+    norm_index = vault.norm_index
+    path_suffix_set = vault.path_suffix_set
+    md_files = vault.md_files
 
     for md_file in md_files:
         total_files += 1

@@ -8,6 +8,7 @@ import curses
 from pathlib import Path
 
 from .help import show_help
+from .keys import is_bare_escape
 
 
 _PREVIEW_PROFILE = {
@@ -71,9 +72,13 @@ def show_preview(stdscr, entry: dict, idx: int, total: int, kind: str, root: Pat
         win.refresh()
 
         key = win.getch()
-        if key in (10, 13, ord("q"), ord("Q"), 27):
+        if key in (10, 13, ord("q"), ord("Q")):
             break
-        elif key == curses.KEY_UP:
+        if key == 27:
+            if is_bare_escape(win):
+                break
+            continue  # consumed escape sequence (Option+Arrow, etc.)
+        if key == curses.KEY_UP:
             del win; stdscr.touchwin(); stdscr.refresh()
             return "prev"
         elif key == curses.KEY_DOWN:

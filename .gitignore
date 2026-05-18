@@ -16,6 +16,7 @@
 .trash/
 .import/
 .output.txt
+/_*.md
 scripts/__pycache__/
 config/personal_info.md
 docs/

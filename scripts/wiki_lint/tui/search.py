@@ -4,7 +4,9 @@ import curses
 import re
 from pathlib import Path
 
+from ..resolve import _PROBLEMATIC_CHARS
 from .colors import PAIR_BROKEN_LINK
+from .keys import read_alt_sequence
 
 
 def _word_left(text: str, pos: int) -> int:
@@ -28,53 +30,25 @@ def _word_right(text: str, pos: int) -> int:
     return i
 
 
-def _read_alt_sequence(win) -> "tuple[str, int] | None":
-    """After receiving ESC (27), peek for an Alt/Option modifier sequence.
-    Returns ('left',) / ('right',) / ('home',) / ('end',) etc., or None for a real Escape.
-    Consumes the trailing chars on a match."""
-    win.nodelay(True)
-    try:
-        ch = win.getch()
-        if ch == -1:
-            return None  # bare Escape
-        # iTerm2 / readline: ESC b / ESC f for word movement
-        if ch in (ord('b'), ord('B')):
-            return ('left', 0)
-        if ch in (ord('f'), ord('F')):
-            return ('right', 0)
-        # CSI sequence: ESC [ ... — option-arrow in Terminal.app is ESC [ 1 ; 3 D/C
-        if ch == ord('['):
-            buf = []
-            for _ in range(8):
-                c = win.getch()
-                if c == -1:
-                    break
-                buf.append(c)
-                if 0x40 <= c <= 0x7E:  # final byte of CSI
-                    break
-            seq = ''.join(chr(c) for c in buf)
-            if seq.endswith('D'):
-                return ('left', 0)
-            if seq.endswith('C'):
-                return ('right', 0)
-            if seq.endswith('H'):
-                return ('home', 0)
-            if seq.endswith('F'):
-                return ('end', 0)
-            return ('unknown', 0)
-        # Alt+Esc / double-Esc — treat as real Escape
-        if ch == 27:
-            return None
-        return ('unknown', 0)
-    finally:
-        win.nodelay(False)
-
-
 def show_search_dialog(stdscr, root: Path, broken_target: str = "") -> "Path | None":
     """Search for a replacement link by regex across filenames in raw/ and wiki/.
     Default search text is the stem of broken_target (filename only, no directories).
     Returns path relative to root, or None if cancelled."""
-    search_text = Path(broken_target).name if broken_target else ""
+    if broken_target:
+        # Replace filesystem-problematic chars with '.' (regex wildcard, since they
+        # may have been substituted on disk), and regex-escape everything else so
+        # parens/dots/etc. in the filename match literally. Space and hyphen pass
+        # through verbatim — they have no special meaning at the top level and
+        # escaping them just makes the prefilled pattern harder to read/edit.
+        _PASSTHROUGH = {" ", "-"}
+        search_text = "".join(
+            "." if _PROBLEMATIC_CHARS.match(ch)
+            else ch if ch in _PASSTHROUGH
+            else re.escape(ch)
+            for ch in Path(broken_target).name
+        )
+    else:
+        search_text = ""
     cursor_pos = len(search_text)
 
     top_dirs = [root / name for name in ("wiki", "raw") if (root / name).is_dir()]
@@ -211,7 +185,7 @@ def show_search_dialog(stdscr, root: Path, broken_target: str = "") -> "Path | N
         key = win.getch()
 
         if key == 27:  # Escape — may also start an Alt/Option sequence
-            alt = _read_alt_sequence(win)
+            alt = read_alt_sequence(win)
             if alt is None:
                 break
             action = alt[0]

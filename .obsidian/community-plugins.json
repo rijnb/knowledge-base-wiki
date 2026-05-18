@@ -1,4 +1,5 @@
 [
   "claudian",
-  "notebook-navigator"
+  "notebook-navigator",
+  "find-unlinked-files"
 ]
