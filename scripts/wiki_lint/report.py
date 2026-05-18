@@ -16,13 +16,15 @@ def format_text(result: dict) -> str:
         lines.append(f"Wikilinked {s['raw_refs_wikilinked']} raw/ reference(s) in {s['raw_refs_files_changed']} file(s).")
     elif s.get("raw_refs_pending"):
         lines.append(f"Raw/ references to wikilink: {s['raw_refs_pending']} in {s['raw_refs_pending_files']} file(s) (use --fix-simple-errors to apply).")
-    if s.get("log_pruned_dropped") or s.get("log_pruned_malformed"):
+    if s.get("log_pruned_dropped") or s.get("log_pruned_malformed") or s.get("log_pruned_duplicates"):
         parts = [f"kept {s.get('log_pruned_kept', 0)}", f"dropped {s.get('log_pruned_dropped', 0)}"]
+        if s.get("log_pruned_duplicates"):
+            parts.append(f"{s['log_pruned_duplicates']} duplicate(s)")
         if s.get("log_pruned_malformed"):
             parts.append(f"{s['log_pruned_malformed']} malformed")
         lines.append(f"Pruned wiki/log.jsonl: {', '.join(parts)}. Backup at wiki/log.jsonl.bak.")
     elif s.get("log_pruned_pending"):
-        lines.append(f"wiki/log.jsonl has {s['log_pruned_pending']} stale entry/entries (use --fix-simple-errors to prune).")
+        lines.append(f"wiki/log.jsonl has {s['log_pruned_pending']} stale/duplicate entry/entries (use --fix-simple-errors to prune).")
     lines.append("")
 
     if result["errors"]:

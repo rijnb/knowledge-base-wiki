@@ -109,7 +109,8 @@ Examples:
             "(characters like ':' are often replaced by '_' in filenames or omitted "
             "in link text); normalize curly quotes; wikilink bare/backticked raw/ "
             "references; and prune wiki/log.jsonl in place (backup at "
-            "wiki/log.jsonl.bak), dropping entries whose 'file' no longer exists."
+            "wiki/log.jsonl.bak), dropping entries whose 'file' no longer exists "
+            "and collapsing duplicate entries for the same file (keeping the latest)."
         ),
     )
     parser.add_argument(

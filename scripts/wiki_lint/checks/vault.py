@@ -118,7 +118,10 @@ def check_vault(root: Path, args) -> dict:
         raw_refs_pending_files, raw_refs_pending = fix_raw_references(
             root, quiet=True, dry_run=True
         )
-        _, log_pruned_pending, _ = prune_log(root, quiet=True, dry_run=True)
+        _, log_pruned_pending_missing, _, log_pruned_pending_dupes = prune_log(
+            root, quiet=True, dry_run=True
+        )
+        log_pruned_pending = log_pruned_pending_missing + log_pruned_pending_dupes
 
     fixed_links = 0
     fixed_files = 0
@@ -126,7 +129,7 @@ def check_vault(root: Path, args) -> dict:
     fm_deleted_files = 0
     q_renamed = q_link_files = q_links = 0
     raw_files_changed = raw_changes = 0
-    log_pruned_kept = log_pruned_skipped = log_pruned_malformed = 0
+    log_pruned_kept = log_pruned_skipped = log_pruned_malformed = log_pruned_dupes = 0
     if getattr(args, "fix_simple_errors", False):
         fixes_by_file: dict = {}
         for entry in broken:
@@ -187,10 +190,13 @@ def check_vault(root: Path, args) -> dict:
             print(f"  Raw references: {raw_changes} reference(s) wikilinked in "
                   f"{raw_files_changed} file(s).", file=sys.stderr)
 
-        log_pruned_kept, log_pruned_skipped, log_pruned_malformed = prune_log(root, args.quiet)
-        if not args.quiet and (log_pruned_skipped or log_pruned_malformed):
+        log_pruned_kept, log_pruned_skipped, log_pruned_malformed, log_pruned_dupes = prune_log(
+            root, args.quiet
+        )
+        if not args.quiet and (log_pruned_skipped or log_pruned_malformed or log_pruned_dupes):
             print(f"  Pruned log.jsonl: kept {log_pruned_kept}, "
                   f"dropped {log_pruned_skipped} (missing file), "
+                  f"{log_pruned_dupes} duplicate(s), "
                   f"{log_pruned_malformed} malformed. "
                   f"Backup at wiki/log.jsonl.bak.", file=sys.stderr)
 
@@ -236,9 +242,11 @@ def check_vault(root: Path, args) -> dict:
         if raw_changes:
             summary["raw_refs_wikilinked"] = raw_changes
             summary["raw_refs_files_changed"] = raw_files_changed
-        if log_pruned_skipped or log_pruned_malformed:
+        if log_pruned_skipped or log_pruned_malformed or log_pruned_dupes:
             summary["log_pruned_kept"] = log_pruned_kept
             summary["log_pruned_dropped"] = log_pruned_skipped
+            if log_pruned_dupes:
+                summary["log_pruned_duplicates"] = log_pruned_dupes
             if log_pruned_malformed:
                 summary["log_pruned_malformed"] = log_pruned_malformed
     if getattr(args, "remove_broken_links", False):

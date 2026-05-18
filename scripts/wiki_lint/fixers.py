@@ -203,23 +203,28 @@ def fix_raw_references(root: Path, quiet: bool, dry_run: bool = False) -> tuple[
     return files_changed, total_changes
 
 
-def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int, int]:
-    """Drop entries from wiki/log.jsonl whose 'file' field no longer exists.
+def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int, int, int]:
+    """Drop entries from wiki/log.jsonl whose 'file' field no longer exists,
+    and collapse duplicate entries that share the same 'file' value.
+
+    For duplicates, the entry with the latest 'date' (lexicographic on the
+    ISO-style timestamp, falling back to last-seen position) is kept and the
+    others are counted as duplicates_dropped.
 
     Paths are resolved relative to `root` (the vault root, parent of wiki/).
     When dry_run is False, the original log is backed up to wiki/log.jsonl.bak
     (overwritten on each run) and log.jsonl is rewritten in place. When
     dry_run is True, the file is only scanned and no backup or rewrite happens.
 
-    Returns (kept, dropped, malformed). If the log file does not exist, returns
-    (0, 0, 0) without raising.
+    Returns (kept, dropped, malformed, duplicates_dropped). If the log file
+    does not exist, returns (0, 0, 0, 0) without raising.
     """
     log_path = root / "wiki" / "log.jsonl"
     if not log_path.exists():
-        return 0, 0, 0
+        return 0, 0, 0, 0
 
-    kept_lines: list[str] = []
-    kept = dropped = malformed = 0
+    best_by_file: dict[str, tuple[str, int, str]] = {}
+    dropped = malformed = duplicates = 0
     with log_path.open("r", encoding="utf-8") as src:
         for lineno, raw in enumerate(src, start=1):
             line = raw.rstrip("\n")
@@ -237,14 +242,23 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
             if not file_field:
                 dropped += 1
                 continue
-            if (root / file_field).exists():
-                kept_lines.append(line)
-                kept += 1
-            else:
+            if not (root / file_field).exists():
                 dropped += 1
+                continue
+            date_field = entry.get("date", "")
+            prev = best_by_file.get(file_field)
+            if prev is None:
+                best_by_file[file_field] = (date_field, lineno, line)
+            else:
+                duplicates += 1
+                if (date_field, lineno) > (prev[0], prev[1]):
+                    best_by_file[file_field] = (date_field, lineno, line)
+
+    kept_lines = [ld for (_, _, ld) in sorted(best_by_file.values(), key=lambda v: v[1])]
+    kept = len(kept_lines)
 
     if dry_run:
-        return kept, dropped, malformed
+        return kept, dropped, malformed, duplicates
 
     backup_path = log_path.with_suffix(log_path.suffix + ".bak")
     shutil.copy2(log_path, backup_path)
@@ -253,4 +267,4 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
         for line in kept_lines:
             dst.write(line + "\n")
 
-    return kept, dropped, malformed
+    return kept, dropped, malformed, duplicates
