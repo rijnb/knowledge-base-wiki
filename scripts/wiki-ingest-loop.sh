@@ -785,6 +785,11 @@ run_phase_finalize() {
 main() {
     cd "$PROJECT_DIR"
 
+    if [ -f "$PROJECT_DIR/wiki/log.jsonl" ]; then
+        cp "$PROJECT_DIR/wiki/log.jsonl" "$PROJECT_DIR/wiki/log.jsonl.backup"
+        echo "Backed up wiki/log.jsonl → wiki/log.jsonl.backup"
+    fi
+
     local needs_ingest=false
     local batch_count
     batch_count=$(count_batch_files)
