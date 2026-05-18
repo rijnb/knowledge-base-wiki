@@ -108,10 +108,18 @@ print('\n'.join(lines))
 # Filter candidates: include if (a) not in log, or (b) mtime is newer than last import date
 _py=$(mktemp /tmp/wiki-filter.XXXXXX.py)
 cat > "$_py" << 'PYEOF'
-import sys, json, os
+import sys, json, os, re
+
+# Extensions that are converted to .md and logged as a converted/<stem>.md sibling.
+# If agents fail to log the source file, we infer it from the converted entry.
+_SOURCE_EXTS = {'.eml', '.vtt', '.pdf', '.doc', '.docx', '.txt'}
+_DATE_PREFIX_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
 
 log_files = sys.argv[1:]
 files_db = set()
+# (grandparent_dir, date_prefix) pairs seen in logged converted/*.md entries.
+# Allows matching source files even when sanitization changed the stem slightly.
+converted_date_db = set()
 
 for logfile in log_files:
     if not os.path.isfile(logfile):
@@ -125,8 +133,17 @@ for logfile in log_files:
                 try:
                     d = json.loads(line)
                     fp = d.get('file', '')
-                    if fp:
-                        files_db.add(fp)
+                    if not fp:
+                        continue
+                    files_db.add(fp)
+                    # If this is a converted/<stem>.md, record (grandparent, date_prefix)
+                    # so we can skip the source .eml/.vtt/etc. even when only the .md was logged.
+                    if fp.endswith('.md') and os.path.basename(os.path.dirname(fp)) == 'converted':
+                        stem = os.path.splitext(os.path.basename(fp))[0]
+                        m = _DATE_PREFIX_RE.match(stem)
+                        if m:
+                            grandparent = os.path.dirname(os.path.dirname(fp))
+                            converted_date_db.add((grandparent, m.group(0)))
                 except Exception:
                     pass
     except Exception:
@@ -136,8 +153,19 @@ for line in sys.stdin:
     fp = line.rstrip('\n')
     if not fp:
         continue
-    if fp not in files_db:
-        print(fp)
+    if fp in files_db:
+        continue
+    # For non-markdown source files with a date-prefixed name, also check whether
+    # the corresponding converted/.md was logged (agents sometimes omit the source entry).
+    ext = os.path.splitext(fp)[1].lower()
+    if ext in _SOURCE_EXTS:
+        stem = os.path.splitext(os.path.basename(fp))[0]
+        m = _DATE_PREFIX_RE.match(stem)
+        if m:
+            parent = os.path.dirname(fp)
+            if (parent, m.group(0)) in converted_date_db:
+                continue
+    print(fp)
 PYEOF
 
 remaining=()
