@@ -538,6 +538,61 @@
       "folder": true,
       "tag": false,
       "property": false
+    },
+    "templates/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "draft/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/clips/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/confluence/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/diary/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/emails/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/notes/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/scans/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/slack/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "raw/transcripts/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
     }
   },
   "collapsedPinnedContexts": {},
