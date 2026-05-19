@@ -43,6 +43,10 @@ If you converted the attachment of a note, always append to the bottom of the so
 
 After conversion of any file to Markdown make sure you ingest that new file as well as the original. So, if you read `x.md` and it has an attachment to `y.jpg` and `y.jpg.md` gets generated during the conversion, then you must now ingest not just `x.md` but also `y.jpg.md`.
 
+> **⚠ CONVERSION LOGGING — DO NOT SKIP**
+> For **every** file you convert during processing (whether it was a batch entry like `foo.eml`, or an attachment discovered while reading a note like `y.pdf` / `y.jpg` / `y.docx`), you MUST later write log entries for **both** the source file path and the converted `.md` path.
+> The next batch run scans `raw/` for `.md`, `.pdf`, `.doc`, `.docx`, `.txt`, `.vtt`, `.eml` files and re-ingests anything whose exact path is not present in a log entry. If you log only the converted `.md` (or only the parent note), the source attachment will be re-ingested next time.
+
 Then, for each Markdown file to ingest:
 - The top-level Wiki topic list is: competition, concepts, decisions, people, problems, projects, systems.
 - **Only use topics from that list.** Never create a `wiki/<dir>/` that is not one of those topics — not "systems", not "architecture", not anything else.
@@ -82,10 +86,31 @@ Then, for each Markdown file to ingest:
   - The number of pages touched is reasonable relative to the length and density of the note (a dense meeting note should produce many pages, not one or two).
   - If any of these checks fail, go back and fill in the gaps before moving on.
 - Do NOT update `wiki/<topic>/_index.md` during a session (deferred to finalization).
-- **After finishing each note's Wiki pages** (immediately, before moving to the next note): append its log entry to the batch log file specified in your prompt. Write one JSON object per line — one for the original file, plus one for each converted Markdown file produced from it:
+- **After finishing each note's Wiki pages** (immediately, before moving to the next note): append its log entries to the batch log file specified in your prompt. Write one JSON object per line.
+  - Write one entry for the file you were asked to ingest (the path that was in the batch).
+  - **In addition, for every conversion you performed during processing**, write entries for BOTH the source file and the converted `.md`. This includes:
+    - Batch entries that are non-Markdown (`.eml`, `.vtt`, `.pdf`, `.docx`, …) — log the batch path (the source) AND its converted `.md`.
+    - Attachments converted while reading a note (e.g. `y.pdf` → `y.pdf.md`, `y.jpg` → `y.jpg.md`, `y.docx` → `y.docx.md`) — log BOTH `y.pdf` (or `.jpg`/`.docx`/…) AND `converted/y.pdf.md`, even though only `y.pdf` was an attachment, not a batch entry.
+  - The source-file entry can have an empty `pages_created`/`pages_updated` and a `summary` of "Source file processed via conversion." The Wiki-page details belong on the converted-`.md` entry.
+  - Rationale: the next batch run scans `raw/` for source extensions (`.pdf`, `.eml`, `.vtt`, `.doc`, `.docx`, `.txt`) and re-ingests anything whose path is not in any log entry. Missing the source-file entry causes re-ingestion next time.
+
+  Plain Markdown note (single entry):
 ```json
 {"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/filename.md","summary":"One-sentence description.","pages_created":["wiki/concepts/NavSDK.md"],"pages_updated":["wiki/people/Jane Smith.md"]}
 ```
+  Batch entry that required conversion (two entries — source file first, then the converted `.md`):
+```json
+{"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/emails/foo.eml","summary":"Source file processed via conversion.","pages_created":[],"pages_updated":[]}
+{"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/emails/converted/foo.md","summary":"One-sentence description.","pages_created":["wiki/concepts/NavSDK.md"],"pages_updated":["wiki/people/Jane Smith.md"]}
+```
+  Note `x.md` (in batch) with a PDF attachment `y.pdf` converted on the fly (three entries):
+```json
+{"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/x.md","summary":"One-sentence description.","pages_created":[],"pages_updated":["wiki/projects/AutoStream.md"]}
+{"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/_resources/y.pdf","summary":"Source file processed via conversion.","pages_created":[],"pages_updated":[]}
+{"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/_resources/converted/y.pdf.md","summary":"One-sentence description of the PDF contents.","pages_created":["wiki/concepts/SomeStandard.md"],"pages_updated":[]}
+```
+  The same source+converted pattern applies to `.vtt`, `.pdf`, `.docx`, images, and any other non-Markdown source that is converted — whether the source appeared in the batch directly or was discovered as an attachment during processing.
+
   The batch log path and session number were given to you in your prompt (e.g. `Write session logs to .import/batch-log-1.jsonl`). Do not wait until all notes are processed — write each entry as you go.
 
 > **⚠ REMINDER:** You MUST write this log entry before moving on to the next note. This is not optional. If you skip it, the batch pipeline cannot track progress and the note will be re-ingested later.

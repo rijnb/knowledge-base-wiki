@@ -350,3 +350,4 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 
 - Andrej Karpathy - for his original idea for the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
 - Rob van der Most - for brainstorming and experimenting with this idea.
+- Christian Rexwinkel - for creating the Slack and Outlook extensions.

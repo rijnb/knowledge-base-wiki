@@ -197,7 +197,7 @@
   "pinRecentNotesWithShortcuts": false,
   "recentNotesCount": 5,
   "showFolderIcons": true,
-  "showRootFolder": false,
+  "showRootFolder": true,
   "inheritFolderColors": true,
   "folderSortOrder": "alpha-asc",
   "enableFolderNotes": false,
@@ -228,6 +228,10 @@
   "defaultFolderSort": "modified-desc",
   "propertySortKey": "",
   "propertySortSecondary": "title",
+  "manualSortPropertyKey": "sort_index",
+  "manualSortGroupHeaderProperty": "group_header",
+  "manualSortNewNotePlacement": "below-selected-note",
+  "confirmBeforeManualSort": true,
   "revealFileOnListChanges": true,
   "listPaneTitle": "header",
   "noteGrouping": "date",
@@ -289,7 +293,10 @@
   "showPropertiesOnSeparateRows": false,
   "enablePropertyInternalLinks": true,
   "enablePropertyExternalLinks": true,
-  "notePropertyType": "none",
+  "showWordCount": false,
+  "wordCountPlacement": "title",
+  "wordCountTargetProperty": "word-goal",
+  "showWordCountPercentage": false,
   "showFileDate": true,
   "alphabeticalDateMode": "modified",
   "showParentFolder": true,
@@ -312,6 +319,7 @@
   "calendarLeftPlacement": "navigation",
   "calendarWeeksToShow": 1,
   "calendarIntegrationMode": "notebook-navigator",
+  "calendarPeriodicNotesLocaleSource": "calendar",
   "calendarCustomFilePattern": "YYYY/YYYY-MM-DD",
   "calendarCustomWeekPattern": "gggg/[W]ww",
   "calendarCustomMonthPattern": "YYYY/YYYY-MM",
@@ -560,7 +568,8 @@
     "wiki/systems": "monitor",
     "raw/scans/_resources": "image",
     "raw/notes/_resources": "image",
-    "raw/slack": "message-square"
+    "raw/slack": "message-square",
+    "raw/diary": "calendar-days"
   },
   "folderColors": {},
   "folderBackgroundColors": {},
@@ -576,12 +585,12 @@
   "folderTreeSortOverrides": {},
   "folderAppearances": {
     "wiki/competition": {
-      "groupBy": "none",
+      "groupBy": "custom",
       "previewRows": 3
     },
     "wiki/people": {
       "mode": "compact",
-      "groupBy": "none"
+      "groupBy": "custom"
     },
     "raw/clips": {
       "titleRows": 3
@@ -630,7 +639,7 @@
     "#404040",
     "#404040"
   ],
-  "lastShownVersion": "2.6.6",
+  "lastShownVersion": "3.0.0",
   "rootFolderOrder": [
     "config",
     "scripts",
