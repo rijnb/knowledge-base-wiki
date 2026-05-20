@@ -1,3 +1,8 @@
+---
+name: wiki-fetch-mail
+description: Use when the user asks to fetch mail, sync email inbox, or process emails into the knowledge base.
+---
+
 # Wiki — Mail Fetch
 
 Fetch email files from the configured OneDrive inbox and copy them to `raw/emails/` for ingestion.

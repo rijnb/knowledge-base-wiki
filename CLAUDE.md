@@ -4,6 +4,7 @@ Before your start, read the file `config/personal_info.md` (it may not exist, wh
 Use the information from that file to make your responses more relevant to me.
 
 Use the appropriate `wiki` skill for each action:
+- **Fetch mail** (sync email inbox) — `wiki-fetch-mail` skill
 - **Fetch slack** (fetch channels and DMs) — `wiki-fetch-slack` skill
 - **Ingest** (notes, Confluence, start bulk) — `wiki-ingest` skill
 - **Ingest next batch** (parallel sessions) — `wiki-ingest-next-batch` skill
