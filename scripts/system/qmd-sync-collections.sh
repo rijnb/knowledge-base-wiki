@@ -16,7 +16,7 @@ done
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 
-existing=$(qmd collection list 2>/dev/null | awk '/^[^ ]/ && NR>1 {print $1}')
+existing=$(qmd collection list 2>/dev/null | awk '/^[^ ]/ && NR>1 { sub(/ \(.*/, ""); print }')
 
 # $1 = absolute path, $2 = collection name (dash-joined relative path)
 add_if_missing() {
