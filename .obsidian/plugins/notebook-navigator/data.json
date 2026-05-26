@@ -92,7 +92,7 @@
     }
   ],
   "vaultProfile": "default",
-  "vaultTitle": "navigation",
+  "vaultTitle": "header",
   "syncModes": {
     "vaultProfile": "synced",
     "homepage": "synced",
@@ -197,7 +197,7 @@
   "pinRecentNotesWithShortcuts": false,
   "recentNotesCount": 5,
   "showFolderIcons": true,
-  "showRootFolder": true,
+  "showRootFolder": false,
   "inheritFolderColors": true,
   "folderSortOrder": "alpha-asc",
   "enableFolderNotes": false,
@@ -524,11 +524,6 @@
       "tag": false,
       "property": false
     },
-    "START_HERE.md": {
-      "folder": true,
-      "tag": false,
-      "property": false
-    },
     "wiki/index.md": {
       "folder": true,
       "tag": false,
@@ -540,11 +535,6 @@
       "property": false
     },
     "templates/index.md": {
-      "folder": true,
-      "tag": false,
-      "property": false
-    },
-    "draft/index.md": {
       "folder": true,
       "tag": false,
       "property": false
@@ -590,6 +580,16 @@
       "property": false
     },
     "raw/transcripts/index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "index.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
+    },
+    "inbox/index.md": {
       "folder": true,
       "tag": false,
       "property": false
@@ -696,13 +696,12 @@
   ],
   "lastShownVersion": "3.0.0",
   "rootFolderOrder": [
-    "config",
-    "scripts",
-    "templates",
-    "draft",
+    "inbox",
     "raw",
     "wiki",
-    "_resources"
+    "templates",
+    "config",
+    "scripts"
   ],
   "rootTagOrder": [],
   "rootPropertyOrder": []
