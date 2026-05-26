@@ -647,13 +647,13 @@
       "mode": "compact",
       "groupBy": "custom"
     },
-    "raw/clips": {
-      "titleRows": 3
-    },
     "wiki/decisions": {
       "previewRows": 3
     },
     "wiki/conversations": {
+      "titleRows": 2
+    },
+    "raw/clips": {
       "titleRows": 2
     }
   },

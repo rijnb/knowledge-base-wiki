@@ -5,4 +5,4 @@ Confluence pages are stored here. To fetch Confluence pages, simply issue the pr
 fetch confluence page <url>
 ```
 
-![[raw/confluence/index.jpg]]
+![[raw/confluence/_resources/index.jpg]]

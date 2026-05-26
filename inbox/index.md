@@ -7,4 +7,4 @@ If you want to ingest them into the knowledge base, move them to `raw/notes` and
 scripts/wiki-ingest-loop.sh
 ```
 
-![[inbox/index.jpg]]
+![[inbox/_resources/index.jpg]]

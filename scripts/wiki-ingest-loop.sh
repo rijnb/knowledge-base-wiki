@@ -33,6 +33,7 @@ WAIT_BETWEEN_BATCHES=60
 ERROR_COUNT=0
 CURRENT_BATCH=0
 AGENT=claude
+DRY_RUN=false
 
 check_dependencies() {
     local missing=()
@@ -68,7 +69,7 @@ check_dependencies() {
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--wait-between-batches N] [--help]
+Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--wait-between-batches N] [--dry-run] [--help]
 
 Autonomous wiki ingestion pipeline. Runs /wiki-ingest (if needed), then loops
 /wiki-ingest-next-batch until all batches are done, then finalizes. Pauses
@@ -91,6 +92,8 @@ Options:
                              partitioning notes.
   --wait-between-batches N   Seconds to wait between batches (default: 60). The countdown
                              can be skipped with Enter or cancelled with ESC.
+  --dry-run                  Show what would be done without making any changes. No files
+                             are converted, no LLM calls are made, and no notes are ingested.
   --help                     Show this help and exit.
 
 Data sources (in order of preference):
@@ -130,6 +133,7 @@ while [[ $# -gt 0 ]]; do
         --wait-between-batches)
             [[ "$2" =~ ^[0-9]+$ ]] || { echo "--wait-between-batches must be a non-negative integer" >&2; exit 1; }
             WAIT_BETWEEN_BATCHES="$2"; shift 2 ;;
+        --dry-run)             DRY_RUN=true; shift ;;
         --help|-h)             usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
@@ -386,7 +390,11 @@ show_plan() {
     local first_batch_num="${3:-}"
 
     echo ""
-    echo "=== Wiki Ingest Pipeline ==="
+    if [ "$DRY_RUN" = true ]; then
+        echo "=== Wiki Ingest Pipeline  [DRY-RUN — no changes will be made] ==="
+    else
+        echo "=== Wiki Ingest Pipeline ==="
+    fi
     echo ""
     printf "LLM agent: %s\n" "$AGENT"
     echo ""
@@ -782,13 +790,75 @@ run_phase_finalize() {
     echo "Pipeline complete.  Current time: $(date '+%H:%M:%S')"
 }
 
+# Dry-run counterpart of run_phase_convert: lists files that would be converted.
+run_phase_convert_dry() {
+    echo "=== Phase 0 - CONVERT RAW FILES (dry-run): listing files that would be converted ==="
+
+    echo "Would sanitize raw/ filenames..."
+
+    local vtt_files=()
+    while IFS= read -r -d '' f; do
+        vtt_files+=("$f")
+    done < <(find "$PROJECT_DIR/raw/transcripts" -name "*.vtt" -print0 2>/dev/null | sort -z)
+    if [ "${#vtt_files[@]}" -gt 0 ]; then
+        echo "Would convert ${#vtt_files[@]} VTT transcript(s):"
+        printf "  %s\n" "${vtt_files[@]}"
+    else
+        echo "No VTT transcripts found."
+    fi
+
+    local eml_files=()
+    while IFS= read -r -d '' f; do
+        eml_files+=("$f")
+    done < <(find "$PROJECT_DIR/raw/emails" -name "*.eml" -print0 2>/dev/null | sort -z)
+    if [ "${#eml_files[@]}" -gt 0 ]; then
+        echo "Would convert ${#eml_files[@]} EML email(s):"
+        printf "  %s\n" "${eml_files[@]}"
+    else
+        echo "No EML emails found."
+    fi
+
+    local html_files=()
+    while IFS= read -r -d '' f; do
+        html_files+=("$f")
+    done < <(find "$PROJECT_DIR/raw/emails" -name "*.html" -print0 2>/dev/null | sort -z)
+    if [ "${#html_files[@]}" -gt 0 ]; then
+        echo "Would convert ${#html_files[@]} HTML email(s):"
+        printf "  %s\n" "${html_files[@]}"
+    else
+        echo "No HTML emails found."
+    fi
+    echo ""
+}
+
+# Dry-run counterpart of run_phase_batches: lists batch files that would be processed.
+run_phase_batches_dry() {
+    local total="$1"
+    local effective_total=$(( total < MAX_BATCHES ? total : MAX_BATCHES ))
+    echo "=== Phase 2 - INGEST BATCHES (dry-run): would process $effective_total of $total batch file(s) ==="
+    local -a files
+    shopt -s nullglob
+    files=("$PROJECT_DIR/.import"/batch-import-*.txt)
+    shopt -u nullglob
+    for f in "${files[@]}"; do
+        local line_count
+        line_count=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
+        printf "  %-40s  (%s file(s))\n" "$(basename "$f")" "$line_count"
+    done
+}
+
+# Dry-run counterpart of run_phase_finalize.
+run_phase_finalize_dry() {
+    echo ""
+    echo "=== Phase 3 - FINALIZE (dry-run): would run /wiki-finalize-ingest ==="
+    echo "=== Phase 4 - POST-PROCESS (dry-run): would run wiki-lint-check.py and qmd-sync-collections.sh ==="
+    echo ""
+    echo "────────────────────────────────────────────────────────────────────"
+    echo "Dry-run complete — no changes were made.  Time: $(date '+%H:%M:%S')"
+}
+
 main() {
     cd "$PROJECT_DIR"
-
-    if [ -f "$PROJECT_DIR/wiki/log.jsonl" ]; then
-        cp "$PROJECT_DIR/wiki/log.jsonl" "$PROJECT_DIR/wiki/log.jsonl.backup"
-        echo "Backed up wiki/log.jsonl → wiki/log.jsonl.backup"
-    fi
 
     local needs_ingest=false
     local batch_count
@@ -796,6 +866,45 @@ main() {
 
     local log_count
     log_count=$(count_batch_log_files)
+
+    if [ "$DRY_RUN" = true ]; then
+        if [ "$batch_count" -eq 0 ] && [ "$log_count" -gt 0 ]; then
+            needs_ingest=false
+        elif [ "$batch_count" -eq 0 ]; then
+            needs_ingest=true
+        fi
+
+        local first_batch_num=""
+        if [ "$batch_count" -gt 0 ]; then
+            first_batch_num=$(get_first_batch_number)
+        fi
+
+        echo "Start time: $(date '+%H:%M:%S')"
+        show_plan "$needs_ingest" "$batch_count" "$first_batch_num"
+
+        if [ "$needs_ingest" = true ]; then
+            run_phase_convert_dry
+            echo "=== Phase 1 - PARTITION (dry-run): would run wiki-create-import-batches.sh ==="
+            echo "  (batch count unknown until partition runs)"
+            echo ""
+        fi
+
+        if [ "$batch_count" -gt 0 ]; then
+            run_phase_batches_dry "$batch_count"
+        elif [ "$needs_ingest" = false ] && [ "$log_count" -gt 0 ]; then
+            echo "=== Phase 2 - INGEST BATCHES (dry-run): skipped — all batches already consumed ==="
+        else
+            echo "=== Phase 2 - INGEST BATCHES (dry-run): no batch files to process ==="
+        fi
+
+        run_phase_finalize_dry
+        return 0
+    fi
+
+    if [ -f "$PROJECT_DIR/wiki/log.jsonl" ]; then
+        cp "$PROJECT_DIR/wiki/log.jsonl" "$PROJECT_DIR/wiki/log.jsonl.backup"
+        echo "Backed up wiki/log.jsonl → wiki/log.jsonl.backup"
+    fi
 
     # All batches consumed but not yet finalized: only batch-log files remain.
     if [ "$batch_count" -eq 0 ] && [ "$log_count" -gt 0 ]; then

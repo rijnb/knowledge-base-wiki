@@ -2,4 +2,4 @@
 
 This folder contains Obsidian templates.
 
-![[templates/index.jpg]]
+![[templates/_resources/index.jpg]]

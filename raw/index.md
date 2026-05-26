@@ -10,4 +10,4 @@ scripts/wiki-ingest-loop.sh
 ```
 This 'ingests' the notes into the knowledge base, meaning it will augment the knowledge Wiki with information from these notes.
 
-![[raw/index.jpg]]
+![[raw/_resources/index.jpg]]
