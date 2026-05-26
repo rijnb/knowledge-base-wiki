@@ -352,6 +352,20 @@ count_batch_log_files() {
     echo "${#files[@]}"
 }
 
+# Count total number of files to be ingested across all batch-import-*.txt files.
+count_total_files() {
+    local total=0
+    shopt -s nullglob
+    local -a files=("$PROJECT_DIR/.import"/batch-import-*.txt)
+    shopt -u nullglob
+    for f in "${files[@]}"; do
+        local n
+        n=$(grep -c . "$f" 2>/dev/null || echo 0)
+        total=$(( total + n ))
+    done
+    echo "$total"
+}
+
 # Return the numeric suffix of the lowest-numbered batch file, or "" if none.
 get_first_batch_number() {
     local first
@@ -502,9 +516,13 @@ confirm_yn() {
     return "$result"
 }
 
-confirm_or_exit() {
+confirm_start_ingest() {
+    local file_count="$1"
+    local batch_count="$2"
     printf "Agent: %s\n" "$AGENT"
-    if ! confirm_yn "Start the wiki ingest pipeline?"; then
+    local batch_noun="batches"
+    [ "$batch_count" -eq 1 ] && batch_noun="batch"
+    if ! confirm_yn "Start ingesting $file_count file(s) across $batch_count $batch_noun?"; then
         echo "Stopped."
         exit 0
     fi
@@ -790,43 +808,60 @@ run_phase_finalize() {
     echo "Pipeline complete.  Current time: $(date '+%H:%M:%S')"
 }
 
+# Print NUL-delimited paths of source files whose stem has no matching .md in
+# output_dir (same skip logic as the real conversion scripts).
+_list_unconverted() {
+    local input_dir="$1"
+    local pattern="$2"
+    local output_dir="$3"
+
+    while IFS= read -r -d '' f; do
+        local stem
+        stem=$(basename "$f")
+        stem="${stem%.*}"
+        if [ ! -f "$output_dir/${stem}.md" ]; then
+            printf '%s\0' "$f"
+        fi
+    done < <(find "$input_dir" -maxdepth 1 -name "$pattern" -print0 2>/dev/null | sort -z)
+}
+
 # Dry-run counterpart of run_phase_convert: lists files that would be converted.
 run_phase_convert_dry() {
     echo "=== Phase 0 - CONVERT RAW FILES (dry-run): listing files that would be converted ==="
-
-    echo "Would sanitize raw/ filenames..."
+    echo "(Skips files that already have a matching .md in the output directory)"
+    echo ""
 
     local vtt_files=()
-    while IFS= read -r -d '' f; do
-        vtt_files+=("$f")
-    done < <(find "$PROJECT_DIR/raw/transcripts" -name "*.vtt" -print0 2>/dev/null | sort -z)
+    while IFS= read -r -d '' f; do vtt_files+=("$f"); done \
+        < <(_list_unconverted "$PROJECT_DIR/raw/transcripts" "*.vtt" \
+                              "$PROJECT_DIR/raw/transcripts/converted")
     if [ "${#vtt_files[@]}" -gt 0 ]; then
         echo "Would convert ${#vtt_files[@]} VTT transcript(s):"
         printf "  %s\n" "${vtt_files[@]}"
     else
-        echo "No VTT transcripts found."
+        echo "No new VTT transcripts to convert."
     fi
 
     local eml_files=()
-    while IFS= read -r -d '' f; do
-        eml_files+=("$f")
-    done < <(find "$PROJECT_DIR/raw/emails" -name "*.eml" -print0 2>/dev/null | sort -z)
+    while IFS= read -r -d '' f; do eml_files+=("$f"); done \
+        < <(_list_unconverted "$PROJECT_DIR/raw/emails" "*.eml" \
+                              "$PROJECT_DIR/raw/emails/converted")
     if [ "${#eml_files[@]}" -gt 0 ]; then
         echo "Would convert ${#eml_files[@]} EML email(s):"
         printf "  %s\n" "${eml_files[@]}"
     else
-        echo "No EML emails found."
+        echo "No new EML emails to convert."
     fi
 
     local html_files=()
-    while IFS= read -r -d '' f; do
-        html_files+=("$f")
-    done < <(find "$PROJECT_DIR/raw/emails" -name "*.html" -print0 2>/dev/null | sort -z)
+    while IFS= read -r -d '' f; do html_files+=("$f"); done \
+        < <(_list_unconverted "$PROJECT_DIR/raw/emails" "*.html" \
+                              "$PROJECT_DIR/raw/emails/converted")
     if [ "${#html_files[@]}" -gt 0 ]; then
         echo "Would convert ${#html_files[@]} HTML email(s):"
         printf "  %s\n" "${html_files[@]}"
     else
-        echo "No HTML emails found."
+        echo "No new HTML emails to convert."
     fi
     echo ""
 }
@@ -938,7 +973,12 @@ main() {
 
     echo "Start time: $(date '+%H:%M:%S')"
     show_plan "$needs_ingest" "$batch_count" "$first_batch_num"
-    confirm_or_exit
+
+    if [ "$needs_ingest" = false ]; then
+        local total_files
+        total_files=$(count_total_files)
+        confirm_start_ingest "$total_files" "$batch_count"
+    fi
 
     if [ "$needs_ingest" = true ]; then
         run_phase_convert
@@ -962,7 +1002,10 @@ main() {
         fi
 
         batch_count=$(count_batch_files)
-        echo "Phase 1 created $batch_count batch file(s)."
+        local total_files
+        total_files=$(count_total_files)
+        echo "Phase 1 created $batch_count batch file(s) with $total_files file(s) to ingest."
+        confirm_start_ingest "$total_files" "$batch_count"
     fi
 
     local batches_rc=0
