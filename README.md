@@ -43,6 +43,8 @@ qmd skill install --global --yes
 
 After setup, put your notes in `raw/` and tell Claude: **"ingest new raw notes"**.
 
+You can keep notes that you do not want to be ingested yet (like drafts), in `INBOX`. The inbox will not be part of the ingestion process.
+
 ## Update
 
 ```bash
