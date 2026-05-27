@@ -268,6 +268,7 @@ The database is automatically checked for errors after ingesting new notes. To c
 ├── .import/             ← in-progress batch import state (gitignored)
 ├── config/              ← config file for Obsidian web clipper
 ├── scripts/             ← helper scripts for CLAUDE.md
+├── INBOX/               ← folder for draft notes (review/finish before ingestions)
 ├── raw/
 │   ├── clips/           ← web articles and saved pages (web clipper)
 │   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)

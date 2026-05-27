@@ -589,7 +589,7 @@
       "tag": false,
       "property": false
     },
-    "inbox/index.md": {
+    "INBOX/index.md": {
       "folder": true,
       "tag": false,
       "property": false
@@ -696,7 +696,7 @@
   ],
   "lastShownVersion": "3.0.0",
   "rootFolderOrder": [
-    "inbox",
+    "INBOX",
     "raw",
     "wiki",
     "templates",
