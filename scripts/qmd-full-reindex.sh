@@ -50,18 +50,13 @@ if $DO_RESET; then
   echo ""
 fi
 
-echo "=== sync: register raw/* and wiki/* collections + qmd update ==="
-bash "$REPO_ROOT/scripts/system/qmd-sync-collections.sh"
-echo ""
-
-if ! $SKIP_EMBED; then
-  echo "=== embed: vector embeddings (this may take several minutes) ==="
-  qmd embed
-  echo ""
+echo "=== sync: register collections + qmd update + embed ==="
+if $SKIP_EMBED; then
+  bash "$REPO_ROOT/scripts/system/qmd-sync-collections.sh" --skip-embed
 else
-  echo "=== embed: skipped (--skip-embed) ==="
-  echo ""
+  bash "$REPO_ROOT/scripts/system/qmd-sync-collections.sh"
 fi
+echo ""
 
 echo "=== final status ==="
 qmd status

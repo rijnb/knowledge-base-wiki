@@ -43,7 +43,20 @@ qmd update
 echo ""
 if ! $SKIP_EMBED; then
   echo "=== Embedding (vector embeddings) ==="
-  qmd embed
+  while true; do
+    _embed_start=$(date +%s)
+    _embed_exit=0
+    qmd embed || _embed_exit=$?
+    _embed_elapsed=$(( $(date +%s) - _embed_start ))
+    if [ $_embed_exit -eq 0 ]; then
+      break
+    elif [ $_embed_elapsed -ge 1500 ]; then
+      echo "qmd embed timed out after ${_embed_elapsed}s, retrying..."
+    else
+      echo "ERROR: qmd embed failed (exit $_embed_exit) after ${_embed_elapsed}s" >&2
+      exit $_embed_exit
+    fi
+  done
   echo ""
 else
   echo "=== Embedding: skipped (--skip-embed) ==="

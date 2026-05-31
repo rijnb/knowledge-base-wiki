@@ -39,6 +39,10 @@
         {
           "type": "note",
           "path": "wiki/index.md"
+        },
+        {
+          "type": "note",
+          "path": "INBOX/My activities.md"
         }
       ],
       "navRainbow": {
@@ -293,8 +297,9 @@
   "showPropertiesOnSeparateRows": false,
   "enablePropertyInternalLinks": true,
   "enablePropertyExternalLinks": true,
-  "showWordCount": false,
-  "wordCountPlacement": "title",
+  "textCountDisplay": "none",
+  "textCountPlacement": "title",
+  "characterCountSpaces": "include",
   "wordCountTargetProperty": "word-goal",
   "showWordCountPercentage": false,
   "showFileDate": true,
@@ -593,6 +598,11 @@
       "folder": true,
       "tag": false,
       "property": false
+    },
+    "INBOX/My activities.md": {
+      "folder": true,
+      "tag": false,
+      "property": false
     }
   },
   "collapsedPinnedContexts": {},
@@ -694,14 +704,15 @@
     "#404040",
     "#404040"
   ],
-  "lastShownVersion": "3.0.0",
+  "lastShownVersion": "3.0.2",
   "rootFolderOrder": [
     "INBOX",
     "raw",
     "wiki",
     "templates",
     "config",
-    "scripts"
+    "scripts",
+    "_resources"
   ],
   "rootTagOrder": [],
   "rootPropertyOrder": []

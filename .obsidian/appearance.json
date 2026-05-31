@@ -3,5 +3,6 @@
   "translucency": false,
   "showViewHeader": true,
   "showRibbon": true,
-  "nativeMenus": true
+  "nativeMenus": true,
+  "accentColor": "#f55c5c"
 }

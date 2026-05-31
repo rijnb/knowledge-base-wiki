@@ -1,14 +1,14 @@
 {
   "alwaysUpdateLinks": true,
   "readableLineLength": true,
-  "propertiesInDocument": "source",
+  "propertiesInDocument": "visible",
   "spellcheck": false,
   "newFileLocation": "folder",
-  "newFileFolderPath": "raw/notes",
-  "attachmentFolderPath": "/raw/notes/_resources",
+  "newFileFolderPath": "INBOX",
+  "attachmentFolderPath": "_resources",
   "newLinkFormat": "absolute",
   "uriCallbacks": true,
-  "showInlineTitle": false,
+  "showInlineTitle": true,
   "mobileToolbarCommands": [
     "editor:undo",
     "editor:redo",
@@ -42,5 +42,6 @@
     "_index.md"
   ],
   "showLineNumber": true,
-  "defaultViewMode": "preview"
+  "defaultViewMode": "preview",
+  "showUnsupportedFiles": true
 }
