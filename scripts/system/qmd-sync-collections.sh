@@ -44,18 +44,14 @@ echo ""
 if ! $SKIP_EMBED; then
   echo "=== Embedding (vector embeddings) ==="
   while true; do
-    _embed_start=$(date +%s)
     _embed_exit=0
     qmd embed || _embed_exit=$?
-    _embed_elapsed=$(( $(date +%s) - _embed_start ))
-    if [ $_embed_exit -eq 0 ]; then
-      break
-    elif [ $_embed_elapsed -ge 1500 ]; then
-      echo "qmd embed timed out after ${_embed_elapsed}s, retrying..."
-    else
-      echo "ERROR: qmd embed failed (exit $_embed_exit) after ${_embed_elapsed}s" >&2
+    if [ $_embed_exit -ne 0 ]; then
+      echo "ERROR: qmd embed failed (exit $_embed_exit)" >&2
       exit $_embed_exit
     fi
+    qmd status | grep -q "needs embedding" || break
+    echo "qmd status still shows 'needs embedding', retrying..."
   done
   echo ""
 else
