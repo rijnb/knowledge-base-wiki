@@ -56,7 +56,7 @@ After ingesting notes, run the Linter regularly to keep your knowledge base clea
 
 You can keep notes that you do not want to be ingested yet (like drafts), in `INBOX`. The inbox will not be part of the ingestion process.
 
-## Update
+## Update the framework regularly
 
 ```bash
 cd ~/my-knowledge-base && git pull
