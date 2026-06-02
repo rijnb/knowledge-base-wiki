@@ -42,6 +42,17 @@ qmd skill install --global --yes
 ```
 
 After setup, put your notes in `raw/` and tell Claude: **"ingest new raw notes"**.
+Alternatively, run:
+
+```bash
+./scripts/wiki-ingest-loop.sh
+```
+
+After ingesting notes, run the Linter regularly to keep your knowledge base clean:
+
+```bash
+./scripts/wiki-lint-check.py
+```
 
 You can keep notes that you do not want to be ingested yet (like drafts), in `INBOX`. The inbox will not be part of the ingestion process.
 

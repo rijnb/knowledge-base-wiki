@@ -4,5 +4,6 @@
   "showViewHeader": true,
   "showRibbon": true,
   "nativeMenus": true,
-  "accentColor": "#f55c5c"
+  "accentColor": "#f55c5c",
+  "cssTheme": "Primary"
 }
