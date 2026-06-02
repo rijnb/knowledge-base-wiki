@@ -58,6 +58,8 @@ You can keep notes that you do not want to be ingested yet (like drafts), in `IN
 
 ## Update the framework regularly
 
+The framework is updated regularly, so it's wise to `git pull` every now and then:
+
 ```bash
 cd ~/my-knowledge-base && git pull
 ./scripts/qmd-full-reindex.sh   # re-register and update any new subdirectories
