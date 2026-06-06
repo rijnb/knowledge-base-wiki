@@ -184,7 +184,7 @@ Instead of running a full re-index, you can also execute `qmd embed`. This is us
 
 You can store notes in `/inbox` while you're working on then and you don't want them ingested yet. Move them manually to `/raw/notes` once you think they are ready for ingestion. Then run `scripts/wiki-ingest-loop.sh`.
 
-### Pro-tip 5: Use Obsidna CLI
+### Pro-tip 5: Use Obsidian CLI
 
 You can use the Obsidian CLI to interact with Obsidian on the command-line. Or, even better, have Claude interact with Obsidian using a CLI. For example, take a look at [https://github.com/kepano/obsidian-skills](Obsidian skills for Claude) to install skills for Claude on how to use Obsidian.
 
