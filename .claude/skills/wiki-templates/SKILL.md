@@ -20,6 +20,38 @@ description: Use when creating or structuring a new Wiki page — decisions, sys
     - item-2
   ```
 
+## Freshness metadata (auto-managed — do NOT hand-edit)
+
+Every content page may carry three machine-managed frontmatter fields:
+
+```
+date: YYYY-MM-DD            # page's content date (newest source for a wiki page)
+date_span: YYYY | YYYY–YYYY # min–max year of contributing sources (flags era-mixing)
+date_confidence: high | medium | low   # low = capture/ingestion date, may overstate freshness
+```
+
+These are written and refreshed automatically by `scripts/system/wiki-assign-dates.py`, which `wiki-finalize-ingest` runs after every index rebuild. **Do not set or edit them by hand** — let finalization populate them. When creating a page you may omit them entirely; they will be filled in from the source-note dates at finalize time. (Note: this replaces the older per-type `date: YYYY-MM-DD HH:mm:ss` creation-timestamp convention shown in some templates below — the managed `date` reflects content recency, not creation time.)
+
+## Supersession (when a page is replaced by a newer one)
+
+When a page's content is explicitly superseded by another page (an old architecture replaced by a new one, a decision reversed by a later one, a decommissioned system replaced by its successor), mark the relationship in frontmatter rather than deleting the old page (it stays as history):
+
+```yaml
+# on the OLD (superseded) page — the canonical "this is historical" signal:
+superseded_by: [[wiki/systems/New Map Pipeline]]   # one link, or a YAML list if split into several
+superseded_date: 2022-06-01                          # optional — when it was replaced
+tags: [..., superseded]                              # for filtering / graph
+
+# on the NEW (successor) page — reciprocal back-link:
+supersedes: [[wiki/systems/Old Map Pipeline]]
+```
+
+Rules:
+- The **presence of `superseded_by`** is what marks a page as historical — it works on every topic type (people/concepts/competition have no `status` field). Do not encode supersession in the free-text `status` field.
+- Always add the reciprocal `supersedes:` on the successor so navigation works both ways.
+- The `superseded_by` target **must be an existing page** (no dangling links). Chains are allowed (A→B→C); queries follow them to the newest live page.
+- Only assert supersession when a source **explicitly** states the replacement — never guess. Uncertain candidates belong in the lint review queue (see `wiki-lint`), not applied directly.
+
 ## wiki/index.md
 
 Links to section indexes only. Never add individual page entries here.

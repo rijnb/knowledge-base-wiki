@@ -38,7 +38,16 @@ find wiki -name "*.md" -exec awk '/^---/{p++} p==1{print FILENAME": "$0} p==2{p=
 ```
 If any exist, list them in a "Contradictions that still need resolution" section so the user knows what gaps remain.
 
-## Step 4: Manual checks
+## Step 4: Supersession check + review queue
+
+Run the supersession lint:
+```bash
+python3 scripts/system/wiki-supersession-lint.py
+```
+- **Integrity** — report any dangling `superseded_by` targets, ambiguous targets, missing reciprocal `supersedes` back-links, or cycles. These should be fixed (the successor must exist and link back).
+- **Review queue** — it writes `.import/supersession-candidates.md`: pages whose body says they were superseded/replaced/decommissioned but have no `superseded_by` field yet, with a guessed successor where one was found. Point the user to it. Do NOT auto-apply — each needs confirmation, then add `superseded_by` to the old page and reciprocal `supersedes` to the successor (see `wiki-templates`).
+
+## Step 5: Manual checks
 
 Present recommendations only — never modify the Wiki for these without user confirmation.
 

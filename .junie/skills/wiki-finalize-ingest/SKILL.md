@@ -35,7 +35,15 @@ python3 scripts/system/wiki-create-index-pages.py
 
 This rebuilds `wiki/index.md` and all `wiki/<topic>/_index.md` files.
 
-## Step 3 — Report stubs
+## Step 2.5 — Assign freshness dates
+
+Run the freshness pass so every wiki and raw page carries up-to-date `date` / `date_span` / `date_confidence` frontmatter (newly ingested pages get dated; existing pages get refreshed if newer sources were added):
+
+```bash
+python3 scripts/system/wiki-assign-dates.py --apply
+```
+
+This is deterministic and idempotent — safe to run on every finalize. It resolves each page's content date from source-note filenames, parent-folder years, source frontmatter, and (for raw pages) body text, recording `date_confidence` (high/medium/low) so stale or capture-only dates are flagged. Report its summary line (resolved / no-date / confidence distribution). Pages with no datable source are intentionally left without a `date` field.
 
 Use this command to scan Markdown files for stubs:
 ```bash

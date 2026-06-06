@@ -47,9 +47,18 @@ Triggered by a Confluence URL or page title:
 ---
 source_url: <url>
 fetched: YYYY-MM-DD HH:mm:ss
+last_modified: YYYY-MM-DD   # the page's last-updated / version date from the fetch metadata
+created: YYYY-MM-DD         # the page's creation date, if the fetch exposes it
 ---
 ```
-- Continue with per-note ingestion for that file (as a single-file session — write to `.import/batch-log-1.jsonl`, then immediately tell the user to run `finalize ingest`).
+  - `last_modified` is the real content date (Confluence's "Last updated" / version date). Always record it when available — it gives the page an accurate, medium-confidence `date` instead of falling back to the `fetched` sync timestamp.
+- Continue with per-note ingestion for that file (as a single-file session — write to `.import/batch-log-1.jsonl`).
+- **Assign freshness dates inline** (don't wait for finalize): after all Wiki pages are written, run the date pass so the new raw page and every created/updated Wiki page get `date` / `date_span` / `date_confidence` immediately. Run the full pass (idempotent, only rewrites pages whose dates changed — no need to enumerate paths):
+  ```bash
+  python3 scripts/system/wiki-assign-dates.py --apply
+  ```
+  (To date only specific files instead, append `--paths "raw/confluence/<Page>.md" "wiki/<topic>/<page>.md" …`.)
+- Then tell the user to run `finalize ingest` to rebuild indexes and re-index search.
 
 **Refresh:** "refresh this Confluence page" → re-fetch, overwrite cache, diff vs previous, flag changes affecting existing Wiki pages.
 
