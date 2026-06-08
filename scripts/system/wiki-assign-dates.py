@@ -10,8 +10,10 @@ Resolved fields written to frontmatter:
 WIKI pages: aggregate the content dates of every linked source
   (annotation date > filename date > parent-folder date > raw frontmatter
    content fields > capture fields), then take the NEWEST as `date`.
-RAW pages: resolve the file's own content date directly (single artifact, so
-  date_span is just its year).
+RAW pages: resolve the file's own content date directly. A date or year-range in
+  the filename (YYYY-MM-DD, DD-MM-YYYY, a bare year YYYY, or a range YYYY-YYYY)
+  wins at HIGH confidence; a range sets a multi-year date_span. Otherwise date_span
+  is just the resolved year.
 
 `date` overwrites any pre-existing `date` field. Old field names from the
 earlier run (latest_source / source_span / source_date_confidence) are stripped.
@@ -67,6 +69,13 @@ YEAR = re.compile(r"(?<!\d)(19|20)\d{2}(?!\d)")
 MONTHS = {m: i+1 for i, m in enumerate(
     ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"])}
 MONTH_YEAR = re.compile(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+((?:19|20)\d{2})\b", re.I)
+# ISO date with digit-lookarounds (not \b): matches 2024-03-14 even when followed
+# by '_' (a word char), e.g. 2024-03-14_notes.md, where ISO_FULL's \b would fail.
+ISO_FN = re.compile(r"(?<!\d)((?:19|20)\d{2})-(0[1-9]|1[0-2])-([0-3]\d)(?!\d)")
+# DD-MM-YYYY (day-month-year) in a filename, e.g. 14-03-2024
+DMY = re.compile(r"(?<!\d)([0-3]\d)-(0[1-9]|1[0-2])-((?:19|20)\d{2})(?!\d)")
+# year range, e.g. 2020-2023 / 2020–2023 (en-dash) -> flags a multi-year span
+YEAR_RANGE = re.compile(r"(?<!\d)((?:19|20)\d{2})\s*[-–]\s*((?:19|20)\d{2})(?!\d)")
 
 CONTENT_FIELDS = ["sent", "published", "when", "date"]   # high
 EDIT_FIELDS    = ["last_modified"]                        # medium
@@ -90,6 +99,33 @@ def norm_date(s):
     m = YEAR.search(s)
     if m:
         return (f"{m.group(0)}-07-01", "year")
+    return None
+
+def filename_date(name):
+    """Date encoded in a filename -> (date, span, conf) or None. Always HIGH
+    confidence. Recognised, in priority order:
+      1. year RANGE  YYYY-YYYY  -> date = latest year, span = earliest–latest
+      2. ISO YYYY-MM-DD         -> full day date (robust to '_' separators)
+      3. DD-MM-YYYY             -> full day date
+      4. via norm_date(): 'Mon YYYY' or a bare year YYYY (19xx/20xx)
+    """
+    base = os.path.basename(name)
+    m = YEAR_RANGE.search(base)
+    if m:
+        ey, ly = sorted((m.group(1), m.group(2)))
+        span = ey if ey == ly else f"{ey}–{ly}"
+        return (f"{ly}-07-01", span, "high")
+    m = ISO_FN.search(base)
+    if m:
+        date = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        return (date, date[:4], "high")
+    m = DMY.search(base)
+    if m:
+        date = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+        return (date, date[:4], "high")
+    d = norm_date(base)
+    if d:
+        return (d[0], d[0][:4], "high")
     return None
 
 def read_frontmatter(path):
@@ -116,19 +152,17 @@ def file_content_date(rawpath, linkpath=None, skip_date_field=False):
     skip_date_field: when resolving a RAW file's OWN date, ignore a pre-existing
     `date` frontmatter field (we are about to overwrite it) to avoid circularity.
     """
-    base = os.path.basename(rawpath)
-    if ISO_FULL.search(base):
-        d = norm_date(base)
-        if d: return (d[0], "high")
-    if YEAR.search(base):
-        d = norm_date(base)
-        if d: return (d[0], "high")
+    fd = filename_date(os.path.basename(rawpath))
+    if fd:
+        return (fd[0], fd[2])
     if linkpath:
-        for rx in (ISO_FULL, YEAR):
-            if rx.search(linkpath):
-                d = norm_date(linkpath)
-                if d: return (d[0], "high")
-                break
+        fd = filename_date(os.path.basename(linkpath))
+        if fd:
+            return (fd[0], fd[2])
+        # year anywhere in the link path (e.g. a parent folder: raw/2021/...)
+        if YEAR.search(linkpath):
+            d = norm_date(linkpath)
+            if d: return (d[0], "high")
     if os.path.isfile(rawpath):
         fm, _ = read_frontmatter(rawpath)
         # If the source already carries OUR managed freshness, inherit it verbatim
@@ -302,6 +336,13 @@ def resolve_page(p):
     is_raw = p.startswith(RAW + os.sep)
     fm, txt = read_frontmatter(p)
     if is_raw:
+        # a date/range in the filename wins outright (high confidence). Resolved
+        # here too — not just in file_content_date — so a YYYY-YYYY range can set
+        # a multi-year date_span and the era-mixing flag.
+        fd = filename_date(os.path.basename(p))
+        if fd:
+            date, span, conf = fd
+            return {"date": date, "date_span": span, "date_confidence": conf}, conf, ("–" in span)
         rel = os.path.relpath(p, VAULT)
         r = file_content_date(p, rel, skip_date_field=True)
         if not r:
