@@ -35,7 +35,7 @@ WIKI = os.path.join(VAULT, "wiki")
 QUIET = "--quiet" in sys.argv
 
 # Pages the reviewer marked "not a supersession" — kept out of the review queue.
-IGNORE_FILE = os.path.join(VAULT, ".import", "supersession-ignore.txt")
+IGNORE_FILE = os.path.join(VAULT, ".wiki-scratch", "supersession-ignore.txt")
 def _load_ignore():
     try:
         with open(IGNORE_FILE, encoding="utf-8") as f:
@@ -223,7 +223,7 @@ def main():
                     print(fmt(it))
 
     # write review queue as a reviewable markdown checklist
-    outdir = os.path.join(VAULT, ".import")
+    outdir = os.path.join(VAULT, ".wiki-scratch")
     os.makedirs(outdir, exist_ok=True)
     out = os.path.join(outdir, "supersession-candidates.md")
     with open(out, "w", encoding="utf-8") as f:

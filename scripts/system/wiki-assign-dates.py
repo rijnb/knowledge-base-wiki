@@ -411,7 +411,7 @@ def main():
     print("\nExamples (wiki):")
     for rel, fl in examples:
         print(f"  {rel}\n      {fl}")
-    outdir = os.path.join(VAULT, ".import")
+    outdir = os.path.join(VAULT, ".wiki-scratch")
     os.makedirs(outdir, exist_ok=True)
     out = os.path.join(outdir, "wiki-undated-pages.txt")
     with open(out, "w", encoding="utf-8") as f:
