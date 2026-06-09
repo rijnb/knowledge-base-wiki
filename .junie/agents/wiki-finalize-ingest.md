@@ -4,7 +4,7 @@ description: Dispatched by wiki-ingest after all batches complete to merge logs,
 model: sonnet
 skills:
   - wiki-finalize-ingest
-  - wiki-lint
+  - wiki-doctor
 ---
 
 Follow the wiki-finalize-ingest skill to merge batch logs, rebuild Wiki indexes, and run all post-processing steps.

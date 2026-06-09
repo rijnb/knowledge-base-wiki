@@ -10,7 +10,7 @@ Use the appropriate `wiki` skill for each action:
 - **Ingest next batch** (parallel sessions) — `wiki-ingest-next-batch` skill
 - **Finalize ingest** (merge logs, rebuild indexes) — `wiki-finalize-ingest` skill
 - **Query** — `wiki-query` skill (default: use this when the user asks any question)
-- **Health check / lint** — `wiki-lint` skill
+- **Health check / lint** — `wiki-doctor` skill
 - **Creating wiki pages** — `wiki-templates` skill
 - **Add missing page** — `wiki-add-missing` skill
 

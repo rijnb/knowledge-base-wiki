@@ -50,7 +50,7 @@ Rules:
 - The **presence of `superseded_by`** is what marks a page as historical — it works on every topic type (people/concepts/competition have no `status` field). Do not encode supersession in the free-text `status` field.
 - Always add the reciprocal `supersedes:` on the successor so navigation works both ways.
 - The `superseded_by` target **must be an existing page** (no dangling links). Chains are allowed (A→B→C); queries follow them to the newest live page.
-- Only assert supersession when a source **explicitly** states the replacement — never guess. Uncertain candidates belong in the lint review queue (see `wiki-lint`), not applied directly.
+- Only assert supersession when a source **explicitly** states the replacement — never guess. Uncertain candidates belong in the lint review queue (see `wiki-doctor`), not applied directly.
 
 ## wiki/index.md
 

@@ -1,5 +1,5 @@
 ---
-name: wiki-lint
+name: wiki-doctor
 description: Use when the user asks for a health check, lint, audit, or wants to check for orphan pages, contradictions, or data gaps in the Wiki.
 ---
 
