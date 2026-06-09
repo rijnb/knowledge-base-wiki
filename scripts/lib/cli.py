@@ -15,7 +15,7 @@ from .tui.dialogs import ask_run_auto_fixes, run_scan_with_dialog
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="wiki-lint-check.py",
+        prog="wiki-doctor.py",
         description=(
             "Scan Markdown files for broken internal and external links.\n"
             "Output is structured JSON (default) or human-readable text, "
@@ -25,32 +25,32 @@ def parse_args():
         epilog="""
 Examples:
   # Scan vault rooted at the script's parent directory:
-  python3 wiki-lint-check.py
+  python3 wiki-doctor.py
 
   # Scan a specific vault directory:
-  python3 wiki-lint-check.py /path/to/vault
+  python3 wiki-doctor.py /path/to/vault
 
   # Human-readable output:
-  python3 wiki-lint-check.py --format text
+  python3 wiki-doctor.py --format text
 
   # Include external HTTP link checks:
-  python3 wiki-lint-check.py --external --timeout 10
+  python3 wiki-doctor.py --external --timeout 10
 
   # Skip image embeds in checks (they're checked by default):
-  python3 wiki-lint-check.py --no-include-images
+  python3 wiki-doctor.py --no-include-images
 
   # Skip frontmatter links (e.g. author: [[Name]] in raw/clips):
-  python3 wiki-lint-check.py --skip-frontmatter
+  python3 wiki-doctor.py --skip-frontmatter
 
   # Show suggested fixes for broken wikilinks, then apply them:
-  python3 wiki-lint-check.py --format text
-  python3 wiki-lint-check.py --fix-simple-errors
+  python3 wiki-doctor.py --format text
+  python3 wiki-doctor.py --fix-simple-errors
 
   # Batch mode (no TUI, output only):
-  python3 wiki-lint-check.py --batch-mode --format text
+  python3 wiki-doctor.py --batch-mode --format text
 
   # Combine options:
-  python3 wiki-lint-check.py --external --skip-frontmatter --format text /path/to/vault
+  python3 wiki-doctor.py --external --skip-frontmatter --format text /path/to/vault
         """,
     )
     parser.add_argument(

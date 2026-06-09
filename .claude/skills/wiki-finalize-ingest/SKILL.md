@@ -66,4 +66,4 @@ Use `AskUserQuestion` with `multiSelect: true`. Always run QMD before lint:
 
 ## Step 6 - End message
 
-After running the lint check or QMD do not suggest to run finalize again. Do propose to run `scripts/wiki-lint-check.py` if any problems were found during the lint check.
+After running the lint check or QMD do not suggest to run finalize again. Do propose to run `scripts/wiki-doctor.py` if any problems were found during the lint check.

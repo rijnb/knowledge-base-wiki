@@ -266,7 +266,7 @@ def check_external(url: str, timeout: int) -> tuple[bool, str]:
     """Return (ok, reason). Performs a HEAD request, falls back to GET."""
     try:
         req = urllib.request.Request(url, method="HEAD")
-        req.add_header("User-Agent", "wiki-lint-check/1.0")
+        req.add_header("User-Agent", "wiki-doctor/1.0")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status < 400, f"HTTP {resp.status}"
     except urllib.error.HTTPError as e:
@@ -274,7 +274,7 @@ def check_external(url: str, timeout: int) -> tuple[bool, str]:
             # HEAD not allowed — try GET
             try:
                 req2 = urllib.request.Request(url, method="GET")
-                req2.add_header("User-Agent", "wiki-lint-check/1.0")
+                req2.add_header("User-Agent", "wiki-doctor/1.0")
                 with urllib.request.urlopen(req2, timeout=timeout) as resp:
                     return resp.status < 400, f"HTTP {resp.status}"
             except Exception as e2:

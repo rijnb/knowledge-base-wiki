@@ -45,13 +45,13 @@ After setup, put your notes in `raw/` and tell Claude: **"ingest new raw notes"*
 Alternatively, run:
 
 ```bash
-./scripts/wiki-ingest-loop.sh
+./scripts/wiki-ingest.sh
 ```
 
 After ingesting notes, run the Linter regularly to keep your knowledge base clean:
 
 ```bash
-./scripts/wiki-lint-check.py
+./scripts/wiki-doctor.py
 ```
 
 You can keep notes that you do not want to be ingested yet (like drafts), in `INBOX`. The inbox will not be part of the ingestion process.
@@ -132,8 +132,8 @@ These skills commands and natural-language triggers are available:
 | Command / phrase          | Description |
 | ----------------          | ----------- |
 | "ingest new notes"        | Start a new ingest of raw notes (Session 1 — coordinator flow) |
-| "fetch slack"             | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest-loop.sh` to ingest |
-| "fetch mail"              | Copy emails from configured inbox to `raw/emails/`, then run `wiki-ingest-loop.sh` to ingest |
+| "fetch slack"             | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest.sh` to ingest |
+| "fetch mail"              | Copy emails from configured inbox to `raw/emails/`, then run `wiki-ingest.sh` to ingest |
 | "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
 | "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
 | "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
@@ -143,9 +143,9 @@ These skills commands and natural-language triggers are available:
 
 The `ingest next batch` and `finalize ingest` commands are only needed for importing large amounts of notes. LLM will notify you when you `ingest new notes` and it sees it requires batched importing.
 
-### Pro-tip 1: use `wiki-ingest-loop.sh` to ingest multiple files
+### Pro-tip 1: use `wiki-ingest.sh` to ingest multiple files
 
-You can use the script "scripts/wiki-ingest-loop.sh" to start ingesting new notes. The advantage of this script is that it will try to ingest new notes in batches, and wait if your 5h limit has been reached. It will first execute "ingest new notes" followed by as many "ingest next batch" prompts as necessary (up to a specified maximum). Use "--help" for help for this script.
+You can use the script "scripts/wiki-ingest.sh" to start ingesting new notes. The advantage of this script is that it will try to ingest new notes in batches, and wait if your 5h limit has been reached. It will first execute "ingest new notes" followed by as many "ingest next batch" prompts as necessary (up to a specified maximum). Use "--help" for help for this script.
 
 You start it for a specific agent (Claude CLI or Junie CLI), like this
 ```
@@ -154,13 +154,13 @@ scripts/wiki-ingest.loop.sh [--agent claude|junie]
 
 Use `wiki-ingest.loop.sh --help` for more options.
 
-### Pro-tip 2: use `wiki-lint-check.py` to health-check your knowledge base
+### Pro-tip 2: use `wiki-doctor.py` to health-check your knowledge base
 
 After each ingestion, the system can automatically run a health check on the knowledge base. It performs an automated, basic health-check and will check for missing topics, inconsistencies etc. using the LLM (takes time and tokens).
 
 You can also run the basic health-check (which does not use the LLM) manually, by simply executing:
 ```
-scripts/wiki-lint-check.py
+scripts/wiki-doctor.py
 ```
 
 This opens an interactive TUI to deal with:
@@ -172,7 +172,7 @@ Using this interactive mode, you should be able to keep your knowledge base 100%
 
 ### Pro-tip 3: run `qmd-full-reindex.sh` to re-index the semantic database
 
-After running ingestion of notes (e.g. by `scripts/wiki-ingest-loop.sh`), you are advised to run:
+After running ingestion of notes (e.g. by `scripts/wiki-ingest.sh`), you are advised to run:
 ```
 scripts/qmd-full-reindex.sh
 ```
@@ -182,7 +182,7 @@ Instead of running a full re-index, you can also execute `qmd embed`. This is us
 
 ### Pro-tip 4: Storing draft notes in `inbox` (not for ingestion yet)
 
-You can store notes in `/inbox` while you're working on then and you don't want them ingested yet. Move them manually to `/raw/notes` once you think they are ready for ingestion. Then run `scripts/wiki-ingest-loop.sh`.
+You can store notes in `/inbox` while you're working on then and you don't want them ingested yet. Move them manually to `/raw/notes` once you think they are ready for ingestion. Then run `scripts/wiki-ingest.sh`.
 
 ### Pro-tip 5: Use Obsidian CLI
 
@@ -272,10 +272,10 @@ To re-create the entire Wiki, remove the `wiki/` directory, `/clear` the LLM con
 The database is automatically checked for errors after ingesting new notes. To check manually:
 ```bash
 # Basic check (no LLM, fast):
-./scripts/wiki-lint-check.py --batch-mode --format text
+./scripts/wiki-doctor.py --batch-mode --format text
 
 # Interactive TUI (deal with broken links, orphans, stubs):
-./scripts/wiki-lint-check.py
+./scripts/wiki-doctor.py
 ```
 
 ---
@@ -342,8 +342,8 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 
 | Script | Purpose |
 | ------ | ------- |
-| `wiki-ingest-loop.sh` | Main ingestion pipeline: converts raw files (VTT, EML), creates batches if needed, and runs ingestion sessions in a loop until all notes are processed. The normal way to ingest new notes. |
-| `wiki-lint-check.py` | Scans wiki Markdown files for broken internal and external links. Outputs structured JSON for AI consumption. Run periodically to keep the wiki healthy. |
+| `wiki-ingest.sh` | Main ingestion pipeline: converts raw files (VTT, EML), creates batches if needed, and runs ingestion sessions in a loop until all notes are processed. The normal way to ingest new notes. |
+| `wiki-doctor.py` | Scans wiki Markdown files for broken internal and external links. Outputs structured JSON for AI consumption. Run periodically to keep the wiki healthy. |
 
 ### Occasional use
 
@@ -357,11 +357,11 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 
 | Script | Purpose |
 | ------ | ------- |
-| `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest-loop.sh` and the `wiki-ingest` skill. |
+| `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest.sh` and the `wiki-ingest` skill. |
 | `system/wiki-create-index-pages.py` | Rebuilds `_index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
-| `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
-| `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
-| `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest-loop.sh` before ingestion. |
+| `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
+| `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
+| `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories (Junie, Gemini, Codex, etc.) so all agents share the same skill set. |
 | `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
 | `system/qmd-sync-collections.sh` | Adds all `raw/` and `wiki/` subdirectories as QMD collections (idempotent) and re-indexes them. Called by the `wiki-finalize-ingest` skill. |

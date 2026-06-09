@@ -789,12 +789,12 @@ run_phase_finalize() {
     fi
     echo ""
     echo "=== Phase 4 - POST-PROCESS: lint check and QMD sync ==="
-    echo "Running wiki-lint-check.py..."
+    echo "Running wiki-doctor.py..."
     set +e
-    python3 "$PROJECT_DIR/scripts/system/wiki-lint-check.py" -- batch-mode --fix-simple-errors --fix-orphans --format text
+    python3 "$PROJECT_DIR/scripts/system/wiki-doctor.py" -- batch-mode --fix-simple-errors --fix-orphans --format text
     local lint_rc=$?
     set -e
-    [ "$lint_rc" -ne 0 ] && echo "WARN: wiki-lint-check.py exited with status $lint_rc" >&2
+    [ "$lint_rc" -ne 0 ] && echo "WARN: wiki-doctor.py exited with status $lint_rc" >&2
 
     echo "Running qmd-sync-collections.sh..."
     set +e
@@ -886,7 +886,7 @@ run_phase_batches_dry() {
 run_phase_finalize_dry() {
     echo ""
     echo "=== Phase 3 - FINALIZE (dry-run): would run /wiki-finalize-ingest ==="
-    echo "=== Phase 4 - POST-PROCESS (dry-run): would run wiki-lint-check.py and qmd-sync-collections.sh ==="
+    echo "=== Phase 4 - POST-PROCESS (dry-run): would run wiki-doctor.py and qmd-sync-collections.sh ==="
     echo ""
     echo "────────────────────────────────────────────────────────────────────"
     echo "Dry-run complete — no changes were made.  Time: $(date '+%H:%M:%S')"

@@ -50,8 +50,10 @@ if ! $SKIP_EMBED; then
       echo "ERROR: qmd embed failed (exit $_embed_exit)" >&2
       exit $_embed_exit
     fi
-    qmd status | grep -q "needs embedding" || break
-    echo "qmd status still shows 'needs embedding', retrying..."
+    # qmd prints "<N> need embedding" (plural) or "1 needs embedding" (singular);
+    # match both forms, case-insensitively, so the loop continues until done.
+    qmd status | grep -iqE "needs? embedding" || break
+    echo "qmd status still shows pending embeddings, retrying..."
   done
   echo ""
 else

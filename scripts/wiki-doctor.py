@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-wiki-lint-check.py — Scan Markdown files for broken internal and external links.
+wiki-doctor.py — Scan Markdown files for broken internal and external links.
 
-This is a thin shim. The real implementation lives in the `wiki_lint/` package
+This is a thin shim. The real implementation lives in the `lib/` package
 next to this file. Behaviour and CLI surface are unchanged.
 
 Output is structured JSON designed for AI consumption:
@@ -23,7 +23,7 @@ Output is structured JSON designed for AI consumption:
   }
 
 Usage:
-  python3 wiki-lint-check.py [OPTIONS] [ROOT_DIR]
+  python3 wiki-doctor.py [OPTIONS] [ROOT_DIR]
 
 See `--help` for the full option list.
 """
@@ -31,11 +31,11 @@ See `--help` for the full option list.
 import sys
 from pathlib import Path
 
-# Make `wiki_lint` importable when the script is invoked directly from the
+# Make `lib` importable when the script is invoked directly from the
 # scripts/ directory or from anywhere via its absolute path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from wiki_lint.cli import main  # noqa: E402
+from lib.cli import main  # noqa: E402
 
 
 if __name__ == "__main__":

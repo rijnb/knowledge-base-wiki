@@ -84,4 +84,4 @@ Mail fetch complete:
 
 Then tell the user:
 
-> "Email files written to `raw/emails/`. Run `scripts/wiki-ingest-loop.sh` to ingest them into the wiki."
+> "Email files written to `raw/emails/`. Run `scripts/wiki-ingest.sh` to ingest them into the wiki."
