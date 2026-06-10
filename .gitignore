@@ -10,12 +10,10 @@
 .trash/
 .import/
 .output.txt
-/_*.md
 _resources/
-scripts/__pycache__/
+__pycache__/
 config/personal_info.md
 docs/
 raw/
 wiki/
 INBOX/
-

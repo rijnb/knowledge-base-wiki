@@ -147,9 +147,10 @@ The `ingest next batch` and `finalize ingest` commands are only needed for impor
 
 You can use the script "scripts/wiki-ingest.sh" to start ingesting new notes. The advantage of this script is that it will try to ingest new notes in batches, and wait if your 5h limit has been reached. It will first execute "ingest new notes" followed by as many "ingest next batch" prompts as necessary (up to a specified maximum). Use "--help" for help for this script.
 
-You start it for a specific agent (Claude CLI or Junie CLI), like this
+By default, the script reads `config/settings.md` and uses its `ai_backend`
+frontmatter value. You can override it for a single run like this:
 ```
-scripts/wiki-ingest.sh [--agent claude|junie]
+scripts/wiki-ingest.sh [--agent claude|vibe|codex]
 ```
 
 Use `wiki-ingest.sh --help` for more options.
@@ -205,6 +206,20 @@ I am ...
 ```
 
 If the file is missing, or it contains no info topics, default topics will be used.
+
+### Configuring the local AI backend
+
+Set the local LLM CLI used by scripts in `config/settings.md`:
+
+```yaml
+---
+ai_backend: claude
+---
+```
+
+Supported values are `claude` (`claude -p ...`), `vibe` (`vibe -p ...`), and
+`codex` (`codex exec ...`). If the selected CLI is missing or fails, scripts
+keep deterministic state intact and stop before consuming LLM-backed batches.
 
 ### Configuring Slack sources
 

@@ -10,8 +10,8 @@
 #
 # Pauses 30 minutes whenever the 5-hour Claude usage is at or above the
 # threshold, then retries automatically. Usage tracking is Claude-only;
-# for --agent junie, get_usage always returns 0 so the
-# throttling loop is effectively disabled.
+# for other backends, get_usage always returns 0 so the throttling loop is
+# effectively disabled.
 #
 # The 5-hour usage percentage is fetched from the Anthropic API using the
 # OAuth token stored in the macOS Keychain (Claude Code-credentials).
@@ -21,6 +21,7 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SETTINGS_FILE="$PROJECT_DIR/config/settings.md"
 HUD_CACHE="$HOME/.claude/plugins/claude-hud/.usage-cache.json"
 CACHE_TTL_SECONDS=120
 THRESHOLD=85
@@ -32,29 +33,66 @@ MAX_FILES_PER_BATCH=""
 WAIT_BETWEEN_BATCHES=60
 ERROR_COUNT=0
 CURRENT_BATCH=0
-AGENT=claude
+AGENT=""
+AGENT_EXPLICIT=false
 DRY_RUN=false
+
+read_ai_backend_setting() {
+    local value=""
+    local in_frontmatter=false
+    local line
+
+    if [ -f "$SETTINGS_FILE" ]; then
+        while IFS= read -r line; do
+            if [ "$line" = "---" ]; then
+                if [ "$in_frontmatter" = false ]; then
+                    in_frontmatter=true
+                    continue
+                fi
+                break
+            fi
+            if [ "$in_frontmatter" = true ] && [[ "$line" =~ ^[[:space:]]*ai_backend:[[:space:]]*([^[:space:]#]+) ]]; then
+                value="${BASH_REMATCH[1]}"
+                value="${value%\"}"
+                value="${value#\"}"
+                value="${value%\'}"
+                value="${value#\'}"
+                break
+            fi
+        done < "$SETTINGS_FILE"
+    fi
+
+    case "$value" in
+        ""|claude) echo "claude" ;;
+        vibe|codex) echo "$value" ;;
+        *)
+            echo "WARN: unknown ai_backend '$value' in config/settings.md; falling back to claude." >&2
+            echo "claude"
+            ;;
+    esac
+}
+
+resolve_ai_backend() {
+    if [ "$AGENT_EXPLICIT" = false ]; then
+        AGENT="$(read_ai_backend_setting)"
+    fi
+}
+
+backend_command() {
+    case "$AGENT" in
+        claude) echo "claude" ;;
+        vibe)   echo "vibe" ;;
+        codex)  echo "codex" ;;
+        junie)  echo "junie" ;;
+        *)      return 1 ;;
+    esac
+}
 
 check_dependencies() {
     local missing=()
 
     command -v python3 &>/dev/null || \
         missing+=("python3  →  brew install python3      (or https://www.python.org/downloads/)")
-    command -v curl &>/dev/null || \
-        missing+=("curl     →  brew install curl")
-
-    case "$AGENT" in
-        claude)
-            command -v claude &>/dev/null || \
-                missing+=("claude   →  npm install -g @anthropic-ai/claude-code  (or https://claude.ai/code)")
-            command -v jq &>/dev/null || \
-                missing+=("jq       →  brew install jq")
-            ;;
-        junie)
-            command -v junie &>/dev/null || \
-                missing+=("junie    →  install from JetBrains: https://www.jetbrains.com/junie/")
-            ;;
-    esac
 
     if [ "${#missing[@]}" -gt 0 ]; then
         echo "" >&2
@@ -69,26 +107,25 @@ check_dependencies() {
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--agent AGENT] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--wait-between-batches N] [--dry-run] [--help]
+Usage: $(basename "$0") [--agent BACKEND] [--threshold N] [--max-errors N] [--max-batches N] [--max-files-per-batch N] [--wait-between-batches N] [--dry-run] [--help]
 
 Autonomous wiki ingestion pipeline. Runs /wiki-ingest (if needed), then loops
 /wiki-ingest-next-batch until all batches are done, then finalizes. Pauses
 30 minutes whenever the 5-hour Claude usage is at or above the threshold.
-Throttling applies only to --agent claude; for junie, usage is reported as
-0% (no throttling) since junie doesn't expose a quota API.
+Throttling applies only to ai_backend=claude; for other backends, usage is
+reported as 0% (no throttling).
 
 Options:
-  --agent AGENT              LLM agent command to use (default: claude).
-                             Allowed values: claude (Anthropic Claude),
-                                             junie  (JetBrains Junie).
+  --agent BACKEND            Override config/settings.md ai_backend for this run.
+                             Allowed values: claude, vibe, codex, junie.
   --threshold N              Usage percentage ceiling (default: 85). Each phase starts only
                              when current usage is strictly below this value.
-  --max-errors N             Maximum number of LLM agent command errors before the script
+  --max-errors N             Maximum number of LLM backend command errors before the script
                              exits (default: 5). Each error pauses for confirmation first.
   --max-batches N            Maximum number of batches to process (default: 50).
                              The script exits cleanly after this many batches.
-  --max-files-per-batch N    Maximum number of files per batch (default: 10 for claude,
-                             3 for junie). Passed to wiki-create-import-batches.sh when
+  --max-files-per-batch N    Maximum number of files per batch (default: 10 for most
+                             backends, 3 for junie). Passed to wiki-create-import-batches.sh when
                              partitioning notes.
   --wait-between-batches N   Seconds to wait between batches (default: 60). The countdown
                              can be skipped with Enter or cancelled with ESC.
@@ -97,7 +134,7 @@ Options:
   --help                     Show this help and exit.
 
 Data sources (in order of preference):
-  1. Anthropic API  https://api.anthropic.com/api/oauth/usage  (OAuth token
+  1. Anthropic API  https://api.anthropic.com/api/oauth/usage  (Claude backend only; OAuth token
                     read from macOS Keychain: "Claude Code-credentials")
   2. HUD cache      ~/.claude/plugins/claude-hud/.usage-cache.json
                     (used when API is unreachable; max age: ${CACHE_TTL_SECONDS}s)
@@ -114,8 +151,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --agent)
             case "$2" in
-                claude|junie) AGENT="$2" ;;
-                *) echo "Unknown agent: $2 (allowed: claude, junie)" >&2; usage >&2; exit 1 ;;
+                claude|vibe|codex|junie) AGENT="$2"; AGENT_EXPLICIT=true ;;
+                *) echo "Unknown agent: $2 (allowed: claude, vibe, codex, junie)" >&2; usage >&2; exit 1 ;;
             esac
             shift 2 ;;
         --threshold)
@@ -138,6 +175,8 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
 done
+
+resolve_ai_backend
 
 # Apply agent-specific defaults for options not explicitly set by the user.
 if [ "$AGENT" = "junie" ]; then
@@ -213,7 +252,7 @@ print(int(v))
 
 # Resolve current 5-hour usage % for Claude, preferring a fresh API call.
 # Returns non-zero (and prints nothing) if usage cannot be determined.
-# Not applicable to Junie — callers must skip throttling for non-Claude agents.
+# Not applicable to non-Claude backends — callers skip throttling for them.
 get_usage() {
     local pct
     if pct=$(fetch_from_api 2>/dev/null); then
@@ -237,12 +276,12 @@ next_attempt_time() {
 
 # Block until 5-hour usage is below THRESHOLD.
 # Prints the usage percentage to stdout once cleared; all other output to stderr.
-# For non-Claude agents, usage cannot be retrieved — throttling is skipped entirely.
+# For non-Claude backends, usage cannot be retrieved — throttling is skipped entirely.
 wait_for_capacity() {
     local context="$1"
 
     if [ "$AGENT" != "claude" ]; then
-        echo "Usage throttling not available for agent '$AGENT' — skipping check." >&2
+        echo "Usage throttling not available for backend '$AGENT' — skipping check." >&2
         return 0
     fi
 
@@ -374,26 +413,24 @@ get_first_batch_number() {
     basename "$first" | grep -oE '[0-9]+' | head -1
 }
 
-# Invoke the selected LLM agent with a slash-command prompt.
+# Invoke the selected LLM backend with a slash-command prompt.
 # Usage: run_llm "<slash-command>"
 run_llm() {
     local prompt="$1"
+    local cmd
+    if ! cmd="$(backend_command)"; then
+        echo "WARN: unsupported ai_backend '$AGENT'; skipping LLM-backed step." >&2
+        return 127
+    fi
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "WARN: ai_backend '$AGENT' requires '$cmd', but it is not installed; skipping LLM-backed step." >&2
+        return 127
+    fi
+
     case "$AGENT" in
-        claude) claude --dangerously-skip-permissions --output-format stream-json --verbose \
-            --include-partial-messages --print "$prompt" \
-            | jq -rj '
-              if .type == "stream_event" then
-                if .event.delta.type? == "text_delta" then
-                  .event.delta.text
-                elif .event.type? == "content_block_start" and .event.content_block.type? == "tool_use" then
-                  "\n⚙ \(.event.content_block.name)…\n"
-                elif .event.type? == "message_stop" then
-                  "\n"
-                else empty
-                end
-              else empty
-              end
-            ' ;;
+        claude) claude -p "$prompt" ;;
+        vibe)   vibe -p "$prompt" ;;
+        codex)  codex exec "$prompt" ;;
         junie)  junie --brave --skip-update-check --output-format=text --task "$prompt" ;;
     esac
 }
@@ -410,7 +447,7 @@ show_plan() {
         echo "=== Wiki Ingest Pipeline ==="
     fi
     echo ""
-    printf "LLM agent: %s\n" "$AGENT"
+    printf "LLM backend: %s\n" "$AGENT"
     echo ""
     echo "────────────────────────────────────────────────────────────────────"
     case "$AGENT" in
@@ -433,6 +470,12 @@ BANNER
    ╚█████╔╝ ╚██████╔╝ ██║ ╚████║ ██║ ███████╗
     ╚════╝   ╚═════╝  ╚═╝  ╚═══╝ ╚═╝ ╚══════╝
 BANNER
+            ;;
+        vibe)
+            echo "  VIBE backend"
+            ;;
+        codex)
+            echo "  CODEX backend"
             ;;
     esac
     echo "────────────────────────────────────────────────────────────────────"
@@ -519,13 +562,24 @@ confirm_yn() {
 confirm_start_ingest() {
     local file_count="$1"
     local batch_count="$2"
-    printf "Agent: %s\n" "$AGENT"
+    printf "LLM backend: %s\n" "$AGENT"
     local batch_noun="batches"
     [ "$batch_count" -eq 1 ] && batch_noun="batch"
     if ! confirm_yn "Start ingesting $file_count file(s) across $batch_count $batch_noun?"; then
         echo "Stopped."
         exit 0
     fi
+}
+
+report_llm_fallback() {
+    local phase="$1"
+    echo ""
+    echo "────────────────────────────────────────────────────────────────────"
+    echo "WARN: LLM-backed step skipped during $phase." >&2
+    echo "      Backend '$AGENT' is unavailable or returned an error." >&2
+    echo "      Deterministic steps already completed; batch/log state is left intact." >&2
+    echo "      Fix config/settings.md or install the selected CLI, then rerun." >&2
+    echo "────────────────────────────────────────────────────────────────────"
 }
 
 # Prompt to continue after an error; also enforces MAX_ERRORS limit.
@@ -708,13 +762,11 @@ run_phase_batches() {
         fi
         local batch_start_ts
         batch_start_ts=$(date +%s)
-        if ! run_llm "/wiki-ingest-next-batch"; then
-            echo ""
-            echo "────────────────────────────────────────────────────────────────────"
-            echo "ERROR: /wiki-ingest-next-batch failed on batch $iteration.  Current time: $(date '+%H:%M:%S')" >&2
-            echo "       Check $PROJECT_DIR/.import/ for current state." >&2
-            echo "────────────────────────────────────────────────────────────────────"
-            confirm_after_error "/wiki-ingest-next-batch (batch $iteration)"
+        local llm_rc=0
+        run_llm "/wiki-ingest-next-batch" || llm_rc=$?
+        if [ "$llm_rc" -ne 0 ]; then
+            report_llm_fallback "/wiki-ingest-next-batch"
+            return 2
         fi
 
         echo ""
@@ -780,12 +832,11 @@ run_phase_finalize() {
     echo "=== Phase 3 - FINALIZE: consolidate logs and created indexes ==="
     wait_for_capacity "before /wiki-finalize-ingest" > /dev/null  # usage % not needed here
     echo "Starting /wiki-finalize-ingest..."
-    if ! run_llm "/wiki-finalize-ingest"; then
-        echo ""
-        echo "────────────────────────────────────────────────────────────────────"
-        echo "ERROR: /wiki-finalize-ingest exited with an error.  Current time: $(date '+%H:%M:%S')" >&2
-        echo "────────────────────────────────────────────────────────────────────"
-        confirm_after_error "/wiki-finalize-ingest"
+    local llm_rc=0
+    run_llm "/wiki-finalize-ingest" || llm_rc=$?
+    if [ "$llm_rc" -ne 0 ]; then
+        report_llm_fallback "/wiki-finalize-ingest"
+        return 2
     fi
     echo ""
     echo "=== Phase 4 - POST-PROCESS: lint check and QMD sync ==="
@@ -949,7 +1000,15 @@ main() {
         echo "  Found $log_count batch log file(s) in .import/ with no remaining batch-import files."
         echo ""
         if confirm_yn "Proceed directly to /wiki-finalize-ingest and process the batch-log files?"; then
+            set +e
             run_phase_finalize
+            local finalize_rc=$?
+            set -e
+            if [ "$finalize_rc" -eq 2 ]; then
+                echo "Finalization skipped; batch logs remain in .import/."
+            elif [ "$finalize_rc" -ne 0 ]; then
+                exit "$finalize_rc"
+            fi
             exit 0
         fi
         echo ""
@@ -1026,7 +1085,18 @@ main() {
         exit 0
     fi
 
+    set +e
     run_phase_finalize
+    local finalize_rc=$?
+    set -e
+    if [ "$finalize_rc" -eq 2 ]; then
+        echo ""
+        echo "Pipeline stopped before finalization completed."
+        echo "Re-run the script after fixing config/settings.md or installing the selected backend."
+        exit 0
+    elif [ "$finalize_rc" -ne 0 ]; then
+        exit "$finalize_rc"
+    fi
 }
 
 main
