@@ -35,7 +35,7 @@ done
 
 ## Step 3 — Process the batch
 
-Determine the batch number from the claimed filename (e.g. `.import/batch-import-2.claimed.txt` → N=2). Dispatch sub-agents in batches of 10 to process the files. Each sub-agent prompt must begin with: "Invoke `wiki-ingest-per-note` before processing. Write session logs to `.import/batch-log-N.jsonl`. Then ingest these files: [list]." (Replace N with the actual batch number.)
+Determine the batch number from the claimed filename (e.g. `.import/batch-import-2.claimed.txt` → N=2). Dispatch sub-agents in batches of 10 when the current client supports and permits delegation; otherwise process the files in the current session in manageable chunks. Each sub-agent prompt must begin with: "Invoke `wiki-ingest-per-note` before processing. Write session logs to `.import/batch-log-N.jsonl`. Then ingest these files: [list]." (Replace N with the actual batch number.)
 
 ## Step 4 — Finish
 

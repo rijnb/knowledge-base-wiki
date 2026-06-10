@@ -112,7 +112,7 @@ The email integration uses Microsoft Power Automate to save emails to a OneDrive
 	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/`.
 
 - **Ingest notes:**
-	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.loop.sh`.
+	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.sh`.
 	- LLM converts non-Markdown inputs: `.vtt` transcripts → `raw/transcripts/converted/`, `.eml`/`.html` emails → `raw/emails/converted/`, `.pdf/.jpg` scans → `raw/scans/converted/`.
 	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
 	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `_index.md` files, and run post-processing (QMD re-index + health check).
@@ -149,10 +149,10 @@ You can use the script "scripts/wiki-ingest.sh" to start ingesting new notes. Th
 
 You start it for a specific agent (Claude CLI or Junie CLI), like this
 ```
-scripts/wiki-ingest.loop.sh [--agent claude|junie]    
+scripts/wiki-ingest.sh [--agent claude|junie]
 ```
 
-Use `wiki-ingest.loop.sh --help` for more options.
+Use `wiki-ingest.sh --help` for more options.
 
 ### Pro-tip 2: use `wiki-doctor.py` to health-check your knowledge base
 
@@ -362,9 +362,9 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
-| `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories (Junie, Gemini, Codex, etc.) so all agents share the same skill set. |
+| `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories and generates Codex TOML agent definitions so all agents share the same skill set. |
 | `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
-| `system/qmd-sync-collections.sh` | Adds all `raw/` and `wiki/` subdirectories as QMD collections (idempotent) and re-indexes them. Called by the `wiki-finalize-ingest` skill. |
+| `system/qmd-sync-collections.sh` | Registers the vault root as the QMD collection `tomtom` (idempotent) and re-indexes it. Called by the `wiki-finalize-ingest` skill. |
 
 ## Recognition
 

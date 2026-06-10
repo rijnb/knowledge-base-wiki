@@ -13,6 +13,8 @@ allowed-tools: Bash(qmd:*), mcp__qmd__*
 
 Local search engine for markdown content.
 
+In Codex, use the repo-provided QMD MCP tools if they are available in the current tool list; otherwise use the `qmd` CLI. If `qmd` fails because its cache/database is outside the workspace sandbox, report that QMD needs an MCP server or writable QMD cache path instead of silently falling back to stale results.
+
 ## Status
 
 !`qmd status 2>/dev/null || echo "Not installed: npm install -g @tobilu/qmd"`

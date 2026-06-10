@@ -17,7 +17,7 @@ ls .import/batch-import-*.txt 2>/dev/null
 ```
 
 - **No `.import/batch-log-N.jsonl` files AND no `.import/batch-import-N.txt` files**: nothing to finalize. Tell the user: "No batch import logs or files found. Nothing to finalize — run `wiki-ingest` to start a new import."
-- **Unclaimed `.import/batch-import-N.txt` files still exist** (not `.claimed.`): warn the user: "Some batches have not been processed yet. Make sure all `wiki-ingest-next-batch` sessions have finished before finalizing." Use `AskUserQuestion` to ask: "Proceed anyway (partial finalization) or abort?"
+- **Unclaimed `.import/batch-import-N.txt` files still exist** (not `.claimed.`): warn the user: "Some batches have not been processed yet. Make sure all `wiki-ingest-next-batch` sessions have finished before finalizing." Ask: "Proceed anyway (partial finalization) or abort?" Use `AskUserQuestion` when available; otherwise ask a concise plain-text question and wait for the answer.
 - **Only `.import/batch-log-N.jsonl` files exist**: all batches are done — proceed to Step 1 of finalizing.
 
 ## Step 1 — Merge logs
@@ -57,7 +57,7 @@ Present a table of all pages created/updated across all sessions (read from the 
 
 ## Step 5 — Post-processing menu
 
-Use `AskUserQuestion` with `multiSelect: true`. Always run QMD before lint:
+Ask which post-processing steps to run. Use `AskUserQuestion` with `multiSelect: true` when available; otherwise ask a concise plain-text question and wait for the answer. Always run QMD before lint:
 
 - **All (recommended)** — lint + QMD text + vector embedding; supersedes individual selections
 - **Lint** — health check: orphans, contradictions, gaps 

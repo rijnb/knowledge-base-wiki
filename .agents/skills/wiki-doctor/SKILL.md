@@ -10,8 +10,8 @@ description: Use when the user asks for a health check, lint, audit, or wants to
 Run this command first — it auto-fixes trivial WikiLink mismatches and reports what remains broken:
 
 ```bash
-python3 scripts/wiki-doctor.py --output json --fix-simple-errors --batch-mode
-python3 scripts/wiki-doctor.py --output json --fix-orphans --batch-mode
+python3 scripts/wiki-doctor.py --format json --fix-simple-errors --batch-mode
+python3 scripts/wiki-doctor.py --format json --fix-orphans --batch-mode
 ```
 
 - `--fix-simple-errors` repairs WikiLinks where a unique normalized match exists (e.g. colons vs underscores in filenames). These are applied immediately without requiring user confirmation.

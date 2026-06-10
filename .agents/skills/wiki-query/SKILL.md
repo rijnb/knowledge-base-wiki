@@ -7,8 +7,8 @@ description: Use when the user asks any question, requests research, or wants in
 
 When the user asks any question:
 
-- Use `mcp__plugin_qmd_qmd__query` to search across Wiki collections: `concepts`, `decisions`, `people`, `systems`, `competition`. For broad questions, also search `notes`. **Over-fetch** — ask for more candidates than you need (≈12–15) so the recency re-rank below has room to work.
-- Use `mcp__plugin_qmd_qmd__get` or `mcp__plugin_qmd_qmd__multi_get` to retrieve the candidates. **Always read each page's `date` / `date_confidence` frontmatter** when you retrieve it (QMD ranks by relevance only — it does NOT know about dates).
+- Search the QMD collection `tomtom`, which indexes the whole vault root. Use QMD MCP `query`/`get`/`multi_get` tools when available; otherwise use the `qmd` CLI (`qmd query`, `qmd get`, `qmd multi-get`). **Over-fetch** — ask for more candidates than you need (≈12–15) so the recency re-rank below has room to work.
+- Retrieve the candidates before answering. **Always read each page's `date` / `date_confidence` frontmatter** when you retrieve it (QMD ranks by relevance only — it does NOT know about dates).
 - **Recency re-rank (soft tiebreaker).** QMD ordering is pure relevance. Before answering, re-order the candidates yourself:
   - Relevance still dominates. Apply only a **mild** penalty for age, and only as a tiebreaker among results of *similar* relevance — prefer the page with the newer `date`.
   - **Never drop the only source on a topic** just because it is old, and don't penalise low-relevance-but-unique evidence.

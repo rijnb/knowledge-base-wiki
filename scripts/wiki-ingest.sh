@@ -791,7 +791,7 @@ run_phase_finalize() {
     echo "=== Phase 4 - POST-PROCESS: lint check and QMD sync ==="
     echo "Running wiki-doctor.py..."
     set +e
-    python3 "$PROJECT_DIR/scripts/system/wiki-doctor.py" -- batch-mode --fix-simple-errors --fix-orphans --format text
+    python3 "$PROJECT_DIR/scripts/wiki-doctor.py" --batch-mode --fix-simple-errors --fix-orphans --format text
     local lint_rc=$?
     set -e
     [ "$lint_rc" -ne 0 ] && echo "WARN: wiki-doctor.py exited with status $lint_rc" >&2

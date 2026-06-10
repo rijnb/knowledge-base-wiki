@@ -5,7 +5,7 @@ description: Use when the user wants to clean up, clear, reset, or abort ingesti
 
 # Knowledge Base - Clear Ingest Batches
 
-Use `AskUserQuestion` to confirm before deleting anything:
+Confirm before deleting anything. Use `AskUserQuestion` when available; otherwise ask a concise plain-text question and wait for the user's answer:
 
 ```
 Question: "What would you like to do with the ingestion files in .import/?"
@@ -24,4 +24,3 @@ echo "Cleared."
 Then confirm to the user how many files were removed.
 
 If the user chooses **Abort**: stop immediately and do nothing.
-
