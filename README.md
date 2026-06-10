@@ -139,6 +139,7 @@ These skills commands and natural-language triggers are available:
 | "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
 | "add missing [topic]"     | Create a new Wiki page for a missing concept, person, system, etc. |
 | "clear ingest batches"    | Remove incomplete batch files to restart a failed ingest |
+| "ground this conversation" or "wiki-ground [topic]" | Treat the KB as source of truth for this conversation; optionally front-load a topic. |
 | ask any question          | Query the knowledge base (default behavior) |
 
 The `ingest next batch` and `finalize ingest` commands are only needed for importing large amounts of notes. LLM will notify you when you `ingest new notes` and it sees it requires batched importing.
