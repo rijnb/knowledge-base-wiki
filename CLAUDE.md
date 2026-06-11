@@ -38,6 +38,10 @@ When moving, renaming, or deleting files inside the vault, prefer the Obsidian C
 - **Projects** (`wiki/projects/`) — active and past initiatives
 - **Systems** (`wiki/systems/`) — our products, platforms, and services
 
+## Release Notes
+
+After any changes to scripts (`scripts/`) or skills (`~/.claude/skills/`), append a brief entry to `INBOX/RELEASE-NOTES.md` describing what changed and why.
+
 ## Tests
 
 Tests live in `scripts/tests/`; run with: `python3 -m unittest discover -s scripts/tests -v`
