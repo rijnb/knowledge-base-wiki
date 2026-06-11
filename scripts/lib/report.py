@@ -25,6 +25,12 @@ def format_text(result: dict) -> str:
         lines.append(f"Pruned wiki/log.jsonl: {', '.join(parts)}. Backup at wiki/log.jsonl.bak.")
     elif s.get("log_pruned_pending"):
         lines.append(f"wiki/log.jsonl has {s['log_pruned_pending']} stale/duplicate entry/entries (use --fix-simple-errors to prune).")
+    if s.get("loose_moved") or s.get("loose_converted") or s.get("loose_skipped"):
+        lines.append(f"Loose files: {s.get('loose_moved', 0)} moved to _resources, "
+                     f"{s.get('loose_converted', 0)} converted, {s.get('loose_skipped', 0)} skipped.")
+    elif s.get("loose_pending"):
+        lines.append(f"Loose non-markdown files: {s['loose_pending']} "
+                     f"(use --fix-simple-errors to relocate into _resources/ and convert).")
     lines.append("")
 
     if result["errors"]:
@@ -84,6 +90,20 @@ def format_text(result: dict) -> str:
         else:
             lines.append("No stub pages found.")
 
+    if "loose_files" in result:
+        lines.append("")
+        lf = result["loose_files"]
+        lf_s = result.get("loose_summary", {})
+        lines.append(f"LOOSE FILE CHECK: {lf_s.get('loose_found', len(lf))} "
+                     f"loose non-markdown file(s) found.")
+        if lf:
+            lines.append("LOOSE FILES (non-markdown outside _resources/; "
+                         "--fix-simple-errors relocates via Obsidian CLI and converts):")
+            for f in lf:
+                lines.append(f"  {f}")
+        else:
+            lines.append("No loose files found.")
+
     if "legacy_converted" in result:
         lines.append("")
         lc = result["legacy_converted"]
@@ -104,7 +124,7 @@ def format_text(result: dict) -> str:
 
     # Issues summary — shown at the end
     has_issues = (result["broken_links"] or result.get("orphans") or result.get("stubs")
-                  or result.get("legacy_converted"))
+                  or result.get("legacy_converted") or result.get("loose_files"))
     if has_issues:
         lines.append("")
         lines.append("ISSUES SUMMARY:")
@@ -144,6 +164,11 @@ def format_text(result: dict) -> str:
             st_s = result.get("stub_summary", {})
             n_found = st_s.get("stubs_found", len(result["stubs"]))
             lines.append(f"  stubs        : {n_found} found")
+        if result.get("loose_files"):
+            lf_s = result.get("loose_summary", {})
+            n_loose = lf_s.get("loose_found", len(result["loose_files"]))
+            lines.append(f"  loose files  : {n_loose} found "
+                         f"(use --fix-simple-errors to relocate and convert)")
         if result.get("legacy_converted"):
             lc_s = result.get("legacy_summary", {})
             n_dirs = lc_s.get("converted_dirs_found", len(result["legacy_converted"]))

@@ -1,9 +1,12 @@
-"""Whole-vault sweeps: curly-quote normalization, raw/ reference wikilinking, and log pruning."""
+"""Whole-vault sweeps: curly-quote normalization, raw/ reference wikilinking, log pruning, and loose-file relocation."""
 
 import json
 import re
 import shutil
+import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 from .links import (
@@ -317,3 +320,206 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
             dst.write(line + "\n")
 
     return kept, dropped, malformed, duplicates
+
+
+# ---------------------------------------------------------------------------
+# Loose non-markdown files: relocate into _resources/ and convert
+# ---------------------------------------------------------------------------
+
+# Loose files with these extensions are converted by the existing pipeline
+# scripts (which write their own richer companions); everything else gets the
+# generic per-note companion from _write_companion(). --no-rename keeps the
+# converters from raw-renaming a file Obsidian just moved (which would break
+# the links Obsidian rewrote); convert-html-to-md.py never renames.
+CONVERTER_BY_EXT = {
+    ".eml": ["convert-eml-to-md.py", "--no-rename"],
+    ".vtt": ["convert-vtt-to-md.py", "--no-rename"],
+    ".html": ["convert-html-to-md.py"],
+}
+
+
+def _numbered_fallback(target: Path) -> Path:
+    """First free 'name N.ext' near target — same convention as migrate-converted-to-resources.py."""
+    for n in range(2, 100):
+        cand = target.with_name(f"{target.stem} {n}{target.suffix}")
+        if not cand.exists():
+            return cand
+    raise RuntimeError(f"no free name near {target}")
+
+
+def _extract_text(path: Path) -> str:
+    """Best-effort plain-text extraction for the companion callout."""
+    ext = path.suffix.lower()
+    if ext == ".txt":
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+    if ext == ".pdf" and shutil.which("pdftotext"):
+        try:
+            proc = subprocess.run(
+                ["pdftotext", str(path), "-"],
+                capture_output=True, text=True, timeout=120,
+            )
+            if proc.returncode == 0:
+                return proc.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return ""
+
+
+def _write_companion(moved: Path) -> Path:
+    """Write the per-note-format companion .md one level above _resources/.
+
+    `moved` must already live inside a _resources/ (or legacy *.resources)
+    directory; the companion lands in the directory above it.
+    Format per .claude/skills/wiki-ingest-per-note/SKILL.md: source/converted
+    frontmatter, an embed, and the extracted text in a collapsed callout.
+    """
+    parent_name = moved.parent.name
+    if parent_name != "_resources" and not parent_name.endswith(".resources"):
+        raise ValueError(f"not inside a _resources directory: {moved}")
+    companion = moved.parent.parent / (moved.stem + ".md")
+    text = _extract_text(moved)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    head = [
+        "---",
+        f'source: "_resources/{moved.name}"',
+        f"converted: {now}",
+        "---",
+        "",
+        f"![[{moved.name}]]",
+        "",
+        "> [!ocr-extractor]- Extracted text",
+    ]
+    body = [f"> {line}".rstrip() for line in text.splitlines()] or [">"]
+    companion.write_text("\n".join(head + body) + "\n", encoding="utf-8")
+    return companion
+
+
+def _find_obsidian_cli() -> "str | None":
+    cli = shutil.which("obsidian")
+    if cli:
+        return cli
+    # macOS app-bundle fallback when the CLI shim is not on PATH
+    fallback = "/Applications/Obsidian.app/Contents/MacOS/obsidian"
+    return fallback if Path(fallback).exists() else None
+
+
+def _obsidian_mover(root: Path, src_rel: str, dest_rel: str) -> tuple:
+    """Move a file through the Obsidian CLI so Obsidian updates its link database.
+
+    Returns (ok, reason). The vault is addressed by its registered name, which
+    equals the vault root directory name.
+    """
+    cli = _find_obsidian_cli()
+    if cli is None:
+        return False, "obsidian CLI not found (is Obsidian installed?)"
+    try:
+        # The Obsidian CLI takes key=value parameters (vault=, path=, to=), not --flags.
+        proc = subprocess.run(
+            [cli, f"vault={root.name}", "move", f"path={src_rel}", f"to={dest_rel}"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, f"obsidian CLI failed: {e}"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        return False, detail or f"obsidian CLI exited with status {proc.returncode}"
+    return True, ""
+
+
+def _confirm_move(src: Path, target: Path, timeout: float) -> bool:
+    """Poll until the move is visible on disk — the Obsidian CLI returns
+    before the filesystem reflects the move (asynchronous, and OneDrive
+    sync can add latency)."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if target.is_file() and not src.exists():
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def fix_loose_files(loose_files: list, root: Path, quiet: bool,
+                    mover=None, runner=None, verify_timeout: float = 5.0) -> dict:
+    """Relocate loose non-markdown files into sibling _resources/ dirs and convert them.
+
+    Moves go through the Obsidian CLI (mover) so Obsidian keeps its link
+    database consistent; every move is verified on disk and files are reported
+    and skipped — never moved behind Obsidian's back — when the CLI is
+    unavailable or Obsidian is not running. Companions follow the per-note
+    format; .eml/.vtt/.html are converted by the pipeline scripts (runner).
+    Companions are deliberately NOT logged in wiki/log.jsonl so the next
+    ingest batch picks them up.
+    """
+    if mover is None:
+        mover = _obsidian_mover
+    if runner is None:
+        runner = lambda cmd, **kw: subprocess.run(  # noqa: E731
+            cmd, capture_output=True, text=True, timeout=300, **kw
+        )
+    moved = converted = skipped = 0
+    details = []
+    for rel_str in loose_files:
+        src = root / rel_str
+        if not src.is_file():  # disappeared since the scan
+            continue
+        target = src.parent / "_resources" / src.name
+        if target.exists():
+            try:
+                target = _numbered_fallback(target)
+            except RuntimeError as e:
+                skipped += 1
+                details.append({"file": rel_str, "action": "skipped", "reason": str(e)})
+                continue
+        target.parent.mkdir(exist_ok=True)
+        dest_rel = str(target.relative_to(root))
+
+        ok, reason = mover(root, rel_str, dest_rel)
+        if ok and not _confirm_move(src, target, verify_timeout):
+            ok = False
+            reason = "move not confirmed on disk (is Obsidian running?)"
+        if not ok:
+            skipped += 1
+            details.append({"file": rel_str, "action": "skipped", "reason": reason})
+            try:
+                target.parent.rmdir()  # remove the _resources dir if we just created it empty
+            except OSError:
+                pass  # non-empty or shared — leave it
+            if not quiet:
+                print(f"  loose: SKIP {rel_str}: {reason}", file=sys.stderr)
+            continue
+
+        moved += 1
+        detail = {"file": rel_str, "action": "moved", "to": dest_rel}
+        companion = target.parent.parent / (target.stem + ".md")
+        ext = target.suffix.lower()
+        if companion.exists():
+            detail["companion"] = "already existed"
+        elif ext in CONVERTER_BY_EXT:
+            conv = CONVERTER_BY_EXT[ext]
+            script = root / "scripts" / "system" / conv[0]
+            try:
+                proc = runner([sys.executable, str(script), *conv[1:], str(target)])
+                conv_ok = proc.returncode == 0
+                conv_err = (proc.stderr or "").strip()
+            except (OSError, subprocess.TimeoutExpired) as e:
+                conv_ok, conv_err = False, str(e)
+            if conv_ok:
+                converted += 1
+                detail["converter"] = conv[0]
+            else:
+                detail["conversion_error"] = conv_err or "converter failed"
+        else:
+            try:
+                companion_path = _write_companion(target)
+                converted += 1
+                detail["companion"] = str(companion_path.relative_to(root))
+            except OSError as e:
+                detail["conversion_error"] = str(e)
+        details.append(detail)
+        if not quiet:
+            print(f"  loose: {rel_str} → {dest_rel}", file=sys.stderr)
+    return {"moved": moved, "converted": converted, "skipped": skipped, "details": details}

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .checks.legacy import check_legacy_converted, run_migration
+from .checks.loose import check_loose_files
 from .checks.orphans import check_orphans, fix_orphans
 from .checks.stubs import check_stubs
 from .checks.vault import check_vault
@@ -112,6 +113,10 @@ Examples:
             "references; and prune wiki/log.jsonl in place (backup at "
             "wiki/log.jsonl.bak), dropping entries whose 'file' no longer exists "
             "and collapsing duplicate entries for the same file (keeping the latest)."
+            " Also relocates loose non-markdown files in raw/, wiki/ and INBOX/ "
+            "into sibling _resources/ directories via the Obsidian CLI (requires "
+            "Obsidian running; clash-safe renaming) and converts them to companion "
+            ".md notes."
         ),
     )
     parser.add_argument(
@@ -197,6 +202,7 @@ def main():
                 or bool(result.get("orphans"))
                 or result.get("raw_refs_pending", 0) > 0
                 or result.get("log_pruned_pending", 0) > 0
+                or result.get("loose_pending", 0) > 0
             )
             if has_fixable:
                 auto_fix_applied = ask_run_auto_fixes()
@@ -238,6 +244,11 @@ def main():
         result["stubs"] = stub_result["stubs"]
         result["stub_summary"] = stub_result["summary"]
 
+        # After check_vault: with --fix-simple-errors this reports what REMAINS loose.
+        loose_result = check_loose_files(root, args.quiet)
+        result["loose_files"] = loose_result["loose_files"]
+        result["loose_summary"] = loose_result["summary"]
+
         if getattr(args, "fix_orphans", False) and orphan_result["orphans"]:
             fix_result = fix_orphans(orphan_result["orphans"], root, args.quiet)
             result["orphan_fix"] = fix_result
@@ -251,6 +262,7 @@ def main():
         or result.get("orphan_summary", {}).get("orphans_found", 0) > 0
         or result.get("stub_summary", {}).get("stubs_found", 0) > 0
         or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
+        or result.get("loose_summary", {}).get("loose_found", 0) > 0
     )
 
     if not args.batch_mode:

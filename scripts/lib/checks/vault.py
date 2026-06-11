@@ -3,7 +3,8 @@
 import sys
 from pathlib import Path
 
-from ..fixers import fix_curly_quotes, fix_raw_references, prune_log
+from ..fixers import fix_curly_quotes, fix_loose_files, fix_raw_references, prune_log
+from .loose import check_loose_files
 from ..links import extract_links, is_external, strip_frontmatter
 from ..paths import VaultIndex
 from ..resolve import (
@@ -114,6 +115,7 @@ def check_vault(root: Path, args) -> dict:
     raw_refs_pending = 0
     raw_refs_pending_files = 0
     log_pruned_pending = 0
+    loose_pending = 0
     if not getattr(args, "fix_simple_errors", False):
         raw_refs_pending_files, raw_refs_pending = fix_raw_references(
             root, quiet=True, dry_run=True
@@ -122,6 +124,7 @@ def check_vault(root: Path, args) -> dict:
             root, quiet=True, dry_run=True
         )
         log_pruned_pending = log_pruned_pending_missing + log_pruned_pending_dupes
+        loose_pending = check_loose_files(root, quiet=True)["summary"]["loose_found"]
 
     fixed_links = 0
     fixed_files = 0
@@ -130,6 +133,7 @@ def check_vault(root: Path, args) -> dict:
     q_renamed = q_link_files = q_links = 0
     raw_files_changed = raw_changes = 0
     log_pruned_kept = log_pruned_skipped = log_pruned_malformed = log_pruned_dupes = 0
+    loose_fix = None
     if getattr(args, "fix_simple_errors", False):
         fixes_by_file: dict = {}
         for entry in broken:
@@ -200,6 +204,14 @@ def check_vault(root: Path, args) -> dict:
                   f"{log_pruned_malformed} malformed. "
                   f"Backup at wiki/log.jsonl.bak.", file=sys.stderr)
 
+        loose_now = check_loose_files(root, quiet=True)["loose_files"]
+        if loose_now:
+            loose_fix = fix_loose_files(loose_now, root, args.quiet)
+            if not args.quiet:
+                print(f"  Loose files: {loose_fix['moved']} moved to _resources, "
+                      f"{loose_fix['converted']} converted, "
+                      f"{loose_fix['skipped']} skipped.", file=sys.stderr)
+
     removed_links = 0
     removed_files = 0
     if getattr(args, "remove_broken_links", False):
@@ -249,6 +261,11 @@ def check_vault(root: Path, args) -> dict:
                 summary["log_pruned_duplicates"] = log_pruned_dupes
             if log_pruned_malformed:
                 summary["log_pruned_malformed"] = log_pruned_malformed
+        if loose_fix:
+            summary["loose_moved"] = loose_fix["moved"]
+            summary["loose_converted"] = loose_fix["converted"]
+            if loose_fix["skipped"]:
+                summary["loose_skipped"] = loose_fix["skipped"]
     if getattr(args, "remove_broken_links", False):
         summary["removed_links"] = removed_links
         summary["removed_files"] = removed_files
@@ -257,6 +274,8 @@ def check_vault(root: Path, args) -> dict:
         summary["raw_refs_pending_files"] = raw_refs_pending_files
     if log_pruned_pending:
         summary["log_pruned_pending"] = log_pruned_pending
+    if loose_pending:
+        summary["loose_pending"] = loose_pending
 
     return {
         "broken_links": broken,
@@ -264,4 +283,6 @@ def check_vault(root: Path, args) -> dict:
         "errors": errors,
         "raw_refs_pending": raw_refs_pending,
         "log_pruned_pending": log_pruned_pending,
+        "loose_pending": loose_pending,
+        "loose_fix": loose_fix,
     }
