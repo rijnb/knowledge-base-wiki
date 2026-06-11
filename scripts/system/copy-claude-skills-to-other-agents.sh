@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Copy .claude skills and agents to other agent clients.
 set -euo pipefail
 

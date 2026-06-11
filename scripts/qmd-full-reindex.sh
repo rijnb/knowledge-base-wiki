@@ -26,7 +26,7 @@ for arg in "$@"; do
     --skip-embed) SKIP_EMBED=true ;;
     --reset)      DO_RESET=true ;;
     -h|--help)
-      sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//' | head -n -1
+      sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//' | sed '$d'
       exit 0
       ;;
     *) echo "ERROR: unknown arg: $arg" >&2; exit 2 ;;

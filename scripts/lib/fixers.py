@@ -1,12 +1,13 @@
 """Whole-vault sweeps: curly-quote normalization, raw/ reference wikilinking, log pruning, and loose-file relocation."""
 
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .links import (
@@ -45,7 +46,13 @@ def fix_curly_quotes(root: Path, quiet: bool) -> tuple[int, int, int]:
             if not quiet:
                 print(f"  Cannot rename {p.name}: {new_path.name} already exists", file=sys.stderr)
             continue
-        p.rename(new_path)
+        try:
+            p.rename(new_path)
+        except OSError as e:
+            # A locked file (e.g. mid-OneDrive-sync) must not abort the whole
+            # fix pass — warn and skip just this one.
+            print(f"  WARNING: cannot rename {p.name}: {e}", file=sys.stderr)
+            continue
         renamed += 1
         if not quiet:
             print(f"  Renamed: {p.name} → {new_path.name}", file=sys.stderr)
@@ -57,7 +64,10 @@ def fix_curly_quotes(root: Path, quiet: bool) -> tuple[int, int, int]:
         if should_skip_md(md_file, root):
             continue
         try:
-            content = md_file.read_text(encoding="utf-8", errors="replace")
+            content = md_file.read_text(encoding="utf-8", errors="strict")
+        except UnicodeDecodeError:
+            print(f"  WARNING: skipping {md_file}: not valid UTF-8", file=sys.stderr)
+            continue
         except OSError:
             continue
         if not _CURLY_RE.search(content):
@@ -127,7 +137,10 @@ def fix_raw_references(root: Path, quiet: bool, dry_run: bool = False) -> tuple[
         if not rel.parts or rel.parts[0] != "wiki":
             continue
         try:
-            content = md_file.read_text(encoding="utf-8", errors="replace")
+            content = md_file.read_text(encoding="utf-8", errors="strict")
+        except UnicodeDecodeError:
+            print(f"  WARNING: skipping {md_file}: not valid UTF-8", file=sys.stderr)
+            continue
         except OSError:
             continue
         if "raw/" not in content:
@@ -142,7 +155,7 @@ def fix_raw_references(root: Path, quiet: bool, dry_run: bool = False) -> tuple[
                     fm_end = i + 1
                     break
 
-        in_code_block = False
+        fence_char = None  # '`' or '~' of the fence that opened the current block
         changes = 0
         new_lines = []
         for i, line in enumerate(lines):
@@ -162,10 +175,17 @@ def fix_raw_references(root: Path, quiet: bool, dry_run: bool = False) -> tuple[
 
             stripped = body.lstrip()
             if stripped.startswith("```") or stripped.startswith("~~~"):
-                in_code_block = not in_code_block
+                this_char = stripped[0]
+                if fence_char is None:
+                    # Opening a fenced block — remember which char opened it.
+                    fence_char = this_char
+                elif this_char == fence_char:
+                    # Only a matching fence closes the block; a ~~~ inside a ```
+                    # block (or vice versa) is just content and must not toggle.
+                    fence_char = None
                 new_lines.append(line)
                 continue
-            if in_code_block:
+            if fence_char is not None:
                 new_lines.append(line)
                 continue
 
@@ -315,9 +335,13 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
     backup_path = log_path.with_suffix(log_path.suffix + ".bak")
     shutil.copy2(log_path, backup_path)
 
-    with log_path.open("w", encoding="utf-8") as dst:
+    # Write atomically: a full temp file in the same directory, then os.replace
+    # onto log.jsonl. A crash mid-write can never leave a truncated log.
+    tmp_path = log_path.with_name(log_path.name + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as dst:
         for line in kept_lines:
             dst.write(line + "\n")
+    os.replace(tmp_path, log_path)
 
     return kept, dropped, malformed, duplicates
 
@@ -381,7 +405,7 @@ def _write_companion(moved: Path) -> Path:
         raise ValueError(f"not inside a _resources directory: {moved}")
     companion = moved.parent.parent / (moved.stem + ".md")
     text = _extract_text(moved)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     head = [
         "---",
         f'source: "_resources/{moved.name}"',
@@ -442,6 +466,42 @@ def _confirm_move(src: Path, target: Path, timeout: float) -> bool:
         time.sleep(0.05)
 
 
+def _obsidian_responds(cli: str, root: Path) -> bool:
+    """True if a running Obsidian instance answers a trivial CLI query."""
+    try:
+        proc = subprocess.run(
+            [cli, f"vault={root.name}", "files", "total"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _ensure_obsidian_running(cli: str, root: Path, launch_timeout: float = 20.0) -> bool:
+    """Make sure Obsidian is running; launch it via the CLI binary if needed.
+
+    The `obsidian` CLI shim is the app binary itself, so invoking it with no
+    arguments starts the app. Returns True once Obsidian answers CLI queries.
+    """
+    if _obsidian_responds(cli, root):
+        return True
+    try:
+        subprocess.Popen(
+            [cli],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    except OSError:
+        return False
+    deadline = time.monotonic() + launch_timeout
+    while time.monotonic() < deadline:
+        time.sleep(1.0)
+        if _obsidian_responds(cli, root):
+            return True
+    return False
+
+
 def fix_loose_files(loose_files: list, root: Path, quiet: bool,
                     mover=None, runner=None, verify_timeout: float = 5.0) -> dict:
     """Relocate loose non-markdown files into sibling _resources/ dirs and convert them.
@@ -454,7 +514,20 @@ def fix_loose_files(loose_files: list, root: Path, quiet: bool,
     Companions are deliberately NOT logged in wiki/log.jsonl so the next
     ingest batch picks them up.
     """
+    warning = None
     if mover is None:
+        cli = _find_obsidian_cli()
+        if cli is None or (loose_files and not _ensure_obsidian_running(cli, root)):
+            warning = ("Obsidian is not running and could not be started — "
+                       f"{len(loose_files)} loose file(s) left in place.")
+            if not quiet:
+                print(f"  loose: WARNING: {warning}", file=sys.stderr)
+            details = [
+                {"file": f, "action": "skipped", "reason": "Obsidian unavailable"}
+                for f in loose_files
+            ]
+            return {"moved": 0, "converted": 0, "skipped": len(loose_files),
+                    "details": details, "warning": warning}
         mover = _obsidian_mover
     if runner is None:
         runner = lambda cmd, **kw: subprocess.run(  # noqa: E731
@@ -522,4 +595,5 @@ def fix_loose_files(loose_files: list, root: Path, quiet: bool,
         details.append(detail)
         if not quiet:
             print(f"  loose: {rel_str} → {dest_rel}", file=sys.stderr)
-    return {"moved": moved, "converted": converted, "skipped": skipped, "details": details}
+    return {"moved": moved, "converted": converted, "skipped": skipped,
+            "details": details, "warning": warning}

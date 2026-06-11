@@ -49,10 +49,11 @@ After conversion of any file make sure you ingest the companion `.md`. So, if yo
 > The next batch run scans `raw/` for `.md`, `.pdf`, `.doc`, `.docx`, `.txt`, `.vtt`, `.eml` files and re-ingests anything whose exact path is not present in a log entry and has no companion `.md`. If you log only the companion (or only the parent note), the source file risks being re-ingested next time.
 
 Then, for each Markdown file to ingest:
-- The top-level Wiki topic list is: competition, concepts, decisions, people, problems, projects, systems.
-- **Only use topics from that list.** Never create a `wiki/<dir>/` that is not one of those topics — not "systems", not "architecture", not anything else.
+- The top-level Wiki topic list is: competition, concepts, conversations, decisions, people, problems, projects, systems.
+- **Only use topics from that list.** Never create a `wiki/<dir>/` that is not one of those topics — not "architecture", not "tools", not anything else.
 - Topic definitions — use these to classify correctly and avoid cross-topic confusion:
-  - `competition` → external companies, external products, competitores, or approaches competing with yours
+  - `competition` → external companies, external products, competitors, or approaches competing with yours
+  - `conversations` → valuable results of earlier queries or AI conversations worth preserving as knowledge
   - `concepts` → technology terms, standards, domain vocabulary, mental models (NOT your own systems)
   - `decisions` → recorded choices between alternatives, with rationale (even informal ones)
   - `people` → named individuals (first+last name) who are employees or appear in multiple sources
@@ -65,13 +66,14 @@ Then, for each Markdown file to ingest:
   |---|---|---|
   | `competition` | Does the note mention a competitor, their product, or a market comparison? | Yes, for every distinct competitor or competing product. |
   | `concepts` | Does the note introduce or rely on a technical term, standard, methodology, or domain-specific idea that is not already a named system? | Yes, for every distinct concept. |
+  | `conversations` | Is this note the result of a query or AI conversation whose conclusions are worth preserving as standing knowledge? | Yes, when the conversation produced insights, decisions, or summaries worth retaining beyond the session. |
   | `decisions` | Does the note record a choice between alternatives, a rationale, or a policy? | Yes, for every distinct choice, even informal ones. |
   | `people` | Does the note mention a named person with both first and last name who is a confirmed employee or appears in multiple sources? | Yes, for every such person. |
   | `problems` | Does the note describe a failure, bug, risk, blocker, or open question? | Yes, for every distinct problem. |
   | `projects` | Does the note mention a named initiative, programme, or workstream? | Yes, for every distinct project. |
   | `systems` | Does the note mention a named product, service, platform, component, or tool that is owned or used by the organisation? | Yes, for every distinct named system — even if barely described. |
 
-- **Before creating or updating any Wiki page**, output a brief extraction table listing every candidate entity per topic found in the note. Only after completing the full table for all 7 topics, start writing files.
+- **Before creating or updating any Wiki page**, output a brief extraction table listing every candidate entity per topic found in the note. Only after completing the full table for all 8 topics, start writing files.
 - **When in doubt, create a stub.** If you are unsure whether something qualifies, create a stub page (frontmatter `stub: true`, a title, and one italic source line). Stubs are cheap to delete; missed entities are expensive to recover.
 - For relevant topics: create a new page or update an existing one.
   - Always create pages at exactly one level deep: `wiki/<topic>/<page>.md` — never deeper (e.g. `wiki/concepts/NavSDK.md`, not `wiki/concepts/Navigation/NavSDK.md`).

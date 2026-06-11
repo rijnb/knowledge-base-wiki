@@ -13,7 +13,7 @@ Before doing anything, verify there is something to finalize:
 
 ```bash
 ls .import/batch-log-*.jsonl 2>/dev/null
-ls .import/batch-import-*.txt 2>/dev/null
+ls .import/batch-import-[0-9]*.txt 2>/dev/null | grep -v '\.claimed\.'
 ```
 
 - **No `.import/batch-log-N.jsonl` files AND no `.import/batch-import-N.txt` files**: nothing to finalize. Tell the user: "No batch import logs or files found. Nothing to finalize — run `wiki-ingest` to start a new import."
@@ -35,7 +35,7 @@ python3 scripts/system/wiki-create-index-pages.py
 
 This rebuilds `wiki/index.md` and all `wiki/<topic>/_index.md` files.
 
-## Step 2.5 — Assign freshness dates
+## Step 3 — Assign freshness dates
 
 Run the freshness pass so every wiki and raw page carries up-to-date `date` / `date_span` / `date_confidence` frontmatter (newly ingested pages get dated; existing pages get refreshed if newer sources were added):
 
@@ -53,7 +53,7 @@ If any exist, list them in a "Stubs still needing expansion" section so the user
 
 ## Step 4 — Summarize
 
-Present a table of all pages created/updated across all sessions (read from the just-merged session log data). 
+Present a table of all pages created/updated across all sessions (read from the just-merged session log data).
 
 ## Step 5 — Post-processing menu
 
@@ -66,4 +66,4 @@ Ask which post-processing steps to run. Use `AskUserQuestion` with `multiSelect:
 
 ## Step 6 - End message
 
-After running the lint check or QMD do not suggest to run finalize again. Do propose to run `scripts/wiki-doctor.py` if any problems were found during the lint check.
+After running the lint check or QMD do not suggest to run finalize again. If any problems were found during the lint check, suggest the user runs `python3 scripts/wiki-doctor.py` (interactive mode, without `--batch-mode`) to review and fix the remaining problems one by one.

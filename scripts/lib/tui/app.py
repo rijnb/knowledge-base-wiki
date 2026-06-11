@@ -1,6 +1,7 @@
 """Curses TUI for reviewing broken links, orphans, and stubs."""
 
 import sys
+import unicodedata
 from pathlib import Path
 
 from ..paths import truncate_path
@@ -26,6 +27,11 @@ from .previews import show_preview
 from .search import show_search_dialog
 
 
+def _display_width(s: str) -> int:
+    """Return the terminal display width of *s*, counting CJK/fullwidth chars as 2."""
+    return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in s)
+
+
 def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) -> None:
     """Curses-based TUI for reviewing broken links, orphan pages, and stub pages."""
     try:
@@ -48,7 +54,12 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
     messages: list = [""] * n
 
     def _next_unhandled(start: int) -> "int | None":
-        return next((i for i in range(start + 1, n) if states[i] is None), None)
+        # Search forward from start+1 to end, then wrap 0..start.
+        # Returns None only when no item anywhere is unhandled.
+        return next(
+            (i for i in (*range(start + 1, n), *range(0, start + 1)) if states[i] is None),
+            None,
+        )
 
     def curses_main(stdscr):
         curses.curs_set(0)
@@ -151,11 +162,23 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                 for text, attr in segments:
                     if x >= avail or not text:
                         continue
+                    # Truncate by display width so wide chars don't overflow avail.
+                    remaining = avail - x
+                    truncated = ""
+                    w = 0
+                    for ch in text:
+                        cw = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+                        if w + cw > remaining:
+                            break
+                        truncated += ch
+                        w += cw
+                    if not truncated:
+                        continue
                     try:
-                        stdscr.addstr(y, x, text[:avail - x], attr)
+                        stdscr.addstr(y, x, truncated, attr)
+                        x += _display_width(truncated)
                     except curses.error:
                         pass
-                    x += len(text)
 
             done = sum(1 for s in states if s is not None)
             status = messages[selected] if messages[selected] else ""

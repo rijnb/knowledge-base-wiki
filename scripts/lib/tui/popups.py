@@ -87,10 +87,22 @@ def show_popup(stdscr, entry: dict, idx: int, total: int, root: Path) -> "str | 
     win.keypad(True)
     win.box()
     title = f" Broken link detail {idx + 1}/{total} "
-    win.addstr(0, (pop_w - len(title)) // 2, title)
-    win.addstr(1, 2, f"file: {entry['file']}"[:pop_w - 3])
-    win.addstr(2, 2, f"line: {entry['line']}"[:pop_w - 3])
-    win.addstr(3, 1, sep[:pop_w - 2])
+    try:
+        win.addstr(0, max(0, (pop_w - len(title)) // 2), title)
+    except curses.error:
+        pass
+    try:
+        win.addstr(1, 2, f"file: {entry['file']}"[:pop_w - 3])
+    except curses.error:
+        pass
+    try:
+        win.addstr(2, 2, f"line: {entry['line']}"[:pop_w - 3])
+    except curses.error:
+        pass
+    try:
+        win.addstr(3, 1, sep[:pop_w - 2])
+    except curses.error:
+        pass
     max_content_rows = max(0, pop_h - 8)
     hl_attr = curses.color_pair(PAIR_BROKEN_LINK) | curses.A_BOLD
     for i, (display, is_current, cstart, cend, toff) in enumerate(display_rows[:max_content_rows]):

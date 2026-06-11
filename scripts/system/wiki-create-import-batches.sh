@@ -43,12 +43,14 @@ NOTES_DIR="raw"
 LOG="wiki/log.jsonl"
 IMPORT_DIR=".import"
 
-existing_batches=( $IMPORT_DIR/batch-import-*.txt )
-existing_logs=( $IMPORT_DIR/batch-log-*.jsonl )
+shopt -s nullglob
+existing_batches=( "$IMPORT_DIR"/batch-import-*.txt )
+existing_logs=( "$IMPORT_DIR"/batch-log-*.jsonl )
+shopt -u nullglob
 has_batches=false
 has_logs=false
-[[ -e "${existing_batches[0]}" ]] && has_batches=true
-[[ -e "${existing_logs[0]}" ]]   && has_logs=true
+[ ${#existing_batches[@]} -gt 0 ] && has_batches=true
+[ ${#existing_logs[@]} -gt 0 ]    && has_logs=true
 
 if $has_batches || $has_logs; then
     if ! $FORCE; then
@@ -96,7 +98,7 @@ def sort_key(f):
             return f'{year}-{month}-{day}T23:59:59'
     try:
         st = os.stat(f)
-        ts = st.st_mtime or getattr(st, 'st_birthtime', None) or st.st_ctime
+        ts = st.st_mtime or getattr(st, 'st_birthtime', None) or st.st_ctime  # mtime wins; birthtime/ctime are fallbacks only
     except OSError:
         ts = 0
     return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
@@ -107,6 +109,7 @@ print('\n'.join(lines))
 
 # Filter candidates: include if (a) not in log, or (b) mtime is newer than last import date
 _py=$(mktemp /tmp/wiki-filter.XXXXXX.py)
+trap 'rm -f "$_py"' EXIT
 cat > "$_py" << 'PYEOF'
 import sys, json, os, re
 

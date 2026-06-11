@@ -293,8 +293,11 @@ def run_scan_with_dialog(root: Path, args) -> dict:
 
     try:
         curses.wrapper(_curses_scan)
-    except Exception:
-        pass
+    except Exception as _tui_exc:
+        print(
+            f"wiki-doctor: interactive scan display failed ({type(_tui_exc).__name__}); continuing without TUI",
+            file=sys.stderr,
+        )
 
     if outcome and outcome[0] is not None:
         return outcome[0]

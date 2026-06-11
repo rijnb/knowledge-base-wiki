@@ -13,7 +13,9 @@ def _body_word_count(content: str) -> int:
     """Count prose words in body text, excluding frontmatter, headers, and link-only lines."""
     lines = content.splitlines()
     in_fm = False
-    fm_done = False
+    # When line 0 is not a frontmatter fence, the body starts immediately — so
+    # the body is "done" being-found-after-frontmatter from the very first line.
+    fm_done = not (lines and lines[0].strip() == "---")
     count = 0
     for i, line in enumerate(lines):
         s = line.strip()

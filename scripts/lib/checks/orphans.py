@@ -10,6 +10,7 @@ from ..frontmatter import (
     remove_orphan_false_from_frontmatter,
 )
 from ..links import extract_links, is_external
+from ..paths import should_skip_md
 from ..resolve import resolve_wikilink_to_path
 
 
@@ -69,11 +70,9 @@ def check_orphans(root: Path, quiet: bool) -> dict:
     scanned = 0
     for md_file in sorted(root.rglob("*.md")):
         rel = md_file.relative_to(root)
-        if not rel.parts or rel.parts[0] not in ("wiki", "raw"):
-            continue
-        if any(part.startswith(".") for part in rel.parts[:-1]):
-            continue
-        if md_file.name == "SKILL.md":
+        # Apply the same skip filter the VaultIndex uses, so links inside
+        # skipped files (e.g. wiki/log.md, START_HERE.md) never count as backlinks.
+        if should_skip_md(md_file, root):
             continue
         if md_file.name in ("index.md", "_index.md"):
             continue  # index pages don't count as backlink sources

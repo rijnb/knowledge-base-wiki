@@ -402,7 +402,10 @@ def convert(eml_path: Path, *, rename: bool, dry_run: bool) -> bool:
     if date_source not in ("Date header", "Received header"):
         warn(f"date sourced from {date_source}: {date_str}")
 
-    # --- birthtime for rename prefix ---
+    # --- filesystem time for rename prefix ---
+    # Intentional split: the rename prefix uses filesystem birthtime/mtime so
+    # filenames sort stably by when the file arrived on disk, independent of
+    # the email Date header used for the `date:` frontmatter field below.
     stat = eml_path.stat()
     birthtime_ts = getattr(stat, "st_birthtime", None) or stat.st_mtime
     birthtime_str = datetime.fromtimestamp(birthtime_ts, tz=timezone.utc).strftime("%Y-%m-%d")

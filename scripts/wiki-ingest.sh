@@ -64,7 +64,7 @@ read_ai_backend_setting() {
 
     case "$value" in
         ""|claude) echo "claude" ;;
-        vibe|codex) echo "$value" ;;
+        vibe|codex|junie) echo "$value" ;;
         *)
             echo "WARN: unknown ai_backend '$value' in config/settings.md; falling back to claude." >&2
             echo "claude"
@@ -217,9 +217,19 @@ if not token:
 print(token)
 ") || return 1
 
+    # Pass the bearer token via a private header file rather than on the curl
+    # command line, so the token never appears in `ps`/argv. The file is
+    # created with restrictive permissions and removed right after the call
+    # (and via a trap so it can't leak if curl errors out).
+    local hdr_file
+    hdr_file=$(mktemp) || return 1
+    chmod 600 "$hdr_file"
+    trap 'rm -f "$hdr_file"' RETURN
+    printf 'Authorization: Bearer %s\n' "$access_token" > "$hdr_file"
+
     local response
     response=$(curl -sf --max-time 8 \
-        -H "Authorization: Bearer $access_token" \
+        -H @"$hdr_file" \
         -H "anthropic-beta: oauth-2025-04-20" \
         "https://api.anthropic.com/api/oauth/usage") || return 1
 
@@ -237,16 +247,24 @@ print(round(max(0, min(100, float(util)))))
 # Prints an integer 0-100 on success, or returns non-zero if stale/missing.
 read_from_cache() {
     [ -f "$HUD_CACHE" ] || return 1
+    # Wrap the whole read in try/except: a malformed/unreadable cache must NOT
+    # print a traceback (which the caller would otherwise capture as the
+    # "percentage"). On any failure, print nothing and exit 1.
     HUD_CACHE_PATH="$HUD_CACHE" python3 -c "
-import json, time, os
-d = json.load(open(os.environ['HUD_CACHE_PATH']))
-age_sec = (time.time() * 1000 - d['timestamp']) / 1000
-if age_sec > $CACHE_TTL_SECONDS:
-    raise SystemExit(1)
-v = d.get('data', {}).get('fiveHour')
-if v is None:
-    raise SystemExit(1)
-print(int(v))
+import json, time, os, sys
+try:
+    d = json.load(open(os.environ['HUD_CACHE_PATH']))
+    age_sec = (time.time() * 1000 - d['timestamp']) / 1000
+    if age_sec > $CACHE_TTL_SECONDS:
+        raise SystemExit(1)
+    v = d.get('data', {}).get('fiveHour')
+    if v is None:
+        raise SystemExit(1)
+    print(int(v))
+except SystemExit:
+    raise
+except Exception:
+    sys.exit(1)
 "
 }
 
@@ -260,7 +278,9 @@ get_usage() {
         return 0
     fi
     echo "API unavailable, checking cache..." >&2
-    if pct=$(read_from_cache 2>/dev/null); then
+    # Validate the captured value is a bare integer before trusting it; a
+    # malformed cache could otherwise yield garbage that breaks arithmetic.
+    if pct=$(read_from_cache 2>/dev/null) && [[ "$pct" =~ ^[0-9]+$ ]]; then
         echo "$pct"
         return 0
     fi
@@ -314,6 +334,11 @@ wait_with_cancel() {
     saved_tty=$(stty -g 2>/dev/null) || { sleep "$timeout"; return 0; }
     stty -echo 2>/dev/null
 
+    # Guard against SIGINT/SIGTERM leaving the terminal in raw mode: restore the
+    # saved tty settings (fall back to `stty sane`), clear the trap, then
+    # re-raise INT to the shell so the script terminates as expected.
+    trap 'stty "$saved_tty" 2>/dev/null || stty sane; trap - INT TERM; kill -INT $$' INT TERM
+
     # Flush any characters buffered in stdin while the LLM was running
     # (e.g. accidental Enter presses), so they don't trigger instant continuation.
     while IFS= read -r -s -n 1 -t 0 _flush_ch 2>/dev/null; do :; done
@@ -348,6 +373,7 @@ wait_with_cancel() {
     done
 
     stty "$saved_tty" 2>/dev/null
+    trap - INT TERM
     printf "\r%80s\r\n" ""
 
     if [ "$cancelled" = true ]; then
@@ -519,6 +545,11 @@ confirm_yn() {
     saved_tty=$(stty -g 2>/dev/null) || { return 0; }
     stty -echo -icanon min 1 time 0 2>/dev/null
 
+    # Guard against SIGINT/SIGTERM leaving the terminal in raw mode: restore the
+    # saved tty settings (fall back to `stty sane`), clear the trap, then
+    # re-raise INT to the shell so the script terminates as expected.
+    trap 'stty "$saved_tty" 2>/dev/null || stty sane; trap - INT TERM; kill -INT $$' INT TERM
+
     local elapsed=0 result=0 decided=false
 
     while [ "$elapsed" -le "$timeout" ]; do
@@ -556,6 +587,7 @@ confirm_yn() {
     fi
 
     stty "$saved_tty" 2>/dev/null
+    trap - INT TERM
     return "$result"
 }
 
@@ -735,7 +767,8 @@ run_phase_batches() {
 
         if [ "$iteration" -gt "$total" ]; then
             echo "WARN: Processed $iteration batches but only $total were expected." >&2
-            echo "      A claimed batch file in '.import/' may not have been removed." >&2
+            echo "      Either a claimed batch file in '.import/' was not removed," >&2
+            echo "      or a sibling parallel session is consuming batches concurrently." >&2
             echo "      Stopping loop to avoid infinite loop." >&2
             stopped_early=true
             break
@@ -783,9 +816,16 @@ run_phase_batches() {
         if [ "$AGENT" = "claude" ]; then
             local usage_after
             if usage_after=$(get_usage 2>/dev/null); then
-                local delta=$(( usage_after - usage_before ))
-                local sign=""; [ "$delta" -ge 0 ] && sign="+"
-                echo "Completed $batch_label in $batch_duration.  5-hour usage: ${usage_after}%  (${sign}${delta}%)  Current time: $(date '+%H:%M:%S')"
+                # Only show a delta when usage_before is a real integer; it is
+                # empty on wait_for_capacity's "continuing anyway" path, where a
+                # computed delta would be bogus.
+                if [[ "$usage_before" =~ ^[0-9]+$ ]]; then
+                    local delta=$(( usage_after - usage_before ))
+                    local sign=""; [ "$delta" -ge 0 ] && sign="+"
+                    echo "Completed $batch_label in $batch_duration.  5-hour usage: ${usage_after}%  (${sign}${delta}%)  Current time: $(date '+%H:%M:%S')"
+                else
+                    echo "Completed $batch_label in $batch_duration.  5-hour usage: ${usage_after}%  Current time: $(date '+%H:%M:%S')"
+                fi
             else
                 echo "Completed $batch_label in $batch_duration.  Current time: $(date '+%H:%M:%S')"
             fi
@@ -827,6 +867,19 @@ run_phase_batches() {
 run_phase_finalize() {
     echo ""
     echo "=== Phase 3 - FINALIZE: consolidate logs and created indexes ==="
+
+    # Atomic finalize lock to prevent a parallel-session double-finalize race:
+    # a sibling session may have claimed the last batch, so both sessions reach
+    # finalize together. `mkdir` is atomic — exactly one session can create the
+    # lock dir; any other gets a non-zero exit and skips finalize. The lock is
+    # removed when finalize returns (RETURN trap) so it can't leak on error.
+    local finalize_lock="$PROJECT_DIR/.import/.finalize.lock"
+    if ! mkdir "$finalize_lock" 2>/dev/null; then
+        echo "Another session is already finalizing (lock present) — skipping finalize here." >&2
+        return 0
+    fi
+    trap 'rmdir "$finalize_lock" 2>/dev/null || true' RETURN
+
     wait_for_capacity "before /wiki-finalize-ingest" > /dev/null  # usage % not needed here
     echo "Starting /wiki-finalize-ingest..."
     local llm_rc=0

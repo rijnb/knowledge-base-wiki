@@ -1,7 +1,22 @@
 """In-place file rewriters for wikilinks and markdown links."""
 
 import re
+import sys
 from pathlib import Path
+
+
+def _read_strict(file_path: Path) -> "str | None":
+    """Read a file as strict UTF-8 for a read-modify-write pass.
+
+    Returns the decoded text, or None when the file is not valid UTF-8 — in
+    which case the caller must skip the file without writing, so that a single
+    mojibake'd byte is never silently rewritten as a replacement character.
+    """
+    try:
+        return file_path.read_text(encoding="utf-8", errors="strict")
+    except UnicodeDecodeError:
+        print(f"  WARNING: skipping {file_path}: not valid UTF-8", file=sys.stderr)
+        return None
 
 
 # A line that is "bare" after a link is removed — optional indent + optional list
@@ -13,18 +28,33 @@ _BARE_LINE_RE = re.compile(
 )
 
 
-def fix_wikilinks_in_file(file_path: Path, fixes: list, embed: bool = False) -> int:
+def fix_wikilinks_in_file(file_path: Path, fixes: list, embed: bool = False,
+                          return_targets: bool = False):
     """Replace wikilink targets in-place; returns the number of substitutions made.
-    When embed=True, matches ![[target...]] embeds instead of plain [[target...]] links."""
-    content = file_path.read_text(encoding="utf-8", errors="replace")
+    When embed=True, matches ![[target...]] embeds instead of plain [[target...]] links.
+
+    When return_targets=True, returns (count, fixed_targets) where fixed_targets is
+    the set of old-target strings that got at least one substitution. This lets
+    callers distinguish "a fix was suggested" from "a fix was actually applied".
+    Default (return_targets=False) preserves the int-only contract for existing callers.
+
+    Files that are not valid UTF-8 are skipped without writing (0 changes)."""
+    content = _read_strict(file_path)
+    if content is None:
+        return (0, set()) if return_targets else 0
     count = 0
+    fixed_targets: set = set()
     lookbehind = '(?<=!)' if embed else '(?<!!)'
     for old_target, new_target in fixes:
         pattern = re.compile(lookbehind + r'\[\[' + re.escape(old_target) + r'(?=[\]|#\n]| #)')
         content, n = pattern.subn(f'[[{new_target}', content)
         count += n
+        if n:
+            fixed_targets.add(old_target)
     if count:
         file_path.write_text(content, encoding="utf-8")
+    if return_targets:
+        return count, fixed_targets
     return count
 
 
@@ -52,7 +82,9 @@ def mark_broken_wikilinks_in_file(file_path: Path, targets: list) -> int:
       [[target#heading|text]] -> [[target#heading|(broken link) text]]
     Returns the total number of substitutions made.
     """
-    content = file_path.read_text(encoding="utf-8", errors="replace")
+    content = _read_strict(file_path)
+    if content is None:
+        return 0
     count = 0
     for target in targets:
         pattern = re.compile(
@@ -76,7 +108,9 @@ def delete_wikilink_in_file(file_path: Path, target: str, embed: bool = False):
     the whole line is dropped. Returns (changed, removed_linenos) where removed_linenos
     are 1-indexed lines that were fully deleted (so callers can adjust line numbers in
     sibling entries)."""
-    content = file_path.read_text(encoding='utf-8', errors='replace')
+    content = _read_strict(file_path)
+    if content is None:
+        return False, []
     bracket_prefix = '!' if embed else ''
     lookbehind = '' if embed else '(?<!!)'
     link_pat = re.compile(

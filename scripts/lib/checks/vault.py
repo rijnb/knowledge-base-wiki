@@ -142,20 +142,27 @@ def check_vault(root: Path, args) -> dict:
                 fixes_by_file.setdefault(fp, []).append(
                     (entry["target"], entry["suggested_fix"])
                 )
+        # Per-file set of old-target strings that were ACTUALLY substituted, so
+        # we only mark entries fixed when their target really changed on disk.
+        fixed_targets_by_file: dict = {}
         for fp, fixes in fixes_by_file.items():
             seen: set = set()
             deduped = [f for f in fixes if not (f in seen or seen.add(f))]  # type: ignore[func-returns-value]
-            n = fix_wikilinks_in_file(fp, deduped)
+            n, fixed_targets = fix_wikilinks_in_file(fp, deduped, return_targets=True)
+            fixed_targets_by_file[fp] = fixed_targets
             if n:
                 fixed_files += 1
                 fixed_links += n
                 if not args.quiet:
                     rel = fp.relative_to(root)
                     for old_t, new_t in deduped:
-                        print(f"  fix: {rel}: [[{old_t}]] → [[{new_t}]]", file=sys.stderr)
+                        if old_t in fixed_targets:
+                            print(f"  fix: {rel}: [[{old_t}]] → [[{new_t}]]", file=sys.stderr)
         for entry in broken:
             if "suggested_fix" in entry:
-                entry["fixed"] = True
+                fp = root / entry["file"]
+                if entry["target"] in fixed_targets_by_file.get(fp, set()):
+                    entry["fixed"] = True
 
         # Delete bullet lines in YAML frontmatter that contain unfixable broken wikilinks
         fm_targets_by_file: dict = {}
@@ -211,6 +218,8 @@ def check_vault(root: Path, args) -> dict:
                 print(f"  Loose files: {loose_fix['moved']} moved to _resources, "
                       f"{loose_fix['converted']} converted, "
                       f"{loose_fix['skipped']} skipped.", file=sys.stderr)
+            if loose_fix.get("warning"):
+                print(f"WARNING: {loose_fix['warning']}", file=sys.stderr)
 
     removed_links = 0
     removed_files = 0
@@ -266,6 +275,8 @@ def check_vault(root: Path, args) -> dict:
             summary["loose_converted"] = loose_fix["converted"]
             if loose_fix["skipped"]:
                 summary["loose_skipped"] = loose_fix["skipped"]
+            if loose_fix.get("warning"):
+                summary["loose_warning"] = loose_fix["warning"]
     if getattr(args, "remove_broken_links", False):
         summary["removed_links"] = removed_links
         summary["removed_files"] = removed_files

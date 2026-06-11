@@ -326,13 +326,54 @@ def yaml_list(items: list[str]) -> str:
 # ---------------------------------------------------------------------------
 
 _FILENAME_CHAR_MAP = str.maketrans({
-    "‘": "'", "’": "'", "‚": "'",
-    "“": '"', "”": '"', "„": '"',
-    "–": "-", "—": "-", "―": "-", "−": "-",
-    "…": "...",
-    "•": "-", "·": ".", "‣": "-",
-    " ": " ", " ": " ", " ": " ", "​": "",
-    "×": "x", "÷": "-", "⁄": "-",
+    # Curly / smart single quotes
+    "‘": "'",    # '  left single quotation mark
+    "’": "'",    # '  right single quotation mark / apostrophe
+    "‚": "'",    # ‚  single low-9 quotation mark
+    "‹": "<",    # ‹  single left-pointing angle quotation mark
+    "›": ">",    # ›  single right-pointing angle quotation mark
+    "′": "'",    # ′  prime
+    "‵": "'",    # ‵  reversed prime
+    # Curly / smart double quotes
+    "“": '"',    # "  left double quotation mark
+    "”": '"',    # "  right double quotation mark
+    "„": '"',    # „  double low-9 quotation mark
+    "‟": '"',    # ‟  double high-reversed-9 quotation mark
+    "«": '"',    # «  left-pointing double angle quotation mark
+    "»": '"',    # »  right-pointing double angle quotation mark
+    "″": '"',    # ″  double prime
+    "‶": '"',    # ‶  reversed double prime
+    # Dashes
+    "–": "-",    # –  en dash
+    "—": "-",    # —  em dash
+    "―": "-",    # ―  horizontal bar
+    "−": "-",    # −  minus sign
+    # Arrows
+    "←": "<-",   # ←  leftwards arrow
+    "→": "->",   # →  rightwards arrow
+    "↔": "<->",  # ↔  left right arrow
+    "⇐": "<=",   # ⇐  leftwards double arrow
+    "⇒": "=>",   # ⇒  rightwards double arrow
+    "⇔": "<=>",  # ⇔  left right double arrow
+    "↖": "^",    # ↖  north west arrow
+    "↗": "^",    # ↗  north east arrow
+    "↘": "v",    # ↘  south east arrow
+    "↙": "v",    # ↙  south west arrow
+    # Ellipsis
+    "…": "...",  # …  horizontal ellipsis
+    # Bullets / dots
+    "•": "-",    # •  bullet
+    "·": ".",    # ·  middle dot
+    "‣": "-",    # ‣  triangular bullet
+    # Spaces
+    " ": " ",    # non-breaking space
+    " ": " ",    # narrow no-break space
+    " ": " ",    # thin space
+    "​": "",     # zero-width space
+    # Misc
+    "×": "x",    # ×  multiplication sign
+    "÷": "-",    # ÷  division sign  (/ is path separator — use -)
+    "⁄": "-",    # ⁄  fraction slash (/ is path separator — use -)
 })
 
 _DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")

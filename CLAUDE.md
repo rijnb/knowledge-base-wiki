@@ -3,6 +3,10 @@
 Before your start, read the file `config/personal_info.md` (it may not exist, which is OK).
 Use the information from that file to make your responses more relevant to me.
 
+## Wiki skills
+
+`wiki-query` is the default for any question — use it first. Ingestion flows through `wiki-ingest` (which auto-loads `wiki-ingest-per-note` rules for per-note processing). `wiki-doctor` is the health check; run with `--fix-simple-errors` to auto-relocate loose files using the Obsidian CLI.
+
 Use the appropriate `wiki` skill for each action:
 - **Fetch mail** (sync email inbox) — `wiki-fetch-mail` skill
 - **Fetch slack** (fetch channels and DMs) — `wiki-fetch-slack` skill
@@ -15,13 +19,25 @@ Use the appropriate `wiki` skill for each action:
 - **Creating wiki pages** — `wiki-templates` skill
 - **Add missing page** — `wiki-add-missing` skill
 
-# Topic types in `wiki/`
+## Obsidian CLI
 
-- **Competitors** — competing companies, products, and approaches
-- **Concepts** — technologies, standards, mental models, domain vocabulary
-- **Conversations** — valuable results of earlier queries/conversations
-- **Decisions** — why decisions were taken, on what basis, by whom, and when
-- **Problems** — active and past problems
-- **People** — colleagues, contacts, external stakeholders, teams
-- **Projects** — active and past initiatives
-- **Systems** — our products, platforms, and services
+When moving, renaming, or deleting files inside the vault, prefer the Obsidian CLI over plain `mv`/`rm` — Obsidian then updates all internal links automatically.
+
+- Move/rename example: `obsidian vault="TomTom" move path=<vault-rel-path> to=<vault-rel-path>`
+- Requires Obsidian to be running (`/Applications/Obsidian.app/Contents/MacOS/obsidian`)
+- Full reference: run `obsidian help` or load the `obsidian:obsidian-cli` skill
+
+## Topic types in `wiki/`
+
+- **Competition** (`wiki/competition/`) — competing companies, products, and approaches
+- **Concepts** (`wiki/concepts/`) — technologies, standards, mental models, domain vocabulary
+- **Conversations** (`wiki/conversations/`) — valuable results of earlier queries/conversations
+- **Decisions** (`wiki/decisions/`) — why decisions were taken, on what basis, by whom, and when
+- **Problems** (`wiki/problems/`) — active and past problems
+- **People** (`wiki/people/`) — colleagues, contacts, external stakeholders, teams
+- **Projects** (`wiki/projects/`) — active and past initiatives
+- **Systems** (`wiki/systems/`) — our products, platforms, and services
+
+## Tests
+
+Tests live in `scripts/tests/`; run with: `python3 -m unittest discover -s scripts/tests -v`

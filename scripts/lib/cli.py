@@ -233,7 +233,13 @@ def main():
 
     if args.batch_mode:
         if getattr(args, "fix_simple_errors", False):
-            result["broken_links"] = [b for b in result["broken_links"] if "suggested_fix" in b or b.get("fm_deleted")]
+            # Keep only the links that REMAIN broken (not actually fixed, not
+            # frontmatter-deleted). summary.fixed_links already reports the fixes,
+            # so a fully-fixed run must report 0 remaining broken and exit 0.
+            result["broken_links"] = [
+                b for b in result["broken_links"]
+                if not b.get("fixed") and not b.get("fm_deleted")
+            ]
             result["summary"]["broken"] = len(result["broken_links"])
 
         orphan_result = check_orphans(root, args.quiet)

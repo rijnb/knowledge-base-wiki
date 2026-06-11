@@ -31,6 +31,8 @@ def format_text(result: dict) -> str:
     elif s.get("loose_pending"):
         lines.append(f"Loose non-markdown files: {s['loose_pending']} "
                      f"(use --fix-simple-errors to relocate into _resources/ and convert).")
+    if s.get("loose_warning"):
+        lines.append(f"WARNING: {s['loose_warning']}")
     lines.append("")
 
     if result["errors"]:
