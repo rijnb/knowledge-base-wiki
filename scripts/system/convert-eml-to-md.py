@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """convert-eml-to-md — convert .eml files to Markdown for wiki ingestion.
 
-Each .eml is converted to a .md file (sibling by default, or in --output-dir)
-with YAML frontmatter and a plain-text / HTML-to-Markdown body.  The .eml
-filename is optionally prefixed with the email date (YYYY-MM-DD) if it does
-not already start with one.
+Each .eml is moved into a _resources/ subdirectory of its directory, and a
+companion .md with the same stem is written where the .eml used to live.
+The companion contains YAML frontmatter, an ![[embed]] of the original file,
+and the extracted plain-text / HTML-to-Markdown body inside a collapsed
+"Extracted text" callout.  The .eml filename is optionally prefixed with the
+email date (YYYY-MM-DD) if it does not already start with one.
 
 EXIT CODES
   0  all files converted successfully (or nothing to do)
@@ -29,9 +31,6 @@ EXAMPLES
 
   # Convert all .eml without renaming any files
   python3 convert-eml-to-md.py --input-dir raw/emails --no-rename
-
-  # Write .md files to a different directory
-  python3 convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted
 
   # Dry run — show what would happen without writing anything
   python3 convert-eml-to-md.py --input-dir raw/emails --dry-run
@@ -290,11 +289,88 @@ def safe_rename(src: Path, dst: Path, dry_run: bool) -> Path:
 
 
 # ---------------------------------------------------------------------------
+# _resources layout helpers
+# ---------------------------------------------------------------------------
+
+def _references_source(md_path: Path, src_name: str) -> bool:
+    """True if md_path's frontmatter `source:` field references src_name."""
+    try:
+        with md_path.open(encoding="utf-8", errors="replace") as f:
+            for i, line in enumerate(f):
+                if i > 20:
+                    break
+                if line.startswith("source:") and src_name in line:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def companion_base_dir(src: Path) -> Path:
+    """Directory where the companion .md lives: the directory above _resources."""
+    return src.parent.parent if src.parent.name == "_resources" else src.parent
+
+
+def find_companion(src: Path) -> Path | None:
+    """Return the existing companion .md for src, or None."""
+    base = companion_base_dir(src)
+    for cand in (base / (sanitize_filename(src.stem) + ".md"),
+                 base / (sanitize_filename(src.name) + ".md")):
+        if cand.exists() and _references_source(cand, src.name):
+            return cand
+    return None
+
+
+def companion_target(src: Path) -> Path:
+    """Path to write the companion .md to.
+
+    Uses <stem>.md; falls back to <full name>.md when a different note
+    already owns <stem>.md.
+    """
+    base = companion_base_dir(src)
+    stem_md = base / (sanitize_filename(src.stem) + ".md")
+    if stem_md.exists() and not _references_source(stem_md, src.name):
+        return base / (sanitize_filename(src.name) + ".md")
+    return stem_md
+
+
+def move_to_resources(src: Path, dry_run: bool) -> Path | None:
+    """Move src into a _resources/ subdir of its directory; return the new path.
+
+    Files already inside a _resources/ directory are left where they are.
+    Returns None when the destination already exists (collision).
+    """
+    if src.parent.name == "_resources":
+        return src
+    dest = src.parent / "_resources" / src.name
+    if dest.exists():
+        error(f"cannot move {src.name!r}: {dest} already exists")
+        return None
+    if dry_run:
+        info(f"[dry-run] would move {src.name!r} → '_resources/{src.name}'")
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dest)
+    info(f"moved {src.name!r} → '_resources/{src.name}'")
+    return dest
+
+
+def extracted_text_callout(text: str) -> str:
+    """Wrap text in a collapsed Obsidian callout block."""
+    lines = ["> [!ocr-extractor]- Extracted text"]
+    for line in (text.splitlines() or [""]):
+        lines.append(("> " + line).rstrip())
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Core conversion
 # ---------------------------------------------------------------------------
 
-def convert(eml_path: Path, *, rename: bool, dry_run: bool, output_dir: Path | None = None) -> bool:
-    """Convert one .eml → .md.  Returns True on success."""
+def convert(eml_path: Path, *, rename: bool, dry_run: bool) -> bool:
+    """Convert one .eml → companion .md, moving the .eml into _resources/.
+
+    Returns True on success."""
     # --- validate ---
     if not eml_path.exists():
         error(f"file not found: {eml_path}")
@@ -336,11 +412,12 @@ def convert(eml_path: Path, *, rename: bool, dry_run: bool, output_dir: Path | N
         new_name = f"{birthtime_str} {sanitize_filename(eml_path.stem)}.eml"
         eml_path = safe_rename(eml_path, eml_path.parent / new_name, dry_run)
 
-    # Always sanitize the stem so the .md path is free of non-ASCII chars even
-    # when the .eml was not renamed (e.g. --no-rename or already date-prefixed).
-    md_name = sanitize_filename(eml_path.stem) + ".md"
-    md_dir = output_dir if output_dir is not None else eml_path.parent
-    md_path = md_dir / md_name
+    # --- move the original into _resources/ ---
+    moved = move_to_resources(eml_path, dry_run)
+    if moved is None:
+        return False
+
+    md_path = companion_target(moved)
 
     # --- headers ---
     from_val = decode_header(msg.get("From"), "From") or "(unknown sender)"
@@ -372,7 +449,7 @@ def convert(eml_path: Path, *, rename: bool, dry_run: bool, output_dir: Path | N
         "type: email",
         f"subject: {yaml_str(subject)}",
         f"date: {date_str}",
-        f"source: {yaml_str(eml_path.name)}",
+        f"source: {yaml_str('_resources/' + moved.name)}",
         f"from: {yaml_str(from_val)}",
         f"to: {yaml_str(to_val)}",
     ]
@@ -398,11 +475,15 @@ def convert(eml_path: Path, *, rename: bool, dry_run: bool, output_dir: Path | N
     header_lines += [
         f"Subject: {subject}",
         "```",
-        "",
-        "---",
     ]
 
-    content = "\n".join(lines) + "\n\n" + "\n".join(header_lines) + "\n\n" + body + "\n"
+    content = (
+        "\n".join(lines)
+        + "\n\n" + f"![[{moved.name}]]"
+        + "\n\n" + "\n".join(header_lines)
+        + "\n\n" + extracted_text_callout(body)
+        + "\n"
+    )
 
     if dry_run:
         info(f"[dry-run] would write {md_path.name!r} ({len(content)} bytes, body via {body_source})")
@@ -433,8 +514,12 @@ def build_parser() -> argparse.ArgumentParser:
                  then file mtime (warns if falling back).
               2. Renames the .eml to "YYYY-MM-DD <original-name>.eml" unless it
                  already starts with a date or --no-rename is given.
-              3. Writes a sibling .md file with YAML frontmatter and a plain-text
-                 body (HTML is converted via html2text when available).
+              3. Moves the .eml into a _resources/ subdirectory of its directory
+                 (already-inside-_resources files stay put).
+              4. Writes a companion .md (same stem) where the .eml used to live,
+                 with YAML frontmatter, an ![[embed]] of the .eml, and the
+                 plain-text body inside a collapsed "Extracted text" callout
+                 (HTML is converted via html2text when available).
 
             Output lines are prefixed with [OK], [WARN], [ERROR], or [INFO] so
             AI tools can parse results without ambiguity.
@@ -442,7 +527,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=textwrap.dedent("""\
             FRONTMATTER FIELDS WRITTEN
               type     always "email"
-              source   original .eml filename (after rename)
+              source   "_resources/<filename>.eml" (after rename and move)
               from     From header (RFC 2047 decoded)
               to       To header
               cc       CC header (omitted when empty)
@@ -450,8 +535,9 @@ def build_parser() -> argparse.ArgumentParser:
               subject  Subject header
               date     YYYY-MM-DD HH:mm:ss from Date / Received / mtime
 
-            The markdown body also contains a human-readable header block
-            (Date / From / To / CC / BCC / Subject) before the email body.
+            The markdown body contains an ![[embed]] of the original .eml, a
+            human-readable header block (Date / From / To / CC / BCC / Subject),
+            and the email body inside a collapsed "Extracted text" callout.
 
             EXAMPLES
               # Convert a single file, rename with date prefix
@@ -465,9 +551,6 @@ def build_parser() -> argparse.ArgumentParser:
 
               # Batch convert without renaming
               python3 convert-eml-to-md.py --input-dir raw/emails --no-rename
-
-              # Write .md files to a different directory
-              python3 convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted
 
               # Preview what would happen
               python3 convert-eml-to-md.py --input-dir raw/emails --dry-run
@@ -499,11 +582,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not prefix .eml filenames with the date",
     )
     parser.add_argument(
-        "--output-dir",
-        metavar="DIR",
-        help="write .md files to this directory instead of alongside the .eml files",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="show what would be done without writing or renaming any files",
@@ -514,16 +592,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-
-    # --- resolve output directory ---
-    output_dir: Path | None = None
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-        if not args.dry_run:
-            output_dir.mkdir(parents=True, exist_ok=True)
-        if not args.dry_run and not output_dir.is_dir():
-            print(f"[ERROR] output-dir is not a directory: {args.output_dir}", file=sys.stderr)
-            sys.exit(1)
 
     # --- collect paths ---
     paths: list[Path] = []
@@ -554,9 +622,10 @@ def main() -> None:
     if not args.force:
         before = len(paths)
         def _md_exists(p: Path) -> bool:
-            md_name = sanitize_filename(p.stem) + ".md"
-            check_dir = output_dir if output_dir is not None else p.parent
-            return (check_dir / md_name).exists()
+            if find_companion(p):
+                return True
+            # Legacy layout: a converted/<stem>.md sibling from the old pipeline.
+            return (p.parent / "converted" / (sanitize_filename(p.stem) + ".md")).exists()
         paths = [p for p in paths if not _md_exists(p)]
         skipped = before - len(paths)
         if skipped:
@@ -570,7 +639,7 @@ def main() -> None:
     n_ok = n_fail = 0
     for p in paths:
         print(f"converting {p.name!r} …")
-        success = convert(p, rename=not args.no_rename, dry_run=args.dry_run, output_dir=output_dir)
+        success = convert(p, rename=not args.no_rename, dry_run=args.dry_run)
         if success:
             n_ok += 1
         else:

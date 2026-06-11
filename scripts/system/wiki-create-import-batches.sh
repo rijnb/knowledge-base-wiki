@@ -110,10 +110,42 @@ _py=$(mktemp /tmp/wiki-filter.XXXXXX.py)
 cat > "$_py" << 'PYEOF'
 import sys, json, os, re
 
-# Extensions that are converted to .md and logged as a converted/<stem>.md sibling.
-# If agents fail to log the source file, we infer it from the converted entry.
+# Non-Markdown extensions that get moved into _resources/ and replaced by a
+# companion .md (current layout), or converted to a converted/<stem>.md
+# sibling (legacy layout). If agents fail to log the source file, we infer
+# its state from the companion / converted entry.
 _SOURCE_EXTS = {'.eml', '.vtt', '.pdf', '.doc', '.docx', '.txt'}
 _DATE_PREFIX_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
+
+
+def _is_companion_for(md_path, src_name):
+    """True if md_path is a companion .md whose `source:` references src_name."""
+    try:
+        with open(md_path, encoding='utf-8', errors='replace') as f:
+            for i, line in enumerate(f):
+                if i > 20:
+                    break
+                if line.startswith('source:') and src_name in line:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def _has_companion(fp):
+    """True if a companion .md exists for non-Markdown source file fp.
+
+    The companion lives in the directory above _resources/ (or fp's own
+    directory when fp has not been moved yet), named <stem>.md or <name>.md.
+    """
+    parent = os.path.dirname(fp)
+    base = os.path.dirname(parent) if os.path.basename(parent) == '_resources' else parent
+    name = os.path.basename(fp)
+    stem = os.path.splitext(name)[0]
+    for cand in (os.path.join(base, stem + '.md'), os.path.join(base, name + '.md')):
+        if os.path.isfile(cand) and _is_companion_for(cand, name):
+            return True
+    return False
 
 log_files = sys.argv[1:]
 files_db = set()
@@ -155,10 +187,15 @@ for line in sys.stdin:
         continue
     if fp in files_db:
         continue
-    # For non-markdown source files with a date-prefixed name, also check whether
-    # the corresponding converted/.md was logged (agents sometimes omit the source entry).
     ext = os.path.splitext(fp)[1].lower()
     if ext in _SOURCE_EXTS:
+        # Skip non-Markdown sources that already have a companion .md — the
+        # companion is what gets ingested (and its log entry covers the source).
+        if _has_companion(fp):
+            continue
+        # Legacy layout: for date-prefixed names, also check whether the
+        # corresponding converted/.md was logged (agents sometimes omitted
+        # the source entry).
         stem = os.path.splitext(os.path.basename(fp))[0]
         m = _DATE_PREFIX_RE.match(stem)
         if m:
@@ -169,11 +206,9 @@ for line in sys.stdin:
 PYEOF
 
 remaining=()
-if [[ ${#log_sources[@]} -gt 0 ]]; then
-    filtered=$(echo "$all_files" | python3 "$_py" "${log_sources[@]}")
-else
-    filtered="$all_files"
-fi
+# Always run the filter: even without log files it skips non-Markdown sources
+# that already have a companion .md.
+filtered=$(echo "$all_files" | python3 "$_py" ${log_sources[@]+"${log_sources[@]}"})
 rm -f "$_py"
 
 while IFS= read -r line; do

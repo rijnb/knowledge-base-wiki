@@ -662,8 +662,7 @@ run_phase_convert() {
     echo "Converting VTT transcripts..."
     set +e
     python3 "$scripts_dir/system/convert-vtt-to-md.py" \
-        --input-dir  "$PROJECT_DIR/raw/transcripts" \
-        --output-dir "$PROJECT_DIR/raw/transcripts/converted"
+        --input-dir "$PROJECT_DIR/raw/transcripts"
     local vtt_rc=$?
     set -e
     [ "$vtt_rc" -ne 0 ] && { echo "WARN: convert-vtt-to-md.py exited with status $vtt_rc" >&2; had_error=true; }
@@ -671,8 +670,7 @@ run_phase_convert() {
     echo "Converting EML emails..."
     set +e
     python3 "$scripts_dir/system/convert-eml-to-md.py" \
-        --input-dir  "$PROJECT_DIR/raw/emails" \
-        --output-dir "$PROJECT_DIR/raw/emails/converted"
+        --input-dir "$PROJECT_DIR/raw/emails"
     local eml_rc=$?
     set -e
     [ "$eml_rc" -ne 0 ] && { echo "WARN: convert-eml-to-md.py exited with status $eml_rc" >&2; had_error=true; }
@@ -680,8 +678,7 @@ run_phase_convert() {
     echo "Converting HTML emails..."
     set +e
     python3 "$scripts_dir/system/convert-html-to-md.py" \
-        --input-dir  "$PROJECT_DIR/raw/emails" \
-        --output-dir "$PROJECT_DIR/raw/emails/converted"
+        --input-dir "$PROJECT_DIR/raw/emails"
     local html_rc=$?
     set -e
     [ "$html_rc" -ne 0 ] && { echo "WARN: convert-html-to-md.py exited with status $html_rc" >&2; had_error=true; }
@@ -859,18 +856,17 @@ run_phase_finalize() {
     echo "Pipeline complete.  Current time: $(date '+%H:%M:%S')"
 }
 
-# Print NUL-delimited paths of source files whose stem has no matching .md in
-# output_dir (same skip logic as the real conversion scripts).
+# Print NUL-delimited paths of source files that have no companion .md sibling
+# and no legacy converted/<stem>.md (same skip logic as the conversion scripts).
 _list_unconverted() {
     local input_dir="$1"
     local pattern="$2"
-    local output_dir="$3"
 
     while IFS= read -r -d '' f; do
         local stem
         stem=$(basename "$f")
         stem="${stem%.*}"
-        if [ ! -f "$output_dir/${stem}.md" ]; then
+        if [ ! -f "$input_dir/${stem}.md" ] && [ ! -f "$input_dir/converted/${stem}.md" ]; then
             printf '%s\0' "$f"
         fi
     done < <(find "$input_dir" -maxdepth 1 -name "$pattern" -print0 2>/dev/null | sort -z)
@@ -879,13 +875,12 @@ _list_unconverted() {
 # Dry-run counterpart of run_phase_convert: lists files that would be converted.
 run_phase_convert_dry() {
     echo "=== Phase 0 - CONVERT RAW FILES (dry-run): listing files that would be converted ==="
-    echo "(Skips files that already have a matching .md in the output directory)"
+    echo "(Skips files that already have a matching companion .md or a legacy converted/ .md)"
     echo ""
 
     local vtt_files=()
     while IFS= read -r -d '' f; do vtt_files+=("$f"); done \
-        < <(_list_unconverted "$PROJECT_DIR/raw/transcripts" "*.vtt" \
-                              "$PROJECT_DIR/raw/transcripts/converted")
+        < <(_list_unconverted "$PROJECT_DIR/raw/transcripts" "*.vtt")
     if [ "${#vtt_files[@]}" -gt 0 ]; then
         echo "Would convert ${#vtt_files[@]} VTT transcript(s):"
         printf "  %s\n" "${vtt_files[@]}"
@@ -895,8 +890,7 @@ run_phase_convert_dry() {
 
     local eml_files=()
     while IFS= read -r -d '' f; do eml_files+=("$f"); done \
-        < <(_list_unconverted "$PROJECT_DIR/raw/emails" "*.eml" \
-                              "$PROJECT_DIR/raw/emails/converted")
+        < <(_list_unconverted "$PROJECT_DIR/raw/emails" "*.eml")
     if [ "${#eml_files[@]}" -gt 0 ]; then
         echo "Would convert ${#eml_files[@]} EML email(s):"
         printf "  %s\n" "${eml_files[@]}"
@@ -906,8 +900,7 @@ run_phase_convert_dry() {
 
     local html_files=()
     while IFS= read -r -d '' f; do html_files+=("$f"); done \
-        < <(_list_unconverted "$PROJECT_DIR/raw/emails" "*.html" \
-                              "$PROJECT_DIR/raw/emails/converted")
+        < <(_list_unconverted "$PROJECT_DIR/raw/emails" "*.html")
     if [ "${#html_files[@]}" -gt 0 ]; then
         echo "Would convert ${#html_files[@]} HTML email(s):"
         printf "  %s\n" "${html_files[@]}"

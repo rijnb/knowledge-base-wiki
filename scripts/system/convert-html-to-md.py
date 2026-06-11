@@ -8,6 +8,11 @@ If the header prefix is absent the entire file is treated as the HTML body.
 The date is extracted from an ISO-style filename (YYYY-MM-DDTHH_MM_SS±HH_MM),
 falling back to file mtime.
 
+Each .html is moved into a _resources/ subdirectory of its directory, and a
+companion .md with the same stem is written where the .html used to live.
+The companion contains YAML frontmatter, an ![[embed]] of the original file,
+and the converted body inside a collapsed "Extracted text" callout.
+
 EXIT CODES
   0  all files converted successfully (or nothing to do)
   1  one or more files failed or an argument error occurred
@@ -21,10 +26,10 @@ OUTPUT FORMAT (for AI tools)
 
 EXAMPLES
   # Convert all new .html in a directory
-  python3 convert-html-to-md.py --input-dir raw/emails --output-dir raw/emails/converted
+  python3 convert-html-to-md.py --input-dir raw/emails
 
   # Re-convert all including those already converted
-  python3 convert-html-to-md.py --input-dir raw/emails --output-dir raw/emails/converted --force
+  python3 convert-html-to-md.py --input-dir raw/emails --force
 
   # Dry run
   python3 convert-html-to-md.py --input-dir raw/emails --dry-run
@@ -184,10 +189,85 @@ def sanitize_filename(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# _resources layout helpers (same conventions as convert-eml-to-md.py)
+# ---------------------------------------------------------------------------
+
+def _references_source(md_path: Path, src_name: str) -> bool:
+    """True if md_path's frontmatter `source:` field references src_name."""
+    try:
+        with md_path.open(encoding="utf-8", errors="replace") as f:
+            for i, line in enumerate(f):
+                if i > 20:
+                    break
+                if line.startswith("source:") and src_name in line:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def companion_base_dir(src: Path) -> Path:
+    """Directory where the companion .md lives: the directory above _resources."""
+    return src.parent.parent if src.parent.name == "_resources" else src.parent
+
+
+def find_companion(src: Path) -> Path | None:
+    """Return the existing companion .md for src, or None."""
+    base = companion_base_dir(src)
+    for cand in (base / (sanitize_filename(src.stem) + ".md"),
+                 base / (sanitize_filename(src.name) + ".md")):
+        if cand.exists() and _references_source(cand, src.name):
+            return cand
+    return None
+
+
+def companion_target(src: Path) -> Path:
+    """Path to write the companion .md to.
+
+    Uses <stem>.md; falls back to <full name>.md when a different note
+    already owns <stem>.md.
+    """
+    base = companion_base_dir(src)
+    stem_md = base / (sanitize_filename(src.stem) + ".md")
+    if stem_md.exists() and not _references_source(stem_md, src.name):
+        return base / (sanitize_filename(src.name) + ".md")
+    return stem_md
+
+
+def move_to_resources(src: Path, dry_run: bool) -> Path | None:
+    """Move src into a _resources/ subdir of its directory; return the new path.
+
+    Files already inside a _resources/ directory are left where they are.
+    Returns None when the destination already exists (collision).
+    """
+    if src.parent.name == "_resources":
+        return src
+    dest = src.parent / "_resources" / src.name
+    if dest.exists():
+        error(f"cannot move {src.name!r}: {dest} already exists")
+        return None
+    if dry_run:
+        info(f"[dry-run] would move {src.name!r} → '_resources/{src.name}'")
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dest)
+    info(f"moved {src.name!r} → '_resources/{src.name}'")
+    return dest
+
+
+def extracted_text_callout(text: str) -> str:
+    """Wrap text in a collapsed Obsidian callout block."""
+    lines = ["> [!ocr-extractor]- Extracted text"]
+    for line in (text.splitlines() or [""]):
+        lines.append(("> " + line).rstrip())
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Core conversion
 # ---------------------------------------------------------------------------
 
-def convert(html_path: Path, *, dry_run: bool, output_dir: Path | None = None) -> bool:
+def convert(html_path: Path, *, dry_run: bool) -> bool:
     if not html_path.exists():
         error(f"file not found: {html_path}")
         return False
@@ -257,10 +337,12 @@ def convert(html_path: Path, *, dry_run: bool, output_dir: Path | None = None) -
     if not body_md:
         warn("empty body after HTML conversion")
 
-    # --- output path ---
-    md_name = sanitize_filename(html_path.stem) + ".md"
-    md_dir = output_dir if output_dir is not None else html_path.parent
-    md_path = md_dir / md_name
+    # --- move the original into _resources/ ---
+    moved = move_to_resources(html_path, dry_run)
+    if moved is None:
+        return False
+
+    md_path = companion_target(moved)
 
     # --- assemble ---
     frontmatter = [
@@ -268,7 +350,7 @@ def convert(html_path: Path, *, dry_run: bool, output_dir: Path | None = None) -
         "type: email",
         f"subject: {yaml_str(subject)}",
         f"date: {date_str}",
-        f"source: {yaml_str(html_path.name)}",
+        f"source: {yaml_str('_resources/' + moved.name)}",
         f"from: {yaml_str(from_val)}",
         f"to: {yaml_str(to_val)}",
     ]
@@ -291,11 +373,15 @@ def convert(html_path: Path, *, dry_run: bool, output_dir: Path | None = None) -
     header_block += [
         f"Subject: {subject}",
         "```",
-        "",
-        "---",
     ]
 
-    content = "\n".join(frontmatter) + "\n\n" + "\n".join(header_block) + "\n\n" + body_md + "\n"
+    content = (
+        "\n".join(frontmatter)
+        + "\n\n" + f"![[{moved.name}]]"
+        + "\n\n" + "\n".join(header_block)
+        + "\n\n" + extracted_text_callout(body_md)
+        + "\n"
+    )
 
     if dry_run:
         info(f"[dry-run] would write {md_path.name!r} ({len(content)} bytes)")
@@ -348,11 +434,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="re-convert files that already have a .md counterpart",
     )
     parser.add_argument(
-        "--output-dir",
-        metavar="DIR",
-        help="write .md files to this directory instead of alongside the .html files",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="show what would be done without writing any files",
@@ -363,12 +444,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-
-    output_dir: Path | None = None
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-        if not args.dry_run:
-            output_dir.mkdir(parents=True, exist_ok=True)
 
     paths: list[Path] = []
 
@@ -396,9 +471,10 @@ def main() -> None:
     if not args.force:
         before = len(paths)
         def _md_exists(p: Path) -> bool:
-            md_name = sanitize_filename(p.stem) + ".md"
-            check_dir = output_dir if output_dir is not None else p.parent
-            return (check_dir / md_name).exists()
+            if find_companion(p):
+                return True
+            # Legacy layout: a converted/<stem>.md sibling from the old pipeline.
+            return (p.parent / "converted" / (sanitize_filename(p.stem) + ".md")).exists()
         paths = [p for p in paths if not _md_exists(p)]
         skipped = before - len(paths)
         if skipped:
@@ -411,7 +487,7 @@ def main() -> None:
     n_ok = n_fail = 0
     for p in paths:
         print(f"converting {p.name!r} …")
-        success = convert(p, dry_run=args.dry_run, output_dir=output_dir)
+        success = convert(p, dry_run=args.dry_run)
         if success:
             n_ok += 1
         else:

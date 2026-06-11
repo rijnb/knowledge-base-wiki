@@ -9,9 +9,9 @@ from ..checks.vault import check_vault
 from .keys import is_bare_escape
 
 
-def ask_run_auto_fixes() -> bool:
-    """Show a centered curses dialog asking whether to run automatic fixes first.
-    Enter/Y = yes (default), N/Esc = no."""
+def ask_yes_no(title: str, content: list[str], fallback_prompt: str) -> bool:
+    """Show a centered curses yes/no dialog.  Enter/Y = yes (default), N/Esc = no.
+    Falls back to a plain terminal prompt when curses is unavailable."""
     try:
         import curses
     except ImportError:
@@ -25,15 +25,6 @@ def ask_run_auto_fixes() -> bool:
         curses.use_default_colors()
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)  # selected button
         curses.init_pair(2, curses.COLOR_YELLOW, -1)                # title
-
-        content = [
-            "Apply automatic fixes before interactive review?",
-            "",
-            "  fix-simple-errors  — repair normalizable broken links, wikilink raw/ refs, prune log.jsonl",
-            "  fix-orphans        — link plain-text references in wiki/",
-            "",
-            "Only remaining issues will appear in the interactive TUI.",
-        ]
 
         height, width = stdscr.getmaxyx()
         box_w = min(max(len(l) for l in content) + 6, width - 4)
@@ -51,7 +42,6 @@ def ask_run_auto_fixes() -> bool:
             win.erase()
             win.box()
 
-            title = " Wiki Lint — Auto-fix "
             try:
                 win.addstr(0, max(1, (box_w - len(title)) // 2), title,
                            curses.color_pair(2) | curses.A_BOLD)
@@ -124,7 +114,7 @@ def ask_run_auto_fixes() -> bool:
             pass
 
     # Fallback: plain terminal prompt
-    sys.stdout.write("\nRun automatic checks and fixes before interactive mode? [Y/n] ")
+    sys.stdout.write(f"\n{fallback_prompt} [Y/n] ")
     sys.stdout.flush()
     try:
         import tty, termios
@@ -140,6 +130,41 @@ def ask_run_auto_fixes() -> bool:
         return ch not in ('\x1b', 'n', 'N')
     except Exception:
         return sys.stdin.readline().strip().lower() not in ('n', 'no')
+
+
+def ask_run_auto_fixes() -> bool:
+    """Ask whether to run automatic fixes before the interactive review."""
+    return ask_yes_no(
+        " Wiki Lint — Auto-fix ",
+        [
+            "Apply automatic fixes before interactive review?",
+            "",
+            "  fix-simple-errors  — repair normalizable broken links, wikilink raw/ refs, prune log.jsonl",
+            "  fix-orphans        — link plain-text references in wiki/",
+            "",
+            "Only remaining issues will appear in the interactive TUI.",
+        ],
+        "Run automatic checks and fixes before interactive mode?",
+    )
+
+
+def ask_run_migration(legacy_dirs: list[str]) -> bool:
+    """Ask whether to run the legacy converted/ → _resources migration."""
+    shown = legacy_dirs[:8]
+    content = [
+        f"Found {len(legacy_dirs)} legacy converted/ director{'y' if len(legacy_dirs) == 1 else 'ies'}:",
+        "",
+        *[f"  {d}" for d in shown],
+        *(["  …"] if len(legacy_dirs) > len(shown) else []),
+        "",
+        "Run scripts/system/migrate-converted-to-resources.py --apply now?",
+        "(moves originals into _resources/, rewrites companions, updates wiki/log.jsonl)",
+    ]
+    return ask_yes_no(
+        " Wiki Lint — Legacy layout migration ",
+        content,
+        f"Found {len(legacy_dirs)} legacy converted/ dir(s). Run the migration script now?",
+    )
 
 
 def run_scan_with_dialog(root: Path, args) -> dict:

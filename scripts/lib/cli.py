@@ -5,12 +5,13 @@ import json
 import sys
 from pathlib import Path
 
+from .checks.legacy import check_legacy_converted, run_migration
 from .checks.orphans import check_orphans, fix_orphans
 from .checks.stubs import check_stubs
 from .checks.vault import check_vault
 from .report import format_text
 from .tui.app import run_interactive
-from .tui.dialogs import ask_run_auto_fixes, run_scan_with_dialog
+from .tui.dialogs import ask_run_auto_fixes, ask_run_migration, run_scan_with_dialog
 
 
 def parse_args():
@@ -169,6 +170,24 @@ def main():
             print(msg, file=sys.stderr)
         sys.exit(1)
 
+    # Legacy converted/ layout: detect before scanning (a migration moves files
+    # around, so it must happen before links are resolved). In interactive mode
+    # offer to run the migration script; in batch mode it is reported only.
+    legacy_result = check_legacy_converted(root, args.quiet)
+    migration_result = None
+    if not args.batch_mode and legacy_result["legacy_converted"]:
+        if ask_run_migration(legacy_result["legacy_converted"]):
+            migration_result = run_migration(root)
+            if migration_result.get("error"):
+                print(migration_result["error"], file=sys.stderr)
+            else:
+                for stream in ("stdout", "stderr"):
+                    text = migration_result.get(stream, "")
+                    if text.strip():
+                        print(text.rstrip(),
+                              file=sys.stderr if stream == "stderr" else sys.stdout)
+            legacy_result = check_legacy_converted(root, quiet=True)
+
     auto_fix_applied = False
     try:
         if not args.batch_mode:
@@ -198,6 +217,14 @@ def main():
             print(msg, file=sys.stderr)
         sys.exit(1)
 
+    result["legacy_converted"] = legacy_result["legacy_converted"]
+    result["legacy_summary"] = legacy_result["summary"]
+    if migration_result is not None:
+        result["legacy_migration"] = {
+            "ran": migration_result.get("ran", False),
+            "returncode": migration_result.get("returncode"),
+        }
+
     if args.batch_mode:
         if getattr(args, "fix_simple_errors", False):
             result["broken_links"] = [b for b in result["broken_links"] if "suggested_fix" in b or b.get("fm_deleted")]
@@ -223,6 +250,7 @@ def main():
         result["summary"]["broken"] > 0
         or result.get("orphan_summary", {}).get("orphans_found", 0) > 0
         or result.get("stub_summary", {}).get("stubs_found", 0) > 0
+        or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
     )
 
     if not args.batch_mode:

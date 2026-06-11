@@ -84,8 +84,27 @@ def format_text(result: dict) -> str:
         else:
             lines.append("No stub pages found.")
 
+    if "legacy_converted" in result:
+        lines.append("")
+        lc = result["legacy_converted"]
+        lc_s = result.get("legacy_summary", {})
+        mig = result.get("legacy_migration")
+        if mig and mig.get("ran"):
+            status = "succeeded" if mig.get("returncode") == 0 else f"exited with status {mig.get('returncode')}"
+            lines.append(f"LEGACY MIGRATION: migrate-converted-to-resources.py --apply {status}.")
+        lines.append(f"LEGACY LAYOUT CHECK: {lc_s.get('converted_dirs_found', len(lc))} "
+                     f"legacy converted/ directory(ies) remaining.")
+        if lc:
+            lines.append("LEGACY converted/ DIRECTORIES (superseded by the _resources layout):")
+            for d in lc:
+                lines.append(f"  {d}")
+            lines.append("  Migrate with: python3 scripts/system/migrate-converted-to-resources.py --apply")
+        else:
+            lines.append("No legacy converted/ directories found.")
+
     # Issues summary — shown at the end
-    has_issues = result["broken_links"] or result.get("orphans") or result.get("stubs")
+    has_issues = (result["broken_links"] or result.get("orphans") or result.get("stubs")
+                  or result.get("legacy_converted"))
     if has_issues:
         lines.append("")
         lines.append("ISSUES SUMMARY:")
@@ -125,5 +144,10 @@ def format_text(result: dict) -> str:
             st_s = result.get("stub_summary", {})
             n_found = st_s.get("stubs_found", len(result["stubs"]))
             lines.append(f"  stubs        : {n_found} found")
+        if result.get("legacy_converted"):
+            lc_s = result.get("legacy_summary", {})
+            n_dirs = lc_s.get("converted_dirs_found", len(result["legacy_converted"]))
+            lines.append(f"  legacy layout: {n_dirs} converted/ dir(s) to migrate "
+                         f"(run scripts/system/migrate-converted-to-resources.py --apply)")
 
     return "\n".join(lines)

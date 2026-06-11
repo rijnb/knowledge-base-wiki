@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """convert-vtt-to-md — convert .vtt transcript files to Markdown for wiki ingestion.
 
-Each .vtt is converted to a .md file (sibling by default, or in --output-dir)
-with YAML frontmatter and a readable transcript body.  Consecutive cues from
-the same speaker are merged into a single paragraph.
+Each .vtt is moved into a _resources/ subdirectory of its directory, and a
+companion .md with the same stem is written where the .vtt used to live.
+The companion contains YAML frontmatter, an ![[embed]] of the original file,
+and the readable transcript body inside a collapsed "Extracted text" callout.
+Consecutive cues from the same speaker are merged into a single paragraph.
 
 Speaker detection supports two VTT conventions:
   • Voice tags  — <v Speaker Name>text</v>
@@ -35,9 +37,6 @@ EXAMPLES
 
   # Force reconversion even if .md already exists
   python3 convert-vtt-to-md.py --input-dir raw/transcripts --force
-
-  # Write .md files to a different directory
-  python3 convert-vtt-to-md.py --input-dir raw/transcripts --output-dir raw/transcripts/converted
 
   # Dry run — show what would happen without writing anything
   python3 convert-vtt-to-md.py --input-dir raw/transcripts --dry-run
@@ -382,6 +381,81 @@ def parse_date_arg(value: str) -> datetime | None:
 
 
 # ---------------------------------------------------------------------------
+# _resources layout helpers (same conventions as convert-eml-to-md.py)
+# ---------------------------------------------------------------------------
+
+def _references_source(md_path: Path, src_name: str) -> bool:
+    """True if md_path's frontmatter `source:` field references src_name."""
+    try:
+        with md_path.open(encoding="utf-8", errors="replace") as f:
+            for i, line in enumerate(f):
+                if i > 20:
+                    break
+                if line.startswith("source:") and src_name in line:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def companion_base_dir(src: Path) -> Path:
+    """Directory where the companion .md lives: the directory above _resources."""
+    return src.parent.parent if src.parent.name == "_resources" else src.parent
+
+
+def find_companion(src: Path) -> Path | None:
+    """Return the existing companion .md for src, or None."""
+    base = companion_base_dir(src)
+    for cand in (base / (sanitize_filename(src.stem) + ".md"),
+                 base / (sanitize_filename(src.name) + ".md")):
+        if cand.exists() and _references_source(cand, src.name):
+            return cand
+    return None
+
+
+def companion_target(src: Path) -> Path:
+    """Path to write the companion .md to.
+
+    Uses <stem>.md; falls back to <full name>.md when a different note
+    already owns <stem>.md.
+    """
+    base = companion_base_dir(src)
+    stem_md = base / (sanitize_filename(src.stem) + ".md")
+    if stem_md.exists() and not _references_source(stem_md, src.name):
+        return base / (sanitize_filename(src.name) + ".md")
+    return stem_md
+
+
+def move_to_resources(src: Path, dry_run: bool) -> Path | None:
+    """Move src into a _resources/ subdir of its directory; return the new path.
+
+    Files already inside a _resources/ directory are left where they are.
+    Returns None when the destination already exists (collision).
+    """
+    if src.parent.name == "_resources":
+        return src
+    dest = src.parent / "_resources" / src.name
+    if dest.exists():
+        error(f"cannot move {src.name!r}: {dest} already exists")
+        return None
+    if dry_run:
+        info(f"[dry-run] would move {src.name!r} → '_resources/{src.name}'")
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dest)
+    info(f"moved {src.name!r} → '_resources/{src.name}'")
+    return dest
+
+
+def extracted_text_callout(text: str) -> str:
+    """Wrap text in a collapsed Obsidian callout block."""
+    lines = ["> [!ocr-extractor]- Extracted text"]
+    for line in (text.splitlines() or [""]):
+        lines.append(("> " + line).rstrip())
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Core conversion
 # ---------------------------------------------------------------------------
 
@@ -390,7 +464,6 @@ def convert(
     *,
     rename: bool,
     dry_run: bool,
-    output_dir: Path | None = None,
     title_override: str | None = None,
     date_override: datetime | None = None,
     merge_gap: float = 120.0,
@@ -445,9 +518,13 @@ def convert(
         new_name = f"{date_str} {sanitize_filename(vtt_path.stem)}.vtt"
         vtt_path = safe_rename(vtt_path, vtt_path.parent / new_name, dry_run)
 
-    md_name = sanitize_filename(vtt_path.stem) + ".md"
-    md_dir = output_dir if output_dir is not None else vtt_path.parent
-    md_path = md_dir / md_name
+    # --- move the original into _resources/ ---
+    moved = move_to_resources(vtt_path, dry_run)
+    if moved is None:
+        return False
+    vtt_path = moved
+
+    md_path = companion_target(vtt_path)
 
     # --- parse VTT ---
     try:
@@ -486,7 +563,7 @@ def convert(
         "type: transcript",
         f"title: {yaml_str(title)}",
         f"date: {date_str}",
-        f"source: {yaml_str(vtt_path.name)}",
+        f"source: {yaml_str('_resources/' + vtt_path.name)}",
         f"duration: {yaml_str(duration_str)}",
     ]
     fm_lines.append(f"speakers:{yaml_list(all_speakers)}")
@@ -494,7 +571,13 @@ def convert(
 
     # --- assemble body ---
     body = _blocks_to_markdown(blocks, has_speakers, include_timestamps, gap_threshold=merge_gap, max_merge_len=max_merge_len)
-    content_out = "\n".join(fm_lines) + f"\n\n# {title}\n\n" + body + "\n"
+    content_out = (
+        "\n".join(fm_lines)
+        + f"\n\n![[{vtt_path.name}]]"
+        + f"\n\n# {title}\n\n"
+        + extracted_text_callout(body)
+        + "\n"
+    )
 
     # --- write ---
     if dry_run:
@@ -535,8 +618,11 @@ def build_parser() -> argparse.ArgumentParser:
               2. Merges consecutive same-speaker cues into readable paragraphs.
               3. Optionally renames the .vtt to "YYYY-MM-DD <original>.vtt"
                  (date from filename prefix, --date flag, or file mtime).
-              4. Writes a .md with YAML frontmatter (type, title, date, source,
-                 duration, speakers) and a bold-speaker transcript body.
+              4. Moves the .vtt into a _resources/ subdirectory of its directory.
+              5. Writes a companion .md (same stem) where the .vtt used to live,
+                 with YAML frontmatter (type, title, date, source, duration,
+                 speakers), an ![[embed]] of the .vtt, and the bold-speaker
+                 transcript body inside a collapsed "Extracted text" callout.
 
             Output lines are prefixed with [OK], [WARN], [ERROR], or [INFO].
         """),
@@ -545,7 +631,7 @@ def build_parser() -> argparse.ArgumentParser:
               type      always "transcript"
               title     --title value, or the .vtt filename stem
               date      YYYY-MM-DD HH:mm:ss (from filename prefix, --date, or file birthtime)
-              source    original .vtt filename (after optional rename)
+              source    "_resources/<filename>.vtt" (after optional rename and move)
               duration  H:MM:SS total duration
               speakers  list of unique speakers (empty list when none detected)
 
@@ -557,9 +643,8 @@ def build_parser() -> argparse.ArgumentParser:
               # Convert single file with a human-readable title (skipped if .md exists)
               python3 convert-vtt-to-md.py "Meeting.vtt" --title "Q2 Planning"
 
-              # Batch convert, output to wiki (already-converted files skipped by default)
-              python3 convert-vtt-to-md.py --input-dir raw/transcripts \\
-                      --output-dir raw/transcripts/converted
+              # Batch convert (already-converted files skipped by default)
+              python3 convert-vtt-to-md.py --input-dir raw/transcripts
 
               # Force reconversion of all files even if .md already exists
               python3 convert-vtt-to-md.py --input-dir raw/transcripts --force
@@ -593,11 +678,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-rename",
         action="store_true",
         help="do not prefix .vtt filenames with the date",
-    )
-    parser.add_argument(
-        "--output-dir",
-        metavar="DIR",
-        help="write .md files here instead of alongside the .vtt files",
     )
     parser.add_argument(
         "--dry-run",
@@ -658,17 +738,6 @@ def main() -> None:
         print(f"[ERROR] --max-merge-len must be >= 0, got {args.max_merge_len}", file=sys.stderr)
         sys.exit(1)
 
-    # --- resolve output directory ---
-    output_dir: Path | None = None
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-        if not args.dry_run:
-            try:
-                output_dir.mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                print(f"[ERROR] cannot create output-dir {args.output_dir!r}: {exc}", file=sys.stderr)
-                sys.exit(1)
-
     # --- collect paths ---
     paths: list[Path] = []
 
@@ -698,16 +767,18 @@ def main() -> None:
         before = len(paths)
 
         def _md_exists(p: Path) -> bool:
-            check_dir = output_dir if output_dir is not None else p.parent
+            if find_companion(p):
+                return True
             stem = sanitize_filename(p.stem)
-            if (check_dir / (stem + ".md")).exists():
+            # Legacy layout: a converted/<stem>.md sibling from the old pipeline.
+            legacy_dir = p.parent / "converted"
+            if (legacy_dir / (stem + ".md")).exists():
                 return True
             # Also check the date-prefixed name that would result from rename
             if not args.no_rename and not has_date_prefix(p.name):
                 dt = get_file_date(p)
                 date_str = dt.strftime("%Y-%m-%d")
-                prefixed_stem = f"{date_str} {stem}"
-                if (check_dir / (prefixed_stem + ".md")).exists():
+                if (legacy_dir / (f"{date_str} {stem}" + ".md")).exists():
                     return True
             return False
 
@@ -728,7 +799,6 @@ def main() -> None:
             p,
             rename=not args.no_rename,
             dry_run=args.dry_run,
-            output_dir=output_dir,
             title_override=args.title,
             date_override=date_override,
             merge_gap=args.merge_gap,

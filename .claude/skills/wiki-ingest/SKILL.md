@@ -11,10 +11,11 @@ When asked to "ingest new raw notes" (or similar):
 
 1. **Convert raw files** (run automatically before partitioning):
    ```bash
-   python3 scripts/system/convert-vtt-to-md.py --input-dir raw/transcripts --output-dir raw/transcripts/converted
-   python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted
+   python3 scripts/system/convert-vtt-to-md.py --input-dir raw/transcripts
+   python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails
+   python3 scripts/system/convert-html-to-md.py --input-dir raw/emails
    ```
-   These convert VTT transcript files and EML email files into Markdown so they are picked up by the batch importer. Skip silently if the input directories don't exist.
+   These move each VTT/EML/HTML source file into a `_resources/` subdirectory and write a companion `.md` (same stem) where the source used to live — containing frontmatter, an `![[embed]]` of the original, and the extracted text in a collapsed `> [!ocr-extractor]- Extracted text` callout — so the Markdown is picked up by the batch importer. Skip silently if the input directories don't exist.
 2. **Partition** (run automatically): `bash scripts/system/wiki-create-import-batches.sh`
    - Default max batch size is 50 files. Override with `--max-size N` (e.g. `--max-size 20`).
    - This removes any old `.import/batch-import-*.txt` remnants and creates fresh ones.
