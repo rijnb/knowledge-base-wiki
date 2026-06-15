@@ -113,7 +113,7 @@ The email integration uses Microsoft Power Automate to save emails to a OneDrive
 
 - **Ingest notes:**
 	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.sh`.
-	- LLM converts non-Markdown inputs: `.vtt` transcripts → `raw/transcripts/converted/`, `.eml`/`.html` emails → `raw/emails/converted/`, `.pdf/.jpg` scans → `raw/scans/converted/`.
+	- LLM converts non-Markdown inputs (`.vtt` transcripts, `.eml`/`.html` emails, `.pdf`/`.jpg` scans): the original file is moved into a `_resources/` subdirectory of its directory, and a companion `.md` note is written next to it (in the same directory as the original was).
 	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
 	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `_index.md` files, and run post-processing (QMD re-index + health check).
    
@@ -151,7 +151,7 @@ You can use the script "scripts/wiki-ingest.sh" to start ingesting new notes. Th
 By default, the script reads `config/settings.md` and uses its `ai_backend`
 frontmatter value. You can override it for a single run like this:
 ```
-scripts/wiki-ingest.sh [--agent claude|vibe|codex]
+scripts/wiki-ingest.sh [--agent claude|vibe|codex|junie]
 ```
 
 Use `wiki-ingest.sh --help` for more options.
@@ -301,20 +301,24 @@ The database is automatically checked for errors after ingesting new notes. To c
 ```
 <root>/
 ├── .import/             ← in-progress batch import state (gitignored)
-├── config/              ← config file for Obsidian web clipper
-├── scripts/             ← helper scripts for CLAUDE.md
+├── _resources/          ← vault-level attachments (images, screenshots)
+├── config/              ← settings.md, personal_info.md, web clipper template
+├── docs/                ← design docs and migration notes
+├── templates/           ← Obsidian note templates
+├── scripts/             ← helper scripts (see Scripts section)
+│   ├── lib/             ← wiki-doctor package (checks, fixers, tui)
+│   ├── system/          ← scripts invoked by skills (not run directly)
+│   └── tests/           ← unit tests
 ├── INBOX/               ← folder for draft notes (review/finish before ingestions)
 ├── raw/
 │   ├── clips/           ← web articles and saved pages (web clipper)
 │   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)
-│   ├── emails/          ← email threads (.eml or .html exports)
-│   │   └── converted/   ← LLM generated: emails converted to Markdown
-│   ├── scans/           ← handwritten pages, whiteboards
-│   │   └── converted/   ← LLM generated: scans converted to Markdown
+│   ├── diary/           ← dated personal/work diary notes
+│   ├── emails/          ← email threads (.eml/.html → .md, originals in _resources/)
 │   ├── notes/           ← notes, 1:1s, and people-specific files
+│   ├── scans/           ← handwritten pages, whiteboards (→ .md, originals in _resources/)
 │   ├── slack/           ← Slack channel and DM threads (fetched by "fetch slack")
-│   └── transcripts/     ← meeting and conversation transcripts (.vtt)
-│       └── converted/   ← LLM generated: transcripts converted to Markdown
+│   └── transcripts/     ← meeting transcripts (.vtt → .md, originals in _resources/)
 ├── wiki/
 │   ├── index.md         ← top-level navigation to section indexes
 │   ├── log.jsonl        ← append-only ingest log (JSON Lines)
@@ -327,9 +331,16 @@ The database is automatically checked for errors after ingesting new notes. To c
 │   ├── problems/        ← living problem tracking pages
 │   ├── projects/        ← living project tracking pages
 │   └── systems/         ← living system reference pages
+├── AGENTS.md            ← shared agent instructions
 ├── CLAUDE.md            ← schema and workflow instructions for Claude Code
+├── index.md            ← vault entry point
 └── README.md            ← this file
 ```
+
+When a non-Markdown file is converted, the original is moved into a `_resources/`
+subdirectory of its directory and a companion `.md` note is written alongside it
+(in the directory the original came from). For example, `raw/transcripts/foo.vtt`
+becomes `raw/transcripts/_resources/foo.vtt` plus `raw/transcripts/foo.md`.
 The directories `raw` and `wiki` are not stored in Git. Create them manually before first use.
 
 ## Wiki topic types
@@ -359,14 +370,12 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | Script | Purpose |
 | ------ | ------- |
 | `wiki-ingest.sh` | Main ingestion pipeline: converts raw files (VTT, EML), creates batches if needed, and runs ingestion sessions in a loop until all notes are processed. The normal way to ingest new notes. |
-| `wiki-doctor.py` | Scans wiki Markdown files for broken internal and external links. Outputs structured JSON for AI consumption. Run periodically to keep the wiki healthy. |
+| `wiki-doctor.py` | Health-check for the wiki: broken internal/external links, orphan pages, and unfilled stub pages. Runs as an interactive TUI by default, or in `--batch-mode` for text/JSON output. Run periodically to keep the wiki healthy. |
 
 ### Occasional use
 
 | Script | Purpose |
 | ------ | ------- |
-| `wiki-remove-all-generated-files.sh` | Deletes all LLM-generated wiki files and batch state, resetting the wiki to a clean slate. Use when you want to re-ingest everything from scratch. |
-| `wiki-remove-large-attachments.py` | Interactive TUI for browsing and removing large Obsidian attachments. Navigate with ↑↓, press `d`/`D` to move files to `.trash/`. Useful for reclaiming disk space. |
 | `qmd-full-reindex.sh` | Reset and fully re-index the QMD database. |
 
 ### For use by skills (not normally run directly)
@@ -378,6 +387,9 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
+| `system/wiki-assign-dates.py` | Infers and assigns dates to wiki pages that are missing them (uses the configured `ai_backend` for smart inference). |
+| `system/wiki-supersession-lint.py` | Checks decision/project pages for supersession consistency (e.g. superseded pages correctly linked). |
+| `system/migrate-converted-to-resources.py` | One-time migration from the legacy `converted/` layout to the current `_resources/` layout. Dry-run by default; pass `--apply` to modify files. |
 | `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories and generates Codex TOML agent definitions so all agents share the same skill set. |
 | `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
 | `system/qmd-sync-collections.sh` | Registers the vault root as the QMD collection `tomtom` (idempotent) and re-indexes it. Called by the `wiki-finalize-ingest` skill. |
