@@ -1,5 +1,6 @@
-"""Tests for scripts/lib/fixers.py: fix_curly_quotes, fix_raw_references, prune_log."""
+"""Tests for scripts/lib/fixers.py: fix_curly_quotes, fix_raw_references, prune_log, stamp_log_hashes."""
 
+import hashlib
 import json
 import sys
 import unittest
@@ -15,6 +16,8 @@ from lib.fixers import (  # noqa: E402
     fix_curly_quotes,
     fix_raw_references,
     prune_log,
+    relink_renamed_log_entries,
+    stamp_log_hashes,
 )
 
 
@@ -207,6 +210,174 @@ class PruneLogTests(VaultFixtureMixin, unittest.TestCase):
         prune_log(self.root, quiet=True, dry_run=True)
         self.assertEqual(log.read_text(), original)
         self.assertFalse((self.root / "wiki/log.jsonl.bak").exists())
+
+
+class StampLogHashesTests(VaultFixtureMixin, unittest.TestCase):
+    def _entry(self, **kw):
+        e = {"date": "2026-06-01 12:00:00", "session": 1,
+             "summary": "x", "pages_created": [], "pages_updated": []}
+        e.update(kw)
+        return e
+
+    def _write_log(self, entries):
+        self.write(
+            "wiki/log.jsonl",
+            "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries),
+        )
+
+    def _entries(self):
+        return [json.loads(l) for l in self.read("wiki/log.jsonl").splitlines() if l.strip()]
+
+    def test_stamps_missing_hash_and_mtime(self):
+        f = self.write("raw/notes/Note.md", "hello world\n")
+        self._write_log([self._entry(file="raw/notes/Note.md")])
+        stamped, total = stamp_log_hashes(self.root, quiet=True)
+        self.assertEqual((stamped, total), (1, 1))
+        entry = self._entries()[0]
+        expected = "sha256:" + hashlib.sha256(f.read_bytes()).hexdigest()
+        self.assertEqual(entry["hash"], expected)
+        self.assertEqual(entry["mtime"], int(f.stat().st_mtime))
+
+    def test_idempotent_second_run_stamps_nothing(self):
+        self.write("raw/notes/Note.md", "hello\n")
+        self._write_log([self._entry(file="raw/notes/Note.md")])
+        stamp_log_hashes(self.root, quiet=True)
+        before = self.read("wiki/log.jsonl")
+        stamped, total = stamp_log_hashes(self.root, quiet=True)
+        self.assertEqual(stamped, 0)
+        self.assertEqual(self.read("wiki/log.jsonl"), before)
+
+    def test_skips_entry_whose_file_is_missing(self):
+        self._write_log([self._entry(file="raw/notes/Gone.md")])
+        stamped, total = stamp_log_hashes(self.root, quiet=True)
+        self.assertEqual((stamped, total), (0, 1))
+        self.assertNotIn("hash", self._entries()[0])
+
+    def test_does_not_overwrite_existing_hash(self):
+        self.write("raw/notes/Note.md", "hello\n")
+        self._write_log([self._entry(file="raw/notes/Note.md",
+                                     hash="sha256:deadbeef", mtime=123)])
+        stamped, total = stamp_log_hashes(self.root, quiet=True)
+        self.assertEqual(stamped, 0)
+        entry = self._entries()[0]
+        self.assertEqual(entry["hash"], "sha256:deadbeef")
+        self.assertEqual(entry["mtime"], 123)
+
+    def test_dry_run_does_not_write(self):
+        self.write("raw/notes/Note.md", "hello\n")
+        self._write_log([self._entry(file="raw/notes/Note.md")])
+        before = self.read("wiki/log.jsonl")
+        stamped, total = stamp_log_hashes(self.root, quiet=True, dry_run=True)
+        self.assertEqual(stamped, 1)
+        self.assertEqual(self.read("wiki/log.jsonl"), before)
+
+    def test_returns_zero_when_log_absent(self):
+        self.assertEqual(stamp_log_hashes(self.root, quiet=True), (0, 0))
+
+    def test_backfills_every_unstamped_entry(self):
+        # Migration path: a pre-hash log with many entries is fully backfilled
+        # in a single pass (this is what every user's first post-upgrade finalize
+        # does). Entries whose file is gone are left unstamped.
+        for name in ("A", "B", "C"):
+            self.write(f"raw/notes/{name}.md", f"content {name}\n")
+        self._write_log([
+            self._entry(file="raw/notes/A.md"),
+            self._entry(file="raw/notes/B.md"),
+            self._entry(file="raw/notes/C.md"),
+            self._entry(file="raw/notes/Gone.md"),  # file does not exist
+        ])
+        stamped, total = stamp_log_hashes(self.root, quiet=True)
+        self.assertEqual((stamped, total), (3, 4))
+        entries = self._entries()
+        for e in entries:
+            if e["file"] == "raw/notes/Gone.md":
+                self.assertNotIn("hash", e)
+            else:
+                self.assertTrue(e["hash"].startswith("sha256:"))
+                self.assertIsInstance(e["mtime"], int)
+
+
+class RelinkRenamedLogEntriesTests(VaultFixtureMixin, unittest.TestCase):
+    def _stamped_entry(self, file_rel, content_path):
+        p = self.root / content_path
+        return {"date": "2026-06-01 12:00:00", "session": 1, "file": file_rel,
+                "hash": "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest(),
+                "mtime": int(p.stat().st_mtime),
+                "summary": "x", "pages_created": [], "pages_updated": []}
+
+    def _write_log(self, entries):
+        self.write("wiki/log.jsonl",
+                   "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries))
+
+    def _entries(self):
+        return [json.loads(l) for l in self.read("wiki/log.jsonl").splitlines() if l.strip()]
+
+    def test_relinks_orphan_to_renamed_file(self):
+        # Post-rename state: New.md holds the bytes; the entry still names Old.md.
+        new = self.write("raw/notes/New.md", "stable content\n")
+        entry = self._stamped_entry("raw/notes/Old.md", "raw/notes/New.md")
+        self._write_log([entry])
+        relinked, ambiguous = relink_renamed_log_entries(self.root, quiet=True)
+        self.assertEqual((relinked, ambiguous), (1, 0))
+        e = self._entries()[0]
+        self.assertEqual(e["file"], "raw/notes/New.md")
+        self.assertEqual(e["mtime"], int(new.stat().st_mtime))
+
+    def test_does_not_relink_when_old_path_still_exists(self):
+        # A copy: both files present, same content -> Old.md not an orphan.
+        self.write("raw/notes/Old.md", "dup\n")
+        self.write("raw/notes/Copy.md", "dup\n")
+        self._write_log([self._stamped_entry("raw/notes/Old.md", "raw/notes/Old.md")])
+        self.assertEqual(relink_renamed_log_entries(self.root, quiet=True), (0, 0))
+        self.assertEqual(self._entries()[0]["file"], "raw/notes/Old.md")
+
+    def test_ambiguous_match_is_skipped(self):
+        self.write("raw/notes/A.md", "twins\n")
+        self.write("raw/notes/B.md", "twins\n")
+        self._write_log([self._stamped_entry("raw/notes/Old.md", "raw/notes/A.md")])
+        relinked, ambiguous = relink_renamed_log_entries(self.root, quiet=True)
+        self.assertEqual((relinked, ambiguous), (0, 1))
+        self.assertEqual(self._entries()[0]["file"], "raw/notes/Old.md")
+
+    def test_orphan_with_no_content_match_left_alone(self):
+        self.write("raw/notes/Other.md", "different\n")
+        self._write_log([{"date": "2026-06-01 12:00:00", "session": 1,
+                          "file": "raw/notes/Gone.md", "hash": "sha256:" + "0" * 64,
+                          "mtime": 1, "summary": "x",
+                          "pages_created": [], "pages_updated": []}])
+        self.assertEqual(relink_renamed_log_entries(self.root, quiet=True), (0, 0))
+        self.assertEqual(self._entries()[0]["file"], "raw/notes/Gone.md")
+
+    def test_dry_run_does_not_write(self):
+        self.write("raw/notes/New.md", "x\n")
+        self._write_log([self._stamped_entry("raw/notes/Old.md", "raw/notes/New.md")])
+        before = self.read("wiki/log.jsonl")
+        relinked, _ = relink_renamed_log_entries(self.root, quiet=True, dry_run=True)
+        self.assertEqual(relinked, 1)
+        self.assertEqual(self.read("wiki/log.jsonl"), before)
+
+    def test_returns_zero_when_log_absent(self):
+        self.assertEqual(relink_renamed_log_entries(self.root, quiet=True), (0, 0))
+
+    def test_two_orphans_relink_to_distinct_files(self):
+        new1 = self.write("raw/notes/New1.md", "content one\n")
+        new2 = self.write("raw/notes/New2.md", "content two\n")
+        self._write_log([
+            self._stamped_entry("raw/notes/Old1.md", "raw/notes/New1.md"),
+            self._stamped_entry("raw/notes/Old2.md", "raw/notes/New2.md"),
+        ])
+        relinked, ambiguous = relink_renamed_log_entries(self.root, quiet=True)
+        self.assertEqual((relinked, ambiguous), (2, 0))
+        files = sorted(e["file"] for e in self._entries())
+        self.assertEqual(files, ["raw/notes/New1.md", "raw/notes/New2.md"])
+
+    def test_entry_without_hash_is_left_untouched(self):
+        self.write("raw/notes/New.md", "stable content\n")
+        self._write_log([{"date": "2026-06-01 12:00:00", "session": 1,
+                          "file": "raw/notes/Old.md", "mtime": 1, "summary": "x",
+                          "pages_created": [], "pages_updated": []}])
+        self.assertEqual(relink_renamed_log_entries(self.root, quiet=True), (0, 0))
+        self.assertEqual(self._entries()[0]["file"], "raw/notes/Old.md")
 
 
 if __name__ == "__main__":

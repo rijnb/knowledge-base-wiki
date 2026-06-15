@@ -3,7 +3,13 @@
 import sys
 from pathlib import Path
 
-from ..fixers import fix_curly_quotes, fix_loose_files, fix_raw_references, prune_log
+from ..fixers import (
+    fix_curly_quotes,
+    fix_loose_files,
+    fix_raw_references,
+    prune_log,
+    relink_renamed_log_entries,
+)
 from .loose import check_loose_files
 from ..links import extract_links, is_external, strip_frontmatter
 from ..paths import VaultIndex
@@ -201,6 +207,10 @@ def check_vault(root: Path, args) -> dict:
             print(f"  Raw references: {raw_changes} reference(s) wikilinked in "
                   f"{raw_files_changed} file(s).", file=sys.stderr)
 
+        log_relinked, log_relink_ambiguous = relink_renamed_log_entries(root, args.quiet)
+        if not args.quiet and log_relinked:
+            print(f"  Relinked {log_relinked} renamed log "
+                  f"entr{'y' if log_relinked == 1 else 'ies'}.", file=sys.stderr)
         log_pruned_kept, log_pruned_skipped, log_pruned_malformed, log_pruned_dupes = prune_log(
             root, args.quiet
         )

@@ -25,6 +25,15 @@ ls .import/batch-import-[0-9]*.txt 2>/dev/null | grep -v '\.claimed\.'
 Append all `.import/batch-log-*.jsonl` to `wiki/log.jsonl` (create `wiki/log.jsonl` if it doesn't exist). 
 Then delete all `.import/batch-log-*.jsonl` and any remaining `.import/batch-import-*.txt`.
 
+Then stamp content hashes onto the merged log, and repoint any entries whose note was renamed (both deterministic and idempotent — safe to run every finalize). Run stamp first; relink matches orphans by the hashes stamping records:
+
+```bash
+python3 scripts/system/wiki-stamp-log-hashes.py
+python3 scripts/system/wiki-relink-log-renames.py
+```
+
+Stamping records a `hash` (SHA-256 of the source bytes) and `mtime` on each entry so that **renaming** a raw note later in Obsidian does not cause it to be re-ingested; notes whose **content** changed are still re-ingested. The relink pass rewrites the `file` of any entry whose note was renamed to its current path, so the log stays accurate and `prune_log` does not later orphan-drop it.
+
 ## Step 2 — Rebuild indexes
 
 Run the index-page script from the project root:

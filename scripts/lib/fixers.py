@@ -1,5 +1,6 @@
 """Whole-vault sweeps: curly-quote normalization, raw/ reference wikilinking, log pruning, and loose-file relocation."""
 
+import hashlib
 import json
 import os
 import re
@@ -20,6 +21,10 @@ from .links import (
     is_external,
 )
 from .paths import should_skip_md
+
+
+# Source extensions the ingester scans (mirrors wiki-create-import-batches.sh).
+_INGEST_EXTS = {".md", ".pdf", ".doc", ".docx", ".txt", ".vtt", ".eml"}
 
 
 # Wrap bare/backticked raw/ paths in wiki/ files with [[...]] wikilinks.
@@ -344,6 +349,189 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
     os.replace(tmp_path, log_path)
 
     return kept, dropped, malformed, duplicates
+
+
+def _sha256_file(path: Path) -> str:
+    """Return 'sha256:<hexdigest>' over the file's exact bytes."""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return "sha256:" + h.hexdigest()
+
+
+def stamp_log_hashes(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int]:
+    """Fill missing 'hash' and 'mtime' on wiki/log.jsonl entries.
+
+    For every entry whose 'file' still exists at its logged path and that lacks
+    a 'hash' (string) or an integer 'mtime', record:
+      - hash:  'sha256:<hexdigest>' over the file's exact bytes (identity).
+      - mtime: int(st_mtime), a fast-path cache key for the dedup reader.
+
+    Existing hash/mtime values are never overwritten, so the pass is idempotent
+    and safe to run on every finalize. Entries whose file no longer exists at
+    its logged path are left untouched (they may legitimately have been renamed
+    before this feature shipped). Malformed JSON lines are preserved verbatim.
+
+    Paths are resolved relative to `root` (the vault root, parent of wiki/).
+    When dry_run is False and at least one entry changed, the original log is
+    backed up to wiki/log.jsonl.bak and rewritten atomically. When dry_run is
+    True, or nothing changed, the file is left untouched.
+
+    Returns (stamped, total): entries newly stamped, and entries scanned. If the
+    log file does not exist, returns (0, 0) without raising.
+    """
+    log_path = root / "wiki" / "log.jsonl"
+    if not log_path.exists():
+        return 0, 0
+
+    out_lines: list[str] = []
+    stamped = total = 0
+    changed = False
+    with log_path.open("r", encoding="utf-8") as src:
+        for raw in src:
+            line = raw.rstrip("\n")
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                out_lines.append(line)  # leave malformed lines for prune_log to handle
+                continue
+            total += 1
+            file_field = entry.get("file")
+            needs_hash = not isinstance(entry.get("hash"), str)
+            needs_mtime = not isinstance(entry.get("mtime"), int)
+            if file_field and (needs_hash or needs_mtime):
+                target = root / file_field
+                if target.is_file():
+                    try:
+                        if needs_hash:
+                            entry["hash"] = _sha256_file(target)
+                        if needs_mtime:
+                            entry["mtime"] = int(target.stat().st_mtime)
+                        stamped += 1
+                        changed = True
+                    except OSError:
+                        pass  # file vanished or unreadable mid-sweep; leave entry unstamped
+            out_lines.append(json.dumps(entry, ensure_ascii=False))
+
+    if dry_run or not changed:
+        return stamped, total
+
+    backup_path = log_path.with_suffix(log_path.suffix + ".bak")
+    shutil.copy2(log_path, backup_path)
+    tmp_path = log_path.with_name(log_path.name + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as dst:
+        for line in out_lines:
+            dst.write(line + "\n")
+    os.replace(tmp_path, log_path)
+
+    if not quiet:
+        print(f"  Stamped log.jsonl: hash/mtime added to {stamped} "
+              f"entr{'y' if stamped == 1 else 'ies'}.", file=sys.stderr)
+    return stamped, total
+
+
+def relink_renamed_log_entries(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int]:
+    """Repoint wiki/log.jsonl entries whose source note was renamed on disk.
+
+    The dedup reader recognizes a renamed note by its content hash, but the log
+    entry still names the old file. prune_log() drops entries whose 'file' is
+    missing, which would later cause the renamed note to look new and re-ingest.
+    This rewrites such entries to the new path BEFORE prune can drop them.
+
+    An entry is an "orphan" if it has a string 'hash' and its 'file' no longer
+    exists at its logged path. A raw file is "unreferenced" if its vault-relative
+    path is not the 'file' of any entry. For each orphan, if exactly one
+    unreferenced raw file (among _INGEST_EXTS) has the same content hash, the
+    entry's 'file' is rewritten to that path and its 'mtime' refreshed; the file
+    is then claimed so no other orphan reuses it. A copy (old path still present)
+    is never relinked; 2+ candidates is ambiguous and skipped. Malformed JSON
+    lines are preserved verbatim.
+
+    Paths resolve relative to `root`. When dry_run is False and at least one
+    entry was relinked, the log is backed up to wiki/log.jsonl.bak and rewritten
+    atomically. Returns (relinked, ambiguous); (0, 0) if the log is absent or
+    there is nothing to relink.
+    """
+    log_path = root / "wiki" / "log.jsonl"
+    if not log_path.exists():
+        return 0, 0
+
+    items: list[tuple[str, object]] = []  # ('raw', str) | ('entry', dict)
+    entries: list[dict] = []
+    with log_path.open("r", encoding="utf-8") as src:
+        for raw in src:
+            line = raw.rstrip("\n")
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                items.append(("raw", line))
+                continue
+            items.append(("entry", entry))
+            entries.append(entry)
+
+    referenced = {e.get("file") for e in entries if e.get("file")}
+    orphans = [e for e in entries
+               if isinstance(e.get("hash"), str)
+               and e.get("file")
+               and not (root / e["file"]).exists()]
+    if not orphans:
+        return 0, 0
+
+    by_hash: dict[str, list[str]] = {}
+    raw_root = root / "raw"
+    if raw_root.is_dir():
+        for path in raw_root.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in _INGEST_EXTS:
+                continue
+            rel = path.relative_to(root).as_posix()
+            if rel in referenced:
+                continue
+            try:
+                by_hash.setdefault(_sha256_file(path), []).append(rel)
+            except OSError:
+                continue
+
+    relinked = ambiguous = 0
+    used: set[str] = set()
+    for entry in orphans:
+        cands = [c for c in by_hash.get(entry["hash"], []) if c not in used]
+        if len(cands) == 1:
+            new_path = cands[0]
+            entry["file"] = new_path
+            try:
+                entry["mtime"] = int((root / new_path).stat().st_mtime)
+            except OSError:
+                entry.pop("mtime", None)  # stale; stamp_log_hashes will refill it
+            used.add(new_path)
+            relinked += 1
+        elif len(cands) > 1:
+            ambiguous += 1
+
+    if dry_run or relinked == 0:
+        if not quiet and ambiguous:
+            print(f"  Relink: {ambiguous} ambiguous rename(s) skipped.", file=sys.stderr)
+        return relinked, ambiguous
+
+    out_lines = [payload if kind == "raw" else json.dumps(payload, ensure_ascii=False)
+                 for kind, payload in items]
+    backup_path = log_path.with_suffix(log_path.suffix + ".bak")
+    shutil.copy2(log_path, backup_path)
+    tmp_path = log_path.with_name(log_path.name + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as dst:
+        for line in out_lines:
+            dst.write(line + "\n")
+    os.replace(tmp_path, log_path)
+
+    if not quiet:
+        print(f"  Relinked {relinked} renamed log "
+              f"entr{'y' if relinked == 1 else 'ies'}; {ambiguous} ambiguous skipped.",
+              file=sys.stderr)
+    return relinked, ambiguous
 
 
 # ---------------------------------------------------------------------------

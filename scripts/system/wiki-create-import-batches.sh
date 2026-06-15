@@ -111,7 +111,7 @@ print('\n'.join(lines))
 _py=$(mktemp /tmp/wiki-filter.XXXXXX.py)
 trap 'rm -f "$_py"' EXIT
 cat > "$_py" << 'PYEOF'
-import sys, json, os, re
+import sys, json, os, re, hashlib
 
 # Non-Markdown extensions that get moved into _resources/ and replaced by a
 # companion .md (current layout), or converted to a converted/<stem>.md
@@ -150,8 +150,34 @@ def _has_companion(fp):
             return True
     return False
 
+def _cur_mtime(fp):
+    try:
+        return int(os.stat(fp).st_mtime)
+    except OSError:
+        return None
+
+
+def _content_hash(fp):
+    try:
+        h = hashlib.sha256()
+        with open(fp, 'rb') as f:
+            for chunk in iter(lambda: f.read(65536), b''):
+                h.update(chunk)
+        return 'sha256:' + h.hexdigest()
+    except OSError:
+        return None
+
+
 log_files = sys.argv[1:]
 files_db = set()
+# Content identity added for rename/modify awareness:
+#   mtime_db      : set of (logged_path, int_mtime) — fast path, skip without hashing
+#   hashes_db     : set of all logged 'sha256:...' hashes — catches renames
+#   stamped_paths : logged paths that carry a hash (so un-stamped legacy/pending
+#                   entries keep the old "logged path = skip" behavior)
+mtime_db = set()
+hashes_db = set()
+stamped_paths = set()
 # (grandparent_dir, date_prefix) pairs seen in logged converted/*.md entries.
 # Allows matching source files even when sanitization changed the stem slightly.
 converted_date_db = set()
@@ -171,6 +197,13 @@ for logfile in log_files:
                     if not fp:
                         continue
                     files_db.add(fp)
+                    h = d.get('hash')
+                    if isinstance(h, str) and h:
+                        hashes_db.add(h)
+                        stamped_paths.add(fp)
+                    mt = d.get('mtime')
+                    if isinstance(mt, int):
+                        mtime_db.add((fp, mt))
                     # If this is a converted/<stem>.md, record (grandparent, date_prefix)
                     # so we can skip the source .eml/.vtt/etc. even when only the .md was logged.
                     if fp.endswith('.md') and os.path.basename(os.path.dirname(fp)) == 'converted':
@@ -188,7 +221,20 @@ for line in sys.stdin:
     fp = line.rstrip('\n')
     if not fp:
         continue
-    if fp in files_db:
+    # 1. Fast path: same path AND same mtime as a logged entry -> already
+    #    ingested, no hashing needed.
+    if (fp, _cur_mtime(fp)) in mtime_db:
+        continue
+    # 2. Content identity: same bytes as something already ingested (a rename,
+    #    or a touch that left content unchanged) -> skip.
+    h = _content_hash(fp)
+    if h is not None and h in hashes_db:
+        continue
+    # 3. Logged path that has NO recorded hash yet (pre-hash legacy entry, or a
+    #    pending batch-log entry the agent just wrote) -> preserve the old
+    #    "logged path = already ingested" behavior. Stamped paths fall through
+    #    so that a modified file (new content, no matching hash) re-ingests.
+    if fp in files_db and fp not in stamped_paths:
         continue
     ext = os.path.splitext(fp)[1].lower()
     if ext in _SOURCE_EXTS:
