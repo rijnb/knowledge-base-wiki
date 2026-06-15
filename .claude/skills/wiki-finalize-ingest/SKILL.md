@@ -57,12 +57,14 @@ Present a table of all pages created/updated across all sessions (read from the 
 
 ## Step 5 — Post-processing menu
 
-Ask which post-processing steps to run. Use `AskUserQuestion` with `multiSelect: true` when available; otherwise ask a concise plain-text question and wait for the answer. Always run QMD before lint:
+Ask which post-processing steps to run. Use `AskUserQuestion` with `multiSelect: true` when available; otherwise ask a concise plain-text question and wait for the answer. Always run QMD before lint.
+
+Always re-index QMD via `scripts/system/qmd-sync-collections.sh` — never call raw `qmd update` / `qmd embed`. The script also (re)registers the vault root as the single `tomtom` collection, removes stale `wiki-*`/`raw-*` collections, and loops `qmd embed` until no embeddings remain pending.
 
 - **All (recommended)** — lint + QMD text + vector embedding; supersedes individual selections
 - **Lint** — health check: orphans, contradictions, gaps 
-- **QMD text re-index** (`qmd update`) — fast, keywords only
-- **QMD vector embedding** (`qmd update && qmd embed`) — slow, ~2 GB models; supersedes text-only if both selected
+- **QMD text re-index** (`bash scripts/system/qmd-sync-collections.sh --skip-embed`) — fast, keywords only
+- **QMD vector embedding** (`bash scripts/system/qmd-sync-collections.sh`) — slow, ~2 GB models; supersedes text-only if both selected
 
 ## Step 6 - End message
 

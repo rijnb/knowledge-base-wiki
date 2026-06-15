@@ -277,8 +277,15 @@ def page_source_dates(txt):
             if d:
                 yield (d[0], "high"); continue
 
+def is_managed_page(path):
+    """Only files under wiki/ or raw/ get managed dates. Top-level vault files
+    (CLAUDE.md, AGENTS.md, README.md, index.md, …) are never touched, even when
+    passed explicitly via --paths."""
+    ap = os.path.abspath(path)
+    return ap.startswith(WIKI + os.sep) or ap.startswith(RAW + os.sep)
+
 def is_content_page(path):
-    return os.path.basename(path) not in ("_index.md", "index.md")
+    return is_managed_page(path) and os.path.basename(path) not in ("_index.md", "index.md")
 
 def upsert_frontmatter(txt, fields):
     if txt.startswith("---"):

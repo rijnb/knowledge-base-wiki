@@ -42,6 +42,12 @@ When moving, renaming, or deleting files inside the vault, prefer the Obsidian C
 
 After any changes to scripts (`scripts/`) or skills (`~/.claude/skills/`), append a brief entry to `INBOX/RELEASE-NOTES.md` describing what changed and why.
 
+## File names for notes
+
+- Use plain readable text, no slugs (no hyphens instead of spaces)
+- No accents or diacritics (e, i, o — not é, î, ö)
+- No characters that have meaning for the file system: `:`, `/`, `\`, `*`, `?`, `"`, `<`, `>`, `|`
+
 ## Tests
 
 Tests live in `scripts/tests/`; run with: `python3 -m unittest discover -s scripts/tests -v`
