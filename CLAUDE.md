@@ -23,8 +23,9 @@ Use the appropriate `wiki` skill for each action:
 
 When moving, renaming, or deleting files inside the vault, prefer the Obsidian CLI over plain `mv`/`rm` — Obsidian then updates all internal links automatically.
 
+- When aksed to move a note to `xyz`, check if that directory exists in `raw/` or `wiki/` first (the user may not specify the whole path)
 - Move/rename example: `obsidian vault="TomTom" move path=<vault-rel-path> to=<vault-rel-path>`
-- Requires Obsidian to be running (`/Applications/Obsidian.app/Contents/MacOS/obsidian`)
+- Requires Obsidian to be running (normally `/Applications/Obsidian.app/Contents/MacOS/obsidian`)
 - Full reference: run `obsidian help` or load the `obsidian:obsidian-cli` skill
 
 ## Topic types in `wiki/`
