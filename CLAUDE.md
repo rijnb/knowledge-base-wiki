@@ -16,6 +16,7 @@ Use the appropriate `wiki` skill for each action:
 - **Query** — `wiki-query` skill (default: use this when the user asks any question)
 - **Ground conversation in KB** — `wiki-ground` skill
 - **Health check / lint** — `wiki-doctor` skill
+- **Curate one page** — `wiki-curate-page` skill
 - **Creating wiki pages** — `wiki-templates` skill
 - **Add missing page** — `wiki-add-missing` skill
 

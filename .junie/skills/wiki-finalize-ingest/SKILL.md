@@ -78,6 +78,14 @@ If any exist, list them in a "Stubs still needing expansion" section so the user
 
 Present a table of all pages created/updated across all sessions (read from the just-merged session log data).
 
+Then run the one-command freshness check:
+
+```bash
+scripts/wiki-freshness.sh --root .
+```
+
+This command does not rewrite `wiki/` pages. It writes `.wiki-scratch/freshness-curation-candidates.md` and `.wiki-scratch/provenance-coverage-backlog.md`; mention whether there are one-page curation candidates.
+
 ## Step 5 — Post-processing menu
 
 Ask which post-processing steps to run. Use `AskUserQuestion` with `multiSelect: true` when available; otherwise ask a concise plain-text question and wait for the answer. Always run QMD before lint.

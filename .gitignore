@@ -6,6 +6,7 @@
 .idea/
 .junie/
 .worktrees/
+.wiki-scratch/
 .obsidian/plugins/
 .obsidian/appearance.json
 .obsidian/community-plugins.json

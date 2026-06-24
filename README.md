@@ -1,10 +1,12 @@
-# Knowledge base Wiki
+# Provenance-Aware Knowledge Base Wiki
 
 (C) 2026, Rijn Buve
 
-This repository contains a solid implementation of [Andrej Karpathy's idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) for a LLM-maintained knowledge base, based on a Wiki. This implementation is meant for work-related notes, structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd).
+This repository started as an implementation of [Andrej Karpathy's idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) for an LLM-maintained knowledge base: keep source notes in a folder, let an LLM maintain a Wiki on top of them, and use the Wiki as the practical interface for remembering and reasoning. This implementation keeps that core idea, but goes considerably further. It is designed for long-lived work knowledge, where old notes do not merely accumulate; they need to be curated, checked, superseded, and sometimes deliberately ranked lower when answering current questions.
 
-The implementation supports Anthropic Claude and Jetbrains Junie (both CLI) to ingest notes into the knowledge base.
+The knowledge base is structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd). Raw evidence lives in `raw/`; canonical pages live in `wiki/`. Ingestion adds and updates canonical pages, while curation improves selected pages over time using source evidence, block-level provenance, and freshness metadata. Provenance-aware query tooling can explain when a claim is current, historical, superseded, disputed, or only minimally migrated, so outdated information is not silently treated as equally reliable.
+
+The implementation supports Anthropic Claude and JetBrains Junie (both CLI) to ingest, curate, query, and maintain the knowledge base.
 
 ## Purpose
 
@@ -52,6 +54,12 @@ After ingesting notes, run the Linter regularly to keep your knowledge base clea
 
 ```bash
 ./scripts/wiki-doctor.py
+```
+
+Freshness checks are the third regular maintenance action, alongside ingest and doctor. You can ask **"freshness check"**, or run:
+
+```bash
+./scripts/wiki-freshness.sh
 ```
 
 You can keep notes that you do not want to be ingested yet (like drafts), in `INBOX`. The inbox will not be part of the ingestion process.
@@ -138,20 +146,32 @@ The combination of using a semantic database to fetch relevant pages before anal
 
 ## Commands and skills
 
-These skills commands and natural-language triggers are available:
+These skill commands and natural-language triggers are available.
+
+Commonly used:
 
 | Command / phrase          | Description |
 | ----------------          | ----------- |
+| ask any question          | Query the knowledge base (default behavior) |
 | "ingest new notes"        | Start a new ingest of raw notes (Session 1 — coordinator flow) |
 | "fetch slack"             | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest.sh` to ingest |
 | "fetch mail"              | Copy emails from configured inbox to `raw/emails/`, then run `wiki-ingest.sh` to ingest |
+| "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
+| "freshness check"         | Run the one-command freshness/provenance/drift/coverage check |
+| "curate page" or "refresh this page" | Clean up one canonical page using block provenance, raw evidence, and freshness/drift signals |
+| "add missing [topic]"     | Create a new Wiki page for a missing concept, person, system, etc. |
+
+Less common / maintenance:
+
+| Command / phrase          | Description |
+| ----------------          | ----------- |
 | "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
 | "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
-| "health check" or "lint"  | Check for orphaned pages, broken links, contradictions |
-| "add missing [topic]"     | Create a new Wiki page for a missing concept, person, system, etc. |
+| freshness query packet    | Rank retrieved canonical blocks for one query using provenance freshness metadata |
+| provenance coverage backlog | List canonical Wiki pages that still lack block provenance |
+| minimal provenance stamp  | Add a query-time caution block to classifier-approved low-risk legacy pages |
 | "clear ingest batches"    | Remove incomplete batch files to restart a failed ingest |
 | "ground this conversation" or "wiki-ground [topic]" | Treat the KB as source of truth for this conversation; optionally front-load a topic. |
-| ask any question          | Query the knowledge base (default behavior) |
 
 The `ingest next batch` and `finalize ingest` commands are only needed for importing large amounts of notes. LLM will notify you when you `ingest new notes` and it sees it requires batched importing.
 
@@ -192,6 +212,54 @@ scripts/qmd-full-reindex.sh
 This makes sure the sematic database (QMD) is fully up-to-date again. The LLM skill `wiki-query` makes use of the semantic database, so make sure it's up-to-date.
 
 Instead of running a full re-index, you can also execute `qmd embed`. This is useful if you only ingested a couple of new notes, for example.
+
+### Pro-tip 3b: use freshness tools to migrate gradually
+
+Canonical pages can opt into block-level provenance using stable Obsidian block IDs plus a compact `kb-prov-v1` provenance callout. The easy command is:
+
+```
+scripts/wiki-freshness.sh --root .
+```
+
+The ingest loop also runs this automatically after finalization. `wiki-doctor.py` reminds you about it in its recommendations. You can run it manually any time you want to refresh the queues, especially after fixing doctor findings or before freshness-sensitive query work. The `.wiki-scratch/` queue files are generated local working state and are ignored by Git.
+
+There are two different queues:
+
+- `wiki-drift-detect.py` finds pages where related raw evidence, newer raw notes, or freshness statuses suggest a real query-time risk.
+- `wiki-provenance-coverage.py` lists every canonical Wiki page that still lacks block provenance, even when no freshness risk has been detected yet.
+
+Use the drift queue first for answer-quality improvements. Use the coverage backlog for gradual migration planning.
+
+Classifier-reviewed legacy pages may receive a minimal status stamp instead of a full rewrite. This adds a `## Freshness Status` block plus `migration_status: legacy-inferred-minimal`, reducing query-time risk while keeping the page in the coverage backlog as `minimal-stamp`. The provenance metadata includes a `review_mode` such as `historical`, `source-mismatch`, `needs-currentness-answer`, or `sensitive-review`:
+
+```
+python3 scripts/system/wiki-provenance-stamp-status.py \
+  --root . \
+  .wiki-scratch/freshness-auto-ok.json
+```
+
+Use this only with a reviewed manifest. It is not a substitute for detailed block-level curation.
+
+Use `wiki-curate-page` for one-page cleanup when drift detection shows that newer raw notes may affect a canonical page. To prepare a read-only packet for one target page:
+
+```
+python3 scripts/system/wiki-curate-page.py --page "wiki/concepts/Some Concept.md" --format json
+```
+
+To let the helper run QMD candidate discovery and then rank block-level claims before answering:
+
+```
+python3 scripts/system/wiki-freshness-query.py \
+  --query "What is current?" \
+  --qmd \
+  --format text
+```
+
+With `--qmd`, raw-note hits are preserved too: raw hits that link to or title-match a canonical page are mapped into `raw_mappings` and can pull that canonical page into the ranked block packet; raw hits without a canonical match remain visible as `raw_evidence`.
+
+If candidate pages were already retrieved by another search path, pass them explicitly with repeated `--page` arguments instead of `--qmd`.
+
+Do not bulk rewrite `wiki/`.
 
 ### Pro-tip 4: Storing draft notes in `inbox` (not for ingestion yet)
 
@@ -382,6 +450,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | ------ | ------- |
 | `wiki-ingest.sh` | Main ingestion pipeline: converts raw files (VTT, EML), creates batches if needed, and runs ingestion sessions in a loop until all notes are processed. The normal way to ingest new notes. |
 | `wiki-doctor.py` | Health-check for the wiki: broken internal/external links, orphan pages, and unfilled stub pages. Runs as an interactive TUI by default, or in `--batch-mode` for text/JSON output. Run periodically to keep the wiki healthy. |
+| `wiki-freshness.sh` | One-command freshness check: provenance lint, freshness inventory, drift queue, and provenance coverage backlog. Run after ingest/finalize, or ask "freshness check". |
 
 ### Occasional use
 
@@ -395,6 +464,8 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | ------ | ------- |
 | `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest.sh` and the `wiki-ingest` skill. |
 | `system/wiki-create-index-pages.py` | Rebuilds `_index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
+| `system/wiki-freshness-query.py` | Builds a query-time packet from retrieved pages, ranking canonical blocks by provenance freshness and explaining demoted legacy evidence. |
+| `system/wiki-provenance-stamp-status.py` | Applies a minimal `Freshness Status` provenance block to reviewed legacy pages from a JSON manifest. |
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |

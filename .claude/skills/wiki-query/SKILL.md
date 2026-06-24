@@ -35,6 +35,32 @@ Rules when answering (today's date is available in context):
 
 Prefer recent sources when gathering evidence, but don't discard old pages — they're valuable for history, just label them as such.
 
+## Block provenance and query-time freshness
+
+Some canonical Wiki pages now carry block-level provenance:
+
+- Claim paragraphs use stable Obsidian block IDs such as `^claim-owner-01`.
+- A page-level `> [!provenance]` callout with `schema: kb-prov-v1` maps block IDs to sources, `observed`, `checked`, `status`, `confidence`, `superseded_by`, and contradiction metadata.
+- `scripts/system/wiki-provenance-lint.py` validates that metadata.
+- `scripts/system/wiki-freshness-inventory.py` builds a read-only inventory of canonical blocks and raw notes.
+- `scripts/system/wiki-drift-detect.py` finds pages that likely need one-page curation.
+- `scripts/system/wiki-freshness-query.py` turns retrieved page paths into a query-time packet of ranked blocks, raw-note mappings, raw evidence, and legacy-page warnings.
+- `scripts/lib/freshness_rank.py` contains deterministic helpers for ranking block lists by current/history/change query intent.
+
+For current, recent, policy, people, project, system, cost, customer, or otherwise freshness-sensitive questions, build the freshness packet automatically after retrieval. Do not ask the user to remember the script.
+
+When retrieved pages contain `kb-prov-v1` or the question is freshness-sensitive:
+
+1. **Build a freshness packet after retrieval.** Run `python3 scripts/system/wiki-freshness-query.py --query "<user query>" --page "<retrieved page>" ... --format json` over the retrieved page paths. If candidate pages have not already been collected, run `python3 scripts/system/wiki-freshness-query.py --query "<user query>" --qmd --format json`; it can run QMD discovery first, resolve returned Wiki pages, map returned raw notes to canonical pages through wikilinks/title matches, and keep unmapped raw hits as `raw_evidence`.
+2. **Answer from blocks, not whole pages.** Prefer packet blocks with `freshness_action: prefer`, `status: current`, recent `checked`, and `confidence: high|medium`.
+3. **Use minimal stamps as cautions.** `freshness_action: use-as-page-caution` means the page has only a page-level migration stamp; use the block text to qualify the answer, but do not treat the rest of the page as fully block-verified.
+4. **Rank lower, explain, don't erase.** `stale`, `historical`, and `disputed` blocks may still be useful, but should not silently win current-state answers.
+5. **Confirmed supersession is strongest.** A block with `status: superseded` or `superseded_by` must not be used as the main current answer unless the user asks for history.
+6. **Use raw notes as evidence.** `raw_mappings` explain which raw hits pulled in canonical pages. `raw_evidence` contains relevant raw hits that do not yet map to a canonical page; mention them as uncategorized evidence instead of treating the query as evidence-free.
+7. **Explain only when it matters.** If freshness affects confidence, say why: "The canonical block is unchecked, and newer raw notes mention the topic" or "Older evidence is superseded by block X."
+
+For freshness-sensitive questions where the retrieved page has no block provenance yet, treat it as a legacy page: use ordinary date/frontmatter rules, then mention if newer raw notes or drift candidates make the answer uncertain.
+
 ## Supersession (explicit replacements)
 
 Some pages are explicitly marked as replaced by a newer page via frontmatter:

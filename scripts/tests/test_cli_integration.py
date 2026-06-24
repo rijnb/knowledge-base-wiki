@@ -42,6 +42,8 @@ class CliIntegrationTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["summary"]["broken"], 0)
+        self.assertEqual(payload["recommendations"][0]["id"], "freshness-check")
+        self.assertEqual(payload["recommendations"][0]["skill"], "wiki-freshness")
 
     def test_broken_link_exits_one_with_json_entry(self):
         self.write("wiki/concepts/a.md",

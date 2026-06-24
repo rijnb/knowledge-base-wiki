@@ -177,4 +177,12 @@ def format_text(result: dict) -> str:
             lines.append(f"  legacy layout: {n_dirs} converted/ dir(s) to migrate "
                          f"(run scripts/system/migrate-converted-to-resources.py --apply)")
 
+    if result.get("recommendations"):
+        lines.append("")
+        lines.append("RECOMMENDATIONS:")
+        for rec in result["recommendations"]:
+            skill = rec.get("skill")
+            suffix = f" or ask for `{skill}`" if skill else ""
+            lines.append(f"  - {rec['message']} Run: {rec['command']}{suffix}.")
+
     return "\n".join(lines)

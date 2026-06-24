@@ -47,7 +47,17 @@ python3 scripts/system/wiki-supersession-lint.py
 - **Integrity** — report any dangling `superseded_by` targets, ambiguous targets, missing reciprocal `supersedes` back-links, or cycles. These should be fixed (the successor must exist and link back).
 - **Review queue** — it writes `.wiki-scratch/supersession-candidates.md`: pages whose body says they were superseded/replaced/decommissioned but have no `superseded_by` field yet, with a guessed successor where one was found. Point the user to it. Do NOT auto-apply — each needs confirmation, then add `superseded_by` to the old page and reciprocal `supersedes` to the successor (see `wiki-templates`).
 
-## Step 5: Manual checks
+## Step 5: Freshness follow-up
+
+Run the one-command freshness check when the user wants currentness/drift status, after fixing doctor findings, after ingest/finalize, or before a freshness-sensitive query/report:
+
+```bash
+scripts/wiki-freshness.sh --root .
+```
+
+Tell the user they can also simply ask for `wiki-freshness` or "freshness check". This is separate from doctor: doctor checks structural health; freshness checks provenance, drift candidates, and the coverage backlog.
+
+## Step 6: Manual checks
 
 Present recommendations only — never modify the Wiki for these without user confirmation.
 

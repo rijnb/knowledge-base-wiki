@@ -909,7 +909,7 @@ run_phase_finalize() {
         return 2
     fi
     echo ""
-    echo "=== Phase 4 - POST-PROCESS: lint check and QMD sync ==="
+    echo "=== Phase 4 - POST-PROCESS: lint check, QMD sync, and freshness ==="
     echo "Running wiki-doctor.py..."
     set +e
     python3 "$PROJECT_DIR/scripts/wiki-doctor.py" --batch-mode --fix-simple-errors --fix-orphans --format text
@@ -923,6 +923,13 @@ run_phase_finalize() {
     local sync_rc=$?
     set -e
     [ "$sync_rc" -ne 0 ] && echo "WARN: qmd-sync-collections.sh exited with status $sync_rc" >&2
+
+    echo "Running wiki-freshness.sh..."
+    set +e
+    bash "$PROJECT_DIR/scripts/wiki-freshness.sh" --root "$PROJECT_DIR"
+    local freshness_rc=$?
+    set -e
+    [ "$freshness_rc" -ne 0 ] && echo "WARN: wiki-freshness.sh exited with status $freshness_rc" >&2
 
     echo ""
     echo "────────────────────────────────────────────────────────────────────"
@@ -1003,7 +1010,7 @@ run_phase_batches_dry() {
 run_phase_finalize_dry() {
     echo ""
     echo "=== Phase 3 - FINALIZE (dry-run): would run /wiki-finalize-ingest ==="
-    echo "=== Phase 4 - POST-PROCESS (dry-run): would run wiki-doctor.py and qmd-sync-collections.sh ==="
+    echo "=== Phase 4 - POST-PROCESS (dry-run): would run wiki-doctor.py, qmd-sync-collections.sh, and wiki-freshness.sh ==="
     echo ""
     echo "────────────────────────────────────────────────────────────────────"
     echo "Dry-run complete — no changes were made.  Time: $(date '+%H:%M:%S')"
@@ -1121,6 +1128,9 @@ main() {
             echo " (exit code 3). All raw notes are already recorded in"
             echo " wiki/log.jsonl, so there is no batch to process and no"
             echo " finalization is needed."
+            echo ""
+            echo " Tip: if you only want to refresh freshness/drift queues,"
+            echo " run: scripts/wiki-freshness.sh --root ."
             echo "────────────────────────────────────────────────────────────────────"
             echo "Pipeline finished cleanly.  Time: $(date '+%H:%M:%S')"
             exit 0

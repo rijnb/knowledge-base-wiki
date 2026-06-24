@@ -1,5 +1,49 @@
 # Release Notes
 
+## 2026-06-24 — Freshness reminders and scratch ignore
+
+Ignored generated `.wiki-scratch/` queue files, updated `wiki-doctor.py` to emit a structured freshness follow-up recommendation, and made the ingest loop dry-run/output text explicitly mention the automatic freshness step.
+
+## 2026-06-24 — One-command freshness workflow
+
+Added `scripts/wiki-freshness.sh` as the easy freshness front door. It runs provenance lint, freshness inventory, drift detection, and coverage backlog generation, and the ingest loop now runs it automatically after finalization/QMD sync. Added a `wiki-freshness` skill and updated ingest/finalize/query skills so users should not need to remember the lower-level script names.
+
+## 2026-06-24 — Minimal provenance status stamps
+
+Added `wiki-provenance-stamp-status.py` and `scripts/lib/provenance_stamp.py` for classifier-approved low-risk legacy pages. The tool adds a `Freshness Status` block with `migration_status: legacy-inferred-minimal`; query packets now report these as `use-as-page-caution`, and coverage keeps them in the backlog as `minimal-stamp` instead of treating them as fully block-migrated.
+
+## 2026-06-24 — Review caution stamps for high-risk drift pages
+
+Extended minimal provenance stamps with `review_mode` values such as `source-mismatch`, `needs-currentness-answer`, and `sensitive-review`. The remaining high-risk drift queue can now be made safer at query time with caution-only stamps while still requiring page-by-page factual curation.
+
+## 2026-06-24 — Provenance coverage backlog
+
+Added `wiki-provenance-coverage.py` and `scripts/lib/provenance_coverage.py` to separate full Wiki provenance coverage from freshness drift. The coverage backlog writes `.wiki-scratch/provenance-coverage-backlog.md` for all canonical pages still lacking block provenance, while `wiki-drift-detect.py` remains the smaller risk-driven curation queue.
+
+## 2026-06-24 — Raw-hit bridge for freshness queries
+
+`wiki-freshness-query.py --qmd` now preserves raw-note QMD hits. Raw hits are resolved back to real vault paths, mapped to canonical Wiki pages via wikilinks and title variants, exposed as `raw_mappings`, and kept as `raw_evidence` when no canonical page can be found.
+
+## 2026-06-24 — Freshness query fallback and comma-safe provenance sources
+
+Fixed `wiki-freshness-query.py --qmd` so an empty QMD-to-Wiki resolution no longer falls back to scanning every Wiki page. Provenance inline lists now parse quoted comma-containing source paths correctly, while missing optional provenance fields remain allowed for gradual migration.
+
+## 2026-06-24 — Query-time freshness packet
+
+Added `wiki-freshness-query.py` and `scripts/lib/freshness_query.py` so retrieved Wiki pages can be converted into ranked canonical blocks for a specific query. The helper can also run local QMD discovery with `--qmd`, resolve QMD's normalized Wiki result IDs back to real vault paths, demote historical/stale/disputed evidence with explanations, and flag unmigrated legacy pages instead of silently trusting them.
+
+## 2026-06-24 — Block provenance foundation for freshness-aware queries
+
+Added a read-only `kb-prov-v1` provenance parser/validator and `wiki-provenance-lint.py` entrypoint. This is the first migration slice for query-time freshness: canonical pages can now carry stable block IDs plus a compact provenance callout without rewriting existing `wiki/` pages.
+
+## 2026-06-24 — Freshness inventory, drift detection, and curation workflow
+
+Added read-only freshness inventory, drift detection, page-curation packet scripts, and deterministic block-ranking tests, plus `wiki-curate-page` guidance for one-page canonical cleanup. Query, ingest, and finalize skills now treat freshness as block/query-time evidence first and canonical rewrites as targeted review work.
+
+## 2026-06-24 — Supersession lint produces far fewer false positives
+
+`wiki-supersession-lint.py` now skips review-queue matches inside code fences, table rows, headings, and inline-code-hugged phrases, plus self-references (a page describing its own rename). On the current vault this cut the queue from 96 to 75 noise-mostly entries before reviewer triage. Confirmed false positives still go in `.wiki-scratch/supersession-ignore.txt` (one path per line) and never reappear.
+
 ## 2026-06-24 — Sync refreshes agent skills first
 
 `sync-all-repos.sh` now runs `scripts/system/copy-claude-skills-to-other-agents.sh` before syncing so `.agents/`, `.codex/`, and `.junie/` skill mirrors are up to date in every synced target.

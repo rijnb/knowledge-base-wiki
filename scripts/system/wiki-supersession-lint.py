@@ -150,16 +150,43 @@ def main():
 
         # review queue: body language but no superseded_by field (and not ignored)
         if "superseded_by" not in fm and rel not in IGNORE:
+            own_name = os.path.splitext(os.path.basename(rel))[0].lower()
+            in_fence = False
             for ln in body.splitlines():
+                stripped = ln.strip()
+                # skip fenced code blocks (``` or ~~~) entirely
+                if stripped.startswith("```") or stripped.startswith("~~~"):
+                    in_fence = not in_fence
+                    continue
+                if in_fence:
+                    continue
+                # skip headings (often a decision-record TITLE like "X Renamed
+                # to Y" — the event record, not a superseded page) and table
+                # rows (spec tables: field/symbol-level renames, not pages)
+                if stripped.startswith("#") or stripped.startswith("|"):
+                    continue
                 m = SUPERSESSION.search(ln)
                 if not m:
+                    continue
+                # skip code/field/symbol renames: trigger phrase hugged by an
+                # inline `code` span (e.g. "`tag` renamed to `sha256`")
+                if "`" in ln[max(0, m.start() - 3): m.end() + 3]:
                     continue
                 # guessed successor = first wikilink after the phrase on this line
                 after = ln[m.end():]
                 gm = WIKILINK.search(after)
                 guess = gm.group(1).split("|")[0].strip() if gm else ""
+                # skip self-references: the page describing its own rename, so it
+                # IS the successor (own title named after the phrase, as a
+                # wikilink or plain text) — e.g. 'renamed to "MapSDK for JS"'
+                if own_name and own_name in after.lower():
+                    continue
+                if guess:
+                    gr = resolve(guess)
+                    if gr == rel or (isinstance(gr, list) and rel in gr):
+                        continue
                 topic = rel.split("/")[1] if rel.startswith("wiki/") and "/" in rel[5:] else "?"
-                candidates.append((rel, m.group(1), guess, ln.strip()[:160], topic))
+                candidates.append((rel, m.group(1), guess, stripped[:160], topic))
                 break  # one candidate per page is enough for review
     # most-actionable first: has a guessed successor, then by topic relevance
     candidates.sort(key=lambda c: (c[2] == "", TOPIC_PRIORITY.get(c[4], 9), c[0]))

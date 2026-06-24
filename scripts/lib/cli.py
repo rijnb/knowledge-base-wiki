@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -50,6 +51,9 @@ Examples:
 
   # Batch mode (no TUI, output only):
   python3 wiki-doctor.py --batch-mode --format text
+
+  # Freshness/drift queues are separate from structural health:
+  scripts/wiki-freshness.sh --root .
 
   # Combine options:
   python3 wiki-doctor.py --external --skip-frontmatter --format text /path/to/vault
@@ -143,6 +147,39 @@ Examples:
         ),
     )
     return parser, parser.parse_args()
+
+
+def _freshness_command(root: Path) -> str:
+    script_path = Path(__file__).resolve().parent.parent / "wiki-freshness.sh"
+    script_root = script_path.parent.parent
+    if root == script_root:
+        return "scripts/wiki-freshness.sh --root ."
+    return f"bash {shlex.quote(str(script_path))} --root {shlex.quote(str(root))}"
+
+
+def _freshness_recommendation(root: Path, has_issues: bool) -> dict:
+    if has_issues:
+        message = (
+            "After reviewing or fixing the structural issues, run the freshness "
+            "check to refresh drift and provenance queues."
+        )
+    else:
+        message = (
+            "Structural checks are clean. Run the freshness check after ingest, "
+            "after major page edits, or before freshness-sensitive query work."
+        )
+    return {
+        "id": "freshness-check",
+        "type": "follow-up",
+        "message": message,
+        "command": _freshness_command(root),
+        "skill": "wiki-freshness",
+        "when": [
+            "after ingest/finalize",
+            "after fixing doctor findings",
+            "before freshness-sensitive query work",
+        ],
+    }
 
 
 def main():
@@ -270,12 +307,16 @@ def main():
         or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
         or result.get("loose_summary", {}).get("loose_found", 0) > 0
     )
+    result["recommendations"] = [_freshness_recommendation(root, has_issues)]
 
     if not args.batch_mode:
         broken_for_review = result["broken_links"]
         if auto_fix_applied:
             broken_for_review = [b for b in broken_for_review if not b.get("fixed") and not b.get("fm_deleted")]
         run_interactive(broken_for_review, result.get("orphans", []), result.get("stubs", []), root)
+        if not args.quiet:
+            rec = result["recommendations"][0]
+            print(f"\nTip: {rec['message']} Run: {rec['command']}", file=sys.stderr)
     elif args.format == "json":
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:

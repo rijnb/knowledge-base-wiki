@@ -39,6 +39,20 @@ When asked to "ingest new raw notes" (or similar):
    After all sub-agents finish, delete `.import/batch-import-1.claimed.txt`.
 5. After all batch processing is complete (batch 1 done here + all batch agents done): run finalization with the `wiki-finalize-ingest` skill, or dispatch one `wiki-finalize-ingest` agent when the current client supports and permits it. Report the batch summary to the user while finalization runs.
 
+## Freshness migration behavior
+
+Ingest should now be treated as evidence collection plus candidate generation, not an unconditional broad rewrite of canonical pages:
+
+- New notes may still create or update Wiki pages, but avoid page-wide regeneration.
+- When a new note appears to affect an existing canonical page, prefer a minimal local edit or a review candidate.
+- Durable supersession still requires explicit evidence and human confirmation. Do not infer `superseded_by` just because a newer note discusses the same topic.
+- After finalization, run the one-command freshness check to identify one-page curation candidates:
+  ```bash
+  scripts/wiki-freshness.sh --root .
+  ```
+  When using `scripts/wiki-ingest.sh`, this already happens automatically after doctor and QMD sync; just report its result.
+- If drift candidates are meaningful, suggest `wiki-curate-page` for the highest-value page instead of re-ingesting the same raw notes.
+
 ## Confluence ingestion
 
 Triggered by a Confluence URL or page title:
