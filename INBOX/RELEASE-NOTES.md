@@ -1,5 +1,13 @@
 # Release Notes
 
+## 2026-06-24 — Sync refreshes agent skills first
+
+`sync-all-repos.sh` now runs `scripts/system/copy-claude-skills-to-other-agents.sh` before syncing so `.agents/`, `.codex/`, and `.junie/` skill mirrors are up to date in every synced target.
+
+## 2026-06-24 — Safer ingest batching and synced skills
+
+Ingest now preserves colliding sanitized raw filenames instead of overwriting, rejects zero-sized batches, keeps unconverted HTML email exports visible to batching, and refreshes agent skill mirrors from `.claude/skills`.
+
 ## 2026-06-24 — Ingest cleanup no longer leaves stale batch files
 
 Fixed a bug where stale batch files (e.g. `batch-log-1.jsonl`) could be left behind after finalize/clear, blocking the next ingest with a "previous ingest not completed" error.

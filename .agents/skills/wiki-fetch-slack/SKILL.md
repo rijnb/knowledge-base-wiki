@@ -5,7 +5,7 @@ description: Use when the user asks to fetch Slack, ingest Slack, sync Slack cha
 
 # Wiki — Slack Ingest
 
-Fetch Slack threads and DMs configured in `config/personal_info.md` and write them as Markdown files to `raw/slack/`. After fetching, tell the user to run `scripts/wiki-ingest.sh` to ingest them into the wiki.
+Fetch Slack threads and DMs configured in `config/personal_info.md` and write them as Markdown files to `raw/slack/`. After fetching, tell the user to use the `wiki-ingest` skill (or say `ingest new notes`) to ingest them — or run `scripts/wiki-ingest.sh` for unattended bulk ingestion.
 
 ## Step 1: Read config
 
@@ -179,4 +179,4 @@ Slack fetch complete:
 
 Then tell the user:
 
-> "Slack files written to `raw/slack/`. Run `scripts/wiki-ingest.sh` to ingest them into the wiki."
+> "Slack files written to `raw/slack/`. Use the `wiki-ingest` skill (or say `ingest new notes`) to ingest them — or run `scripts/wiki-ingest.sh` for unattended bulk ingestion."

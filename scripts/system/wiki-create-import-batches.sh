@@ -32,12 +32,19 @@ MAX_FILES_PER_BATCH=10
 FORCE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --max-files-per-batch) MAX_FILES_PER_BATCH="$2"; shift 2 ;;
+        --max-files-per-batch)
+            [[ $# -ge 2 ]] || { echo "ERROR: --max-files-per-batch requires a value" >&2; exit 1; }
+            MAX_FILES_PER_BATCH="$2"; shift 2 ;;
         --force)    FORCE=true; shift ;;
         --help|-h)  usage ;;
         *) echo "ERROR: Unknown argument: $1" >&2; echo "Run with --help for usage." >&2; exit 1 ;;
     esac
 done
+
+if ! [[ "$MAX_FILES_PER_BATCH" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: --max-files-per-batch must be a positive integer" >&2
+    exit 1
+fi
 
 NOTES_DIR="raw"
 LOG="wiki/log.jsonl"
@@ -79,7 +86,7 @@ batch_logs=( "$IMPORT_DIR"/batch-log-*.jsonl )
 shopt -u nullglob
 log_sources+=( ${batch_logs[@]+"${batch_logs[@]}"} )
 
-all_files=$(find "$NOTES_DIR" \( -name "*.md" -o -name "*.pdf" -o -name "*.doc" -o -name "*.docx" -o -name "*.txt" -o -name "*.vtt" -o -name "*.eml" \) | \
+all_files=$(find "$NOTES_DIR" \( -name "*.md" -o -name "*.pdf" -o -name "*.doc" -o -name "*.docx" -o -name "*.txt" -o -name "*.vtt" -o -name "*.eml" -o -name "*.html" \) | \
     python3 -c "
 import sys, os, re, datetime
 # Matches YYYY, YYYY-MM, or YYYY-MM-DD at the start of a path component,
@@ -118,7 +125,7 @@ import sys, json, os, re, hashlib, urllib.parse
 # companion .md (current layout), or converted to a converted/<stem>.md
 # sibling (legacy layout). If agents fail to log the source file, we infer
 # its state from the companion / converted entry.
-_SOURCE_EXTS = {'.eml', '.vtt', '.pdf', '.doc', '.docx', '.txt'}
+_SOURCE_EXTS = {'.eml', '.html', '.vtt', '.pdf', '.doc', '.docx', '.txt'}
 _DATE_PREFIX_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
 _INGEST_FALSE_RE = re.compile(
     r'''^\s*ingest\s*:\s*(?:"false"|'false'|false)\s*(?:#.*)?$''',

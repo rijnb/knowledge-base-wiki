@@ -7,6 +7,8 @@ description: Use when the user notices a system, concept, person, project, decis
 
 Follow this workflow step by step. Do not skip steps or batch them together.
 
+If `AskUserQuestion` is unavailable in the current client, ask the same question as a concise plain-text question and wait for the user's answer before continuing.
+
 ---
 
 ## Step 1 — Choose topic type
@@ -70,17 +72,15 @@ Run **parallel** QMD searches to gather all potentially relevant content. Cast a
 **Hypothetical document (hyde) search**:
 - Query: write a short paragraph describing what an answer about [name] would look like
 
-**Collections to search** (include all):
-- `raw-notes` — primary source (2700+ meeting notes, documents)
-- `raw-emails` — email threads
-- `raw-scans-transcribed` — scanned/transcribed documents
-- `raw-confluence` — Confluence pages
-- `wiki-concepts`, `wiki-systems`, `wiki-decisions`, `wiki-people`, `wiki-competition`, `wiki-projects`, `wiki-problems` — existing Wiki pages
+**Collection to search**:
+- `tomtom` — the vault root collection; includes `raw/`, `wiki/`, and supporting Markdown.
+
+Use path and topic terms in queries to bias results when needed, such as `raw/notes`, `raw/emails`, `raw/confluence`, `wiki/concepts`, `wiki/systems`, `wiki/decisions`, `wiki/people`, `wiki/competition`, `wiki/projects`, and `wiki/problems`.
 
 Use `minScore: 0.5` to filter noise. Use `intent` on every call to improve snippet relevance (set intent to the description from Step 2).
 
 ### After searching:
-- Retrieve full content of the top-scoring hits using `mcp__plugin_qmd_qmd__get` or `mcp__plugin_qmd_qmd__multi_get`.
+- Retrieve full content of the top-scoring hits using QMD MCP `get`/`multi_get` tools when available; otherwise use `qmd get` or `qmd multi-get`.
 - Apply your own insight: think about what adjacent concepts, systems, or people might relate to this topic and run additional targeted searches for those too.
 - Collect all source file paths (for citation).
 
@@ -96,7 +96,7 @@ Additional rule: cite sources inline: `Source: raw/notes/2024-03-15 Meeting.md`
 
 Write the completed page to: `wiki/<topic>/<Name>.md`
 
-Use today's date for the `date` field.
+Do not set the auto-managed `date` / `date_span` / `date_confidence` fields by hand; finalization assigns them from sources.
 
 ---
 

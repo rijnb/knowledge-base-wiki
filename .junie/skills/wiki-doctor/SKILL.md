@@ -10,11 +10,11 @@ description: Use when the user asks for a health check, lint, audit, or wants to
 Run this command first — it auto-fixes trivial WikiLink mismatches and reports what remains broken:
 
 ```bash
-python3 scripts/wiki-doctor.py --output json --fix-simple-errors --batch-mode
-python3 scripts/wiki-doctor.py --output json --fix-orphans --batch-mode
+python3 scripts/wiki-doctor.py --format json --fix-simple-errors --batch-mode
+python3 scripts/wiki-doctor.py --format json --fix-orphans --batch-mode
 ```
 
-- `--fix-simple-errors` repairs WikiLinks where a unique normalized match exists (e.g. colons vs underscores in filenames). These are applied immediately without requiring user confirmation.
+- `--fix-simple-errors` repairs WikiLinks where a unique normalized match exists (e.g. colons vs underscores in filenames), and relocates loose non-markdown files (in `raw/`, `wiki/`, `INBOX/`) into sibling `_resources/` directories via the Obsidian CLI, converting them to companion `.md` notes. These are applied immediately without requiring user confirmation. Loose-file moves need Obsidian: the doctor starts it automatically when it is not running, and if it cannot be started the files are skipped with a WARNING in the output.
 - `--fix-orphans` repairs orphaned pages by replacing matching plain text WikiLink names in files with an actual link.
 - Report how many links were fixed, and list any remaining broken links for the user to review manually.
 - If there are problems left, suggest the user to run:
@@ -45,7 +45,7 @@ Run the supersession lint:
 python3 scripts/system/wiki-supersession-lint.py
 ```
 - **Integrity** — report any dangling `superseded_by` targets, ambiguous targets, missing reciprocal `supersedes` back-links, or cycles. These should be fixed (the successor must exist and link back).
-- **Review queue** — it writes `.import/supersession-candidates.md`: pages whose body says they were superseded/replaced/decommissioned but have no `superseded_by` field yet, with a guessed successor where one was found. Point the user to it. Do NOT auto-apply — each needs confirmation, then add `superseded_by` to the old page and reciprocal `supersedes` to the successor (see `wiki-templates`).
+- **Review queue** — it writes `.wiki-scratch/supersession-candidates.md`: pages whose body says they were superseded/replaced/decommissioned but have no `superseded_by` field yet, with a guessed successor where one was found. Point the user to it. Do NOT auto-apply — each needs confirmation, then add `superseded_by` to the old page and reciprocal `supersedes` to the successor (see `wiki-templates`).
 
 ## Step 5: Manual checks
 

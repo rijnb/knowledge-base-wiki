@@ -1,6 +1,6 @@
 ---
 name: wiki-ingest
-description: Use when the user asks to ingest, import, or process one or more notes; mentions a raw note file path; provides a Confluence URL or page title; or says "ingest note", "ingest notes", "ingest new notes", or "ingest files". NOT for Slack messages — use wiki-ingest-slack instead.
+description: Use when the user asks to ingest, import, or process one or more notes; mentions a raw note file path; provides a Confluence URL or page title; or says "ingest note", "ingest notes", "ingest new notes", or "ingest files". NOT for Slack messages — use wiki-fetch-slack instead.
 ---
 
 # Knowledge Base - Ingest
@@ -11,15 +11,17 @@ When asked to "ingest new raw notes" (or similar):
 
 1. **Convert raw files** (run automatically before partitioning):
    ```bash
-   python3 scripts/system/convert-vtt-to-md.py --input-dir raw/transcripts --output-dir raw/transcripts/converted
-   python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted
+   python3 scripts/system/convert-vtt-to-md.py --input-dir raw/transcripts
+   python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails
+   python3 scripts/system/convert-html-to-md.py --input-dir raw/emails
    ```
-   These convert VTT transcript files and EML email files into Markdown so they are picked up by the batch importer. Skip silently if the input directories don't exist.
+   These move each VTT/EML/HTML source file into a `_resources/` subdirectory and write a companion `.md` (same stem) where the source used to live — containing frontmatter, an `![[embed]]` of the original, and the extracted text in a collapsed `> [!ocr-extractor]- Extracted text` callout — so the Markdown is picked up by the batch importer. Skip silently if the input directories don't exist.
 2. **Partition** (run automatically): `bash scripts/system/wiki-create-import-batches.sh`
-   - Default max batch size is 50 files. Override with `--max-size N` (e.g. `--max-size 20`).
+   - Default max batch size is 10 files. Override with `--max-files-per-batch N` (e.g. `--max-files-per-batch 20`).
    - This removes any old `.import/batch-import-*.txt` remnants and creates fresh ones.
+   - The partitioner respects Markdown frontmatter `ingest: false` (also `ingest:false`, quoted `false`, and case variants). Protected notes are left out of batch files, as are local `raw/` files explicitly linked from those notes via wikilinks/embeds or Markdown links/images. The script prints the skipped note basenames and linked-file counts, but writes no skip entries to `wiki/log.jsonl`.
    - **If the script exits with code 3**: there are no new notes to ingest. Report "Nothing to ingest" and stop.
-   - **If the script exits with code 2**: a previous ingest was not completed. Use `AskUserQuestion` to ask the user what to do, with these options:
+   - **If the script exits with code 2**: a previous ingest was not completed. Ask the user what to do (use `AskUserQuestion` when available; otherwise ask a concise plain-text question), with these options:
      - **"Ingest next batch"** — stop here and tell the user: "Use `wiki-ingest-next-batch` (or say `ingest next batch`) in a new session to continue."; do NOT re-run `wiki-create-import-batches.sh`.
      - **"Abort previous ingestion and restart importing new notes"** — re-run `bash scripts/system/wiki-create-import-batches.sh --force` to wipe old batches, then continue with this flow from step 3.
      - **"Abort"** — stop immediately and do nothing.
@@ -31,17 +33,17 @@ When asked to "ingest new raw notes" (or similar):
    ```bash
    mv .import/batch-import-1.txt .import/batch-import-1.claimed.txt
    ```
-   Then read `.import/batch-import-1.claimed.txt`. Dispatch sub-agents in batches of 10 to process the files.
+   Then read `.import/batch-import-1.claimed.txt`. Dispatch sub-agents in batches of 10 when the current client supports and permits delegation; otherwise process the files in the current session in manageable chunks.
    Each sub-agent prompt must begin with: 
      "Invoke `wiki-ingest-per-note` before processing. Write session logs to `.import/batch-log-1.jsonl`. Then ingest these files: [list]."
    After all sub-agents finish, delete `.import/batch-import-1.claimed.txt`.
-5. After all batch processing is complete (batch 1 done here + all batch agents done): dispatch one `wiki-finalize-ingest` agent. Report the batch summary to the user while the finalize agent runs.
+5. After all batch processing is complete (batch 1 done here + all batch agents done): run finalization with the `wiki-finalize-ingest` skill, or dispatch one `wiki-finalize-ingest` agent when the current client supports and permits it. Report the batch summary to the user while finalization runs.
 
 ## Confluence ingestion
 
 Triggered by a Confluence URL or page title:
 
-- Fetch via `mcp__claude_ai_Atlassian__fetch`
+- Fetch via the available Atlassian MCP tools (authenticate first if needed — use whichever fetch/search/page-retrieval tools are available). If no Atlassian connector is available, ask the user for the exported page content before writing files.
 - Save to `raw/confluence/<Page Title>.md` with frontmatter:
 ```yaml
 ---
@@ -64,7 +66,7 @@ created: YYYY-MM-DD         # the page's creation date, if the fetch exposes it
 
 ## Slack ingestion
 
-For Slack channels and DMs, use the `wiki-slack-ingest` skill instead of this one.
+For Slack channels and DMs, use the `wiki-fetch-slack` skill instead of this one.
 Trigger phrases: "fetch Slack", "ingest Slack", "sync Slack channels".
 
 ## wiki/log.jsonl format

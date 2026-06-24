@@ -17,8 +17,15 @@ Options:
 If the user chooses **Clear all ingestion records in .import/**:
 
 ```bash
-rm -f .import/batch-import-*.txt .import/batch-import-*.claimed.txt .import/batch-log-*.jsonl
-echo "Cleared."
+# Wrapped in `bash -c` with `shopt -s nullglob` so unmatched globs expand to
+# nothing instead of aborting (zsh nomatch) or being passed as a literal pattern.
+# Runs identically under bash or zsh (the Bash tool uses zsh).
+bash -c '
+  shopt -s nullglob
+  files=(.import/batch-import-*.txt .import/batch-import-*.claimed.txt .import/batch-log-*.jsonl)
+  [ ${#files[@]} -gt 0 ] && rm -f "${files[@]}"
+  echo "Cleared ${#files[@]} file(s)."
+'
 ```
 
 Then confirm to the user how many files were removed.

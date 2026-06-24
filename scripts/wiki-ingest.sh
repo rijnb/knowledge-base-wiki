@@ -165,7 +165,7 @@ while [[ $# -gt 0 ]]; do
             [[ "$2" =~ ^[0-9]+$ ]] || { echo "--max-batches must be a non-negative integer" >&2; exit 1; }
             MAX_BATCHES="$2"; MAX_BATCHES_EXPLICIT=true; shift 2 ;;
         --max-files-per-batch)
-            [[ "$2" =~ ^[0-9]+$ ]] || { echo "--max-files-per-batch must be a non-negative integer" >&2; exit 1; }
+            [[ "$2" =~ ^[1-9][0-9]*$ ]] || { echo "--max-files-per-batch must be a positive integer" >&2; exit 1; }
             MAX_FILES_PER_BATCH="$2"; shift 2 ;;
         --wait-between-batches)
             [[ "$2" =~ ^[0-9]+$ ]] || { echo "--wait-between-batches must be a non-negative integer" >&2; exit 1; }
@@ -661,6 +661,26 @@ def strip_whitespace_before_ext(fname):
         return fname
     return stem.rstrip() + dot + ext
 
+def collision_safe_path(old_path, new_fname):
+    dirpath = os.path.dirname(old_path)
+    new_path = os.path.join(dirpath, new_fname)
+    if os.path.abspath(old_path) == os.path.abspath(new_path):
+        return new_path
+    try:
+        if os.path.exists(new_path) and os.path.samefile(old_path, new_path):
+            return new_path
+    except OSError:
+        pass
+    if not os.path.exists(new_path):
+        return new_path
+
+    base, ext = os.path.splitext(new_fname)
+    for n in range(2, 1000):
+        candidate = os.path.join(dirpath, f'{base} {n}{ext}')
+        if not os.path.exists(candidate):
+            return candidate
+    raise RuntimeError(f'no free sanitized filename near {new_path}')
+
 count = 0
 for dirpath, dirnames, filenames in os.walk(raw_dir, topdown=False):
     for fname in filenames:
@@ -668,9 +688,9 @@ for dirpath, dirnames, filenames in os.walk(raw_dir, topdown=False):
         new_fname = strip_whitespace_before_ext(new_fname)
         if new_fname != fname:
             old_path = os.path.join(dirpath, fname)
-            new_path = os.path.join(dirpath, new_fname)
+            new_path = collision_safe_path(old_path, new_fname)
             os.rename(old_path, new_path)
-            print(f'  Renamed: {fname} -> {new_fname}')
+            print(f'  Renamed: {fname} -> {os.path.basename(new_path)}')
             count += 1
 
 print(f'Sanitized {count} filename(s).')

@@ -76,6 +76,12 @@ class ImportBatchDedupTests(unittest.TestCase):
             cwd=tmp, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             check=False)
 
+    def run_batches_with_args(self, tmp: Path, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "scripts/system/wiki-create-import-batches.sh", *args],
+            cwd=tmp, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            check=False)
+
     def new_files(self, tmp: Path) -> set:
         out = set()
         import_dir = tmp / ".import"
@@ -132,6 +138,28 @@ class ImportBatchDedupTests(unittest.TestCase):
         self.write_log(tmp, [])  # empty log
         self.run_batches(tmp)
         self.assertIn("raw/notes/Fresh.md", self.new_files(tmp))
+
+    def test_unconverted_html_source_is_ingested(self):
+        tmp = self.make_vault()
+        (tmp / "raw/emails").mkdir(parents=True)
+        (tmp / "raw/emails/Mail.html").write_text("<p>hello</p>\n", encoding="utf-8")
+        self.write_log(tmp, [])
+
+        proc = self.run_batches(tmp)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("raw/emails/Mail.html", self.new_files(tmp))
+
+    def test_zero_max_files_per_batch_is_rejected_before_writing(self):
+        tmp = self.make_vault()
+        (tmp / "raw/notes/Fresh.md").write_text("brand new\n", encoding="utf-8")
+        self.write_log(tmp, [])
+
+        proc = self.run_batches_with_args(tmp, "--max-files-per-batch", "0")
+
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("--max-files-per-batch must be a positive integer", proc.stderr)
+        self.assertFalse((tmp / ".import").exists())
 
     def test_unstamped_logged_path_is_still_skipped(self):
         # Legacy / pending entry: logged path, no hash/mtime -> old behavior (skip).

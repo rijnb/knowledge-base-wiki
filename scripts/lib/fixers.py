@@ -24,7 +24,7 @@ from .paths import should_skip_md
 
 
 # Source extensions the ingester scans (mirrors wiki-create-import-batches.sh).
-_INGEST_EXTS = {".md", ".pdf", ".doc", ".docx", ".txt", ".vtt", ".eml"}
+_INGEST_EXTS = {".md", ".pdf", ".doc", ".docx", ".txt", ".vtt", ".eml", ".html"}
 
 
 # Wrap bare/backticked raw/ paths in wiki/ files with [[...]] wikilinks.

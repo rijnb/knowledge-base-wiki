@@ -11,12 +11,13 @@ When asked to "ingest new raw notes" (or similar):
 
 1. **Convert raw files** (run automatically before partitioning):
    ```bash
-   python3 scripts/system/convert-vtt-to-md.py --input-dir raw/transcripts --output-dir raw/transcripts/converted
-   python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails --output-dir raw/emails/converted
+   python3 scripts/system/convert-vtt-to-md.py --input-dir raw/transcripts
+   python3 scripts/system/convert-eml-to-md.py --input-dir raw/emails
+   python3 scripts/system/convert-html-to-md.py --input-dir raw/emails
    ```
-   These convert VTT transcript files and EML email files into Markdown so they are picked up by the batch importer. Skip silently if the input directories don't exist.
+   These move each VTT/EML/HTML source file into a `_resources/` subdirectory and write a companion `.md` (same stem) where the source used to live — containing frontmatter, an `![[embed]]` of the original, and the extracted text in a collapsed `> [!ocr-extractor]- Extracted text` callout — so the Markdown is picked up by the batch importer. Skip silently if the input directories don't exist.
 2. **Partition** (run automatically): `bash scripts/system/wiki-create-import-batches.sh`
-   - Default max batch size is 50 files. Override with `--max-size N` (e.g. `--max-size 20`).
+   - Default max batch size is 10 files. Override with `--max-files-per-batch N` (e.g. `--max-files-per-batch 20`).
    - This removes any old `.import/batch-import-*.txt` remnants and creates fresh ones.
    - The partitioner respects Markdown frontmatter `ingest: false` (also `ingest:false`, quoted `false`, and case variants). Protected notes are left out of batch files, as are local `raw/` files explicitly linked from those notes via wikilinks/embeds or Markdown links/images. The script prints the skipped note basenames and linked-file counts, but writes no skip entries to `wiki/log.jsonl`.
    - **If the script exits with code 3**: there are no new notes to ingest. Report "Nothing to ingest" and stop.
@@ -42,7 +43,7 @@ When asked to "ingest new raw notes" (or similar):
 
 Triggered by a Confluence URL or page title:
 
-- Fetch via the available Atlassian connector. In Claude this may be `mcp__claude_ai_Atlassian__fetch`; in Codex use the available Atlassian/Rovo fetch/search tools. If no connector is available, ask the user for the exported page content before writing files.
+- Fetch via the available Atlassian MCP tools (authenticate first if needed — use whichever fetch/search/page-retrieval tools are available). If no Atlassian connector is available, ask the user for the exported page content before writing files.
 - Save to `raw/confluence/<Page Title>.md` with frontmatter:
 ```yaml
 ---
