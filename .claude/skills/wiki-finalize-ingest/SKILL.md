@@ -22,8 +22,22 @@ ls .import/batch-import-[0-9]*.txt 2>/dev/null | grep -v '\.claimed\.'
 
 ## Step 1 — Merge logs
 
-Append all `.import/batch-log-*.jsonl` to `wiki/log.jsonl` (create `wiki/log.jsonl` if it doesn't exist). 
-Then delete all `.import/batch-log-*.jsonl` and any remaining `.import/batch-import-*.txt`.
+Append all `.import/batch-log-*.jsonl` to `wiki/log.jsonl` (create `wiki/log.jsonl` if it doesn't exist), then delete all `.import/batch-log-*.jsonl` and any remaining `.import/batch-import-*.txt`:
+
+```bash
+# Wrapped in `bash -c` with `shopt -s nullglob` so unmatched globs expand to
+# nothing instead of aborting (zsh nomatch) or being passed as a literal pattern.
+# This runs identically whether the caller is bash or zsh (the Bash tool uses zsh).
+bash -c '
+  shopt -s nullglob
+  logs=(.import/batch-log-*.jsonl)
+  imports=(.import/batch-import-*.txt)
+  [ ${#logs[@]} -gt 0 ] && cat "${logs[@]}" >> wiki/log.jsonl
+  [ ${#logs[@]} -gt 0 ] && rm -f "${logs[@]}"
+  [ ${#imports[@]} -gt 0 ] && rm -f "${imports[@]}"
+  true  # always exit 0 when cleanup completes without error
+'
+```
 
 Then stamp content hashes onto the merged log, and repoint any entries whose note was renamed (both deterministic and idempotent — safe to run every finalize). Run stamp first; relink matches orphans by the hashes stamping records:
 
