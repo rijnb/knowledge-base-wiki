@@ -168,7 +168,15 @@ def stamp_content(content: str, spec: StampSpec, checked: str = DEFAULT_CHECKED)
 
 def stamp_page(root: Path, spec: StampSpec, checked: str = DEFAULT_CHECKED, dry_run: bool = False) -> dict[str, Any]:
     """Apply one minimal stamp, returning a structured result."""
-    page_path = root / spec.page
+    try:
+        page_path = (root / spec.page).resolve()
+        page_path.relative_to((root / "wiki").resolve())
+    except ValueError:
+        return {
+            "page": spec.page,
+            "action": "skipped",
+            "reason": "invalid-path",
+        }
     if not page_path.is_file():
         return {"page": spec.page, "action": "missing"}
     content = page_path.read_text(encoding="utf-8", errors="replace")

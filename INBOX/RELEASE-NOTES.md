@@ -1,5 +1,13 @@
 # Release Notes
 
+## 2026-06-25 — Freshness review follow-up fixes
+
+Fixed the actionable review findings in the freshness/provenance tooling:
+- Freshness inventory, drift, and QMD raw-hit mapping now respect `ingest: false` protected raw notes and their explicitly linked local raw files.
+- `wiki-freshness.sh` now runs all freshness/provenance steps before returning a non-zero status, so lint errors no longer prevent drift and coverage queues from being written.
+- Minimal provenance stamping rejects manifest page paths outside `wiki/` under the selected vault root.
+- Added missing-value and negative-limit guards for freshness/migration helper entrypoints.
+
 ## 2026-06-24 — Code-review fixes across provenance/freshness/drift tooling
 
 Fixed issues found in a code review of the new provenance/freshness/drift/migration tooling:

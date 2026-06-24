@@ -60,6 +60,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --root)
+            [[ $# -ge 2 ]] || { echo "ERROR: --root requires a directory argument" >&2; exit 2; }
             ROOT="$2"
             shift 2
             ;;
@@ -84,6 +85,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --limit)
+            [[ $# -ge 2 ]] || { echo "ERROR: --limit requires a value" >&2; exit 2; }
             [[ "$2" =~ ^[0-9]+$ ]] || { echo "--limit must be a non-negative integer" >&2; exit 2; }
             LIMIT="$2"
             shift 2

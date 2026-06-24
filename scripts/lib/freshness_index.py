@@ -13,6 +13,7 @@ from .provenance import (
     parse_provenance_callout,
     validate_provenance,
 )
+from .raw_privacy import protected_raw_paths
 
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -101,7 +102,12 @@ def _raw_notes(root: Path) -> list[Path]:
     raw = root / "raw"
     if not raw.is_dir():
         return []
-    return sorted(path for path in raw.rglob("*.md") if path.name != "SKILL.md")
+    protected, _ = protected_raw_paths(root)
+    return sorted(
+        path
+        for path in raw.rglob("*.md")
+        if path.name != "SKILL.md" and path.resolve() not in protected
+    )
 
 
 def _block_entry(

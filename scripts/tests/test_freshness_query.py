@@ -289,6 +289,32 @@ No canonical page exists yet.
         self.assertEqual(packet["raw_mappings"], [])
         self.assertEqual(packet["raw_evidence"][0]["path"], "raw/notes/Only Raw.md")
 
+    def test_qmd_ingest_false_raw_hit_is_ignored(self):
+        self.write("wiki/concepts/Secret Topic.md", "# Secret Topic\n\nKnown idea. ^claim\n")
+        self.write(
+            "raw/notes/Sensitive.md",
+            """---
+ingest: false
+date: 2026-06-20
+---
+
+# Secret Topic
+
+Private notes about [[Secret Topic]].
+""",
+        )
+
+        packet = build_query_packet_from_qmd_results(
+            self.root,
+            query="What is current?",
+            result_files=["qmd://tomtom/raw/notes/Sensitive.md"],
+        )
+
+        self.assertEqual(packet["candidate_pages"], [])
+        self.assertEqual(packet["ranked_blocks"], [])
+        self.assertEqual(packet["raw_mappings"], [])
+        self.assertEqual(packet["raw_evidence"], [])
+
     def test_qmd_ambiguous_normalized_wiki_path_is_unresolved(self):
         self.write("wiki/concepts/Foo Bar.md", "# Foo Bar\n")
         self.write("wiki/concepts/Foo_Bar.md", "# Foo Bar\n")

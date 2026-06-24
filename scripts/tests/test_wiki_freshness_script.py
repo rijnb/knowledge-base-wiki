@@ -42,6 +42,73 @@ class WikiFreshnessScriptTests(VaultFixtureMixin, unittest.TestCase):
         self.assertTrue((self.root / ".wiki-scratch/freshness-curation-candidates.md").is_file())
         self.assertTrue((self.root / ".wiki-scratch/provenance-coverage-backlog.md").is_file())
 
+    def test_lint_errors_do_not_skip_queue_generation(self):
+        self.write(
+            "wiki/concepts/Bad.md",
+            """# Bad
+
+Claim. ^actual
+
+> [!provenance]- Provenance
+> schema: kb-prov-v1
+> blocks:
+>   missing:
+>     status: current
+>     confidence: high
+>     sources: [raw/notes/source.md]
+""",
+        )
+        self.write(
+            "raw/notes/source.md",
+            "---\ndate: 2026-06-21\n---\n\n[[Bad]] update.\n",
+        )
+
+        result = subprocess.run(
+            [
+                "bash",
+                str(ROOT / "scripts/wiki-freshness.sh"),
+                "--root",
+                str(self.root),
+                "--limit",
+                "5",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Provenance lint", result.stdout)
+        self.assertIn("Freshness drift", result.stdout)
+        self.assertIn("Provenance coverage", result.stdout)
+        self.assertTrue((self.root / ".wiki-scratch/freshness-curation-candidates.md").is_file())
+        self.assertTrue((self.root / ".wiki-scratch/provenance-coverage-backlog.md").is_file())
+
+    def test_root_without_value_fails_cleanly(self):
+        result = subprocess.run(
+            ["bash", str(ROOT / "scripts/wiki-freshness.sh"), "--root"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--root requires", result.stderr)
+
+    def test_limit_without_value_fails_cleanly(self):
+        result = subprocess.run(
+            ["bash", str(ROOT / "scripts/wiki-freshness.sh"), "--limit"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--limit requires", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

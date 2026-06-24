@@ -137,6 +137,25 @@ class ProvenanceCoverageCliTests(VaultFixtureMixin, unittest.TestCase):
         self.assertEqual(payload["summary"]["wiki_pages"], 1)
         self.assertEqual(payload["summary"]["backlog_pages"], 1)
 
+    def test_rejects_negative_limit(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/system/wiki-provenance-coverage.py"),
+                "--root",
+                str(self.root),
+                "--limit",
+                "-1",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("limit", result.stderr.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

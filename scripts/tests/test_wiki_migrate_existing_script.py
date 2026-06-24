@@ -90,6 +90,28 @@ class WikiMigrateExistingScriptTests(unittest.TestCase):
         strict = self.run_script("--apply", "--strict")
         self.assertNotEqual(strict.returncode, 0)
 
+    def test_root_without_value_fails_cleanly(self):
+        proc = subprocess.run(
+            ["bash", str(SCRIPT), "--root"],
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("--root requires", proc.stderr)
+
+    def test_limit_without_value_fails_cleanly(self):
+        proc = subprocess.run(
+            ["bash", str(SCRIPT), "--limit"],
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("--limit requires", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -127,6 +127,40 @@ class ProvenanceStampCliTests(VaultFixtureMixin, unittest.TestCase):
         self.assertIn("stamped: 1", result.stdout)
         self.assertIn("legacy-inferred-minimal", self.read("wiki/concepts/Legacy.md"))
 
+    def test_cli_rejects_manifest_page_outside_wiki_root(self):
+        outside = self.root.parent / f"{self.root.name}-outside.md"
+        outside.write_text("# Outside\n\nShould not be touched.\n", encoding="utf-8")
+        self.addCleanup(lambda: outside.unlink(missing_ok=True))
+        self.write(
+            ".wiki-scratch/auto-ok.json",
+            json.dumps({
+                "auto_ok": [
+                    {
+                        "page": f"../{outside.name}",
+                        "stamp_mode": "historical",
+                    },
+                ],
+            }),
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/system/wiki-provenance-stamp-status.py"),
+                "--root",
+                str(self.root),
+                ".wiki-scratch/auto-ok.json",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("invalid-path", result.stdout)
+        self.assertNotIn("legacy-inferred-minimal", outside.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

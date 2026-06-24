@@ -10,6 +10,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$PROJECT_DIR"
 LIMIT=25
 WRITE=true
+FAILED=0
 
 usage() {
     cat <<EOF
@@ -36,10 +37,12 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --root)
+            [[ $# -ge 2 ]] || { echo "ERROR: --root requires a directory argument" >&2; exit 2; }
             ROOT="$2"
             shift 2
             ;;
         --limit)
+            [[ $# -ge 2 ]] || { echo "ERROR: --limit requires a value" >&2; exit 2; }
             [[ "$2" =~ ^[0-9]+$ ]] || { echo "--limit must be a non-negative integer" >&2; exit 1; }
             LIMIT="$2"
             shift 2
@@ -66,29 +69,40 @@ echo "=== Wiki Freshness Check ==="
 echo "Vault root: $ROOT"
 echo ""
 
-echo "1/4 Provenance lint"
-python3 "$PROJECT_DIR/scripts/system/wiki-provenance-lint.py" --root "$ROOT" --format text
-echo ""
+run_step() {
+    local label="$1"
+    shift
+    echo "$label"
+    set +e
+    "$@"
+    local rc=$?
+    set -e
+    if [ "$rc" -ne 0 ]; then
+        FAILED=1
+        echo "WARN: $label exited with status $rc" >&2
+    fi
+    echo ""
+}
 
-echo "2/4 Freshness inventory"
-python3 "$PROJECT_DIR/scripts/system/wiki-freshness-inventory.py" --root "$ROOT" --format text
-echo ""
+run_step "1/4 Provenance lint" \
+    python3 "$PROJECT_DIR/scripts/system/wiki-provenance-lint.py" --root "$ROOT" --format text
 
-echo "3/4 Freshness drift queue"
+run_step "2/4 Freshness inventory" \
+    python3 "$PROJECT_DIR/scripts/system/wiki-freshness-inventory.py" --root "$ROOT" --format text
+
 drift_args=(--root "$ROOT" --limit "$LIMIT" --format text)
 if [ "$WRITE" = true ]; then
     drift_args+=(--write-queue)
 fi
-python3 "$PROJECT_DIR/scripts/system/wiki-drift-detect.py" "${drift_args[@]}"
-echo ""
+run_step "3/4 Freshness drift queue" \
+    python3 "$PROJECT_DIR/scripts/system/wiki-drift-detect.py" "${drift_args[@]}"
 
-echo "4/4 Provenance coverage backlog"
 coverage_args=(--root "$ROOT" --limit "$LIMIT" --format text)
 if [ "$WRITE" = true ]; then
     coverage_args+=(--write-backlog)
 fi
-python3 "$PROJECT_DIR/scripts/system/wiki-provenance-coverage.py" "${coverage_args[@]}"
-echo ""
+run_step "4/4 Provenance coverage backlog" \
+    python3 "$PROJECT_DIR/scripts/system/wiki-provenance-coverage.py" "${coverage_args[@]}"
 
 echo "Freshness check complete."
 if [ "$WRITE" = true ]; then
@@ -96,3 +110,4 @@ if [ "$WRITE" = true ]; then
     echo "  $ROOT/.wiki-scratch/freshness-curation-candidates.md"
     echo "  $ROOT/.wiki-scratch/provenance-coverage-backlog.md"
 fi
+exit "$FAILED"

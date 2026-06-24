@@ -99,6 +99,26 @@ This follow-up is about [[Legacy Concept]].
 
         self.assertEqual(detect_drift(self.root)["candidates"], [])
 
+    def test_ingest_false_raw_note_does_not_create_candidate(self):
+        self.write("wiki/concepts/Secret Topic.md", "# Secret Topic\n\nKnown idea.\n")
+        self.write(
+            "raw/notes/Sensitive.md",
+            """---
+ingest: false
+date: 2026-06-21
+---
+
+# Secret Topic
+
+Private notes about [[Secret Topic]].
+""",
+        )
+
+        result = detect_drift(self.root)
+
+        self.assertEqual(result["summary"]["raw_notes_checked"], 0)
+        self.assertEqual(result["candidates"], [])
+
 
 class DriftCliTests(VaultFixtureMixin, unittest.TestCase):
     def test_cli_outputs_candidates_json(self):
@@ -146,6 +166,25 @@ class DriftCliTests(VaultFixtureMixin, unittest.TestCase):
         queue = self.root / ".wiki-scratch/freshness-curation-candidates.md"
         self.assertTrue(queue.is_file())
         self.assertIn("[[wiki/concepts/Concept]]", queue.read_text(encoding="utf-8"))
+
+    def test_rejects_negative_limit(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/system/wiki-drift-detect.py"),
+                "--root",
+                str(self.root),
+                "--limit",
+                "-1",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("limit", result.stderr.lower())
 
 
 if __name__ == "__main__":

@@ -121,6 +121,39 @@ We agreed to pilot block provenance.
         self.assertEqual(note["source_type"], "meeting")
         self.assertEqual(note["headings"], ["Weekly Meeting", "Decisions"])
 
+    def test_skips_ingest_false_raw_notes_and_linked_raw_notes(self):
+        self.write(
+            "raw/notes/Sensitive.md",
+            """---
+ingest: false
+date: 2026-06-22
+---
+
+# Sensitive
+
+Private note with [[linked/Linked Secret]].
+""",
+        )
+        self.write(
+            "raw/notes/linked/Linked Secret.md",
+            """---
+date: 2026-06-22
+---
+
+# Linked Secret
+
+Private linked context.
+""",
+        )
+        self.write("raw/notes/Public.md", "# Public\n\nOrdinary evidence.\n")
+
+        inventory = build_inventory(self.root)
+
+        self.assertEqual(
+            [note["path"] for note in inventory["raw_notes"]],
+            ["raw/notes/Public.md"],
+        )
+
 
 class FreshnessInventoryCliTests(VaultFixtureMixin, unittest.TestCase):
     def test_cli_outputs_inventory_json(self):

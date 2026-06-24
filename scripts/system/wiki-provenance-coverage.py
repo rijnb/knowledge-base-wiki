@@ -33,11 +33,18 @@ def parse_args():
     )
     parser.add_argument(
         "--limit",
-        type=int,
+        type=_non_negative_int,
         default=25,
         help="Number of backlog entries to print in text mode (default: 25).",
     )
     return parser.parse_args()
+
+
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("limit must be a non-negative integer")
+    return parsed
 
 
 def main() -> int:
