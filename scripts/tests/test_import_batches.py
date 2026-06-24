@@ -144,6 +144,52 @@ class ImportBatchDedupTests(unittest.TestCase):
         self.run_batches(tmp)
         self.assertNotIn("raw/notes/Pending.md", self.new_files(tmp))
 
+    def test_ingest_false_markdown_and_explicit_linked_files_are_skipped(self):
+        tmp = self.make_vault()
+        (tmp / "raw/notes/_resources").mkdir(parents=True)
+        (tmp / "raw/notes/docs").mkdir(parents=True)
+        (tmp / "raw/notes/Sensitive.md").write_text(
+            "---\ningest: false\n---\n"
+            "![[secret.pdf]]\n"
+            "[plan](docs/Plan.docx)\n"
+            "[mail](_resources/foo_(mail).pdf)\n"
+            "[remote](https://example.com/doc.pdf)\n",
+            encoding="utf-8")
+        (tmp / "raw/notes/_resources/secret.pdf").write_bytes(b"secret")
+        (tmp / "raw/notes/_resources/foo_(mail).pdf").write_bytes(b"mail")
+        (tmp / "raw/notes/docs/Plan.docx").write_bytes(b"plan")
+        (tmp / "raw/notes/Public.md").write_text("public\n", encoding="utf-8")
+        self.write_log(tmp, [])
+
+        proc = self.run_batches(tmp)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        files = self.new_files(tmp)
+        self.assertNotIn("raw/notes/Sensitive.md", files)
+        self.assertNotIn("raw/notes/_resources/secret.pdf", files)
+        self.assertNotIn("raw/notes/_resources/foo_(mail).pdf", files)
+        self.assertNotIn("raw/notes/docs/Plan.docx", files)
+        self.assertIn("raw/notes/Public.md", files)
+        self.assertIn("Skipped (ingest:false): 1", proc.stdout)
+        self.assertIn("Sensitive.md (+3 linked files)", proc.stdout)
+        self.assertNotIn("secret.pdf", proc.stdout)
+        self.assertNotIn("foo_(mail).pdf", proc.stdout)
+        self.assertNotIn("Plan.docx", proc.stdout)
+
+    def test_ingest_false_accepts_quoted_case_variants_only(self):
+        tmp = self.make_vault()
+        (tmp / "raw/notes/Quoted.md").write_text(
+            "---\ningest: 'False'\n---\nprivate\n", encoding="utf-8")
+        (tmp / "raw/notes/No.md").write_text(
+            "---\ningest: no\n---\nnormal\n", encoding="utf-8")
+        self.write_log(tmp, [])
+
+        proc = self.run_batches(tmp)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        files = self.new_files(tmp)
+        self.assertNotIn("raw/notes/Quoted.md", files)
+        self.assertIn("raw/notes/No.md", files)
+        self.assertIn("Quoted.md", proc.stdout)
+
 
 class RelinkEntrypointTests(unittest.TestCase):
     def make_vault(self) -> Path:

@@ -56,6 +56,16 @@ After ingesting notes, run the Linter regularly to keep your knowledge base clea
 
 You can keep notes that you do not want to be ingested yet (like drafts), in `INBOX`. The inbox will not be part of the ingestion process.
 
+For sensitive Markdown notes that should remain in `raw/` but never be ingested, add frontmatter:
+
+```yaml
+---
+ingest: false
+---
+```
+
+The batch importer skips that note and any local `raw/` files explicitly linked from it with wikilinks, embeds, or Markdown links/images. It prints the skipped note basename with the number of linked files skipped, and it does not write a skip entry to `wiki/log.jsonl`. Remove the field later to make the note eligible for ingestion again.
+
 ## Update the framework regularly
 
 The framework is updated regularly, so it's wise to `git pull` every now and then:
@@ -111,10 +121,11 @@ The email integration uses Microsoft Power Automate to save emails to a OneDrive
 	- User stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
 	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/`.
 
-- **Ingest notes:**
-	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.sh`.
-	- LLM converts non-Markdown inputs (`.vtt` transcripts, `.eml`/`.html` emails, `.pdf`/`.jpg` scans): the original file is moved into a `_resources/` subdirectory of its directory, and a companion `.md` note is written next to it (in the same directory as the original was).
-	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
+	- **Ingest notes:**
+		- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.sh`.
+		- LLM converts non-Markdown inputs (`.vtt` transcripts, `.eml`/`.html` emails, `.pdf`/`.jpg` scans): the original file is moved into a `_resources/` subdirectory of its directory, and a companion `.md` note is written next to it (in the same directory as the original was).
+		- Markdown notes with `ingest: false` frontmatter, plus local `raw/` files explicitly linked from them, are excluded from batch ingestion and are not logged.
+		- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
 	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `_index.md` files, and run post-processing (QMD re-index + health check).
    
 - **Query wiki:**

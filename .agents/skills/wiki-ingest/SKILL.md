@@ -18,6 +18,7 @@ When asked to "ingest new raw notes" (or similar):
 2. **Partition** (run automatically): `bash scripts/system/wiki-create-import-batches.sh`
    - Default max batch size is 50 files. Override with `--max-size N` (e.g. `--max-size 20`).
    - This removes any old `.import/batch-import-*.txt` remnants and creates fresh ones.
+   - The partitioner respects Markdown frontmatter `ingest: false` (also `ingest:false`, quoted `false`, and case variants). Protected notes are left out of batch files, as are local `raw/` files explicitly linked from those notes via wikilinks/embeds or Markdown links/images. The script prints the skipped note basenames and linked-file counts, but writes no skip entries to `wiki/log.jsonl`.
    - **If the script exits with code 3**: there are no new notes to ingest. Report "Nothing to ingest" and stop.
    - **If the script exits with code 2**: a previous ingest was not completed. Ask the user what to do (use `AskUserQuestion` when available; otherwise ask a concise plain-text question), with these options:
      - **"Ingest next batch"** — stop here and tell the user: "Use `wiki-ingest-next-batch` (or say `ingest next batch`) in a new session to continue."; do NOT re-run `wiki-create-import-batches.sh`.

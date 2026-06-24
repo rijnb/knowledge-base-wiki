@@ -109,9 +109,10 @@ print('\n'.join(lines))
 
 # Filter candidates: include if (a) not in log, or (b) mtime is newer than last import date
 _py=$(mktemp /tmp/wiki-filter.XXXXXX.py)
-trap 'rm -f "$_py"' EXIT
+_skip_meta=$(mktemp /tmp/wiki-skip.XXXXXX.json)
+trap 'rm -f "$_py" "$_skip_meta"' EXIT
 cat > "$_py" << 'PYEOF'
-import sys, json, os, re, hashlib
+import sys, json, os, re, hashlib, urllib.parse
 
 # Non-Markdown extensions that get moved into _resources/ and replaced by a
 # companion .md (current layout), or converted to a converted/<stem>.md
@@ -119,6 +120,14 @@ import sys, json, os, re, hashlib
 # its state from the companion / converted entry.
 _SOURCE_EXTS = {'.eml', '.vtt', '.pdf', '.doc', '.docx', '.txt'}
 _DATE_PREFIX_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
+_INGEST_FALSE_RE = re.compile(
+    r'''^\s*ingest\s*:\s*(?:"false"|'false'|false)\s*(?:#.*)?$''',
+    re.IGNORECASE,
+)
+_WIKILINK_RE = re.compile(r'!?\[\[((?:[^\]|\n\\]|\\(?!\|)|\](?!\]))+)')
+_MDLINK_RE = re.compile(r'!?\[[^\]\n]*\]\(((?:[^()#\n]|\([^()\n]*\))+?)(?:#[^)]*)?\)')
+_SOURCE_RE = re.compile(r'^\s*source\s*:\s*(.+?)\s*(?:#.*)?$')
+_EXTERNAL_RE = re.compile(r'^[a-z][a-z0-9+.-]*:', re.IGNORECASE)
 
 
 def _is_companion_for(md_path, src_name):
@@ -168,7 +177,119 @@ def _content_hash(fp):
         return None
 
 
-log_files = sys.argv[1:]
+def _frontmatter_lines(fp):
+    try:
+        with open(fp, encoding='utf-8', errors='replace') as f:
+            first = f.readline()
+            if first.strip() != '---':
+                return []
+            lines = []
+            for line in f:
+                if line.strip() in ('---', '...'):
+                    return lines
+                lines.append(line.rstrip('\n'))
+    except OSError:
+        pass
+    return []
+
+
+def _has_ingest_false(fp):
+    if os.path.splitext(fp)[1].lower() != '.md':
+        return False
+    return any(_INGEST_FALSE_RE.match(line) for line in _frontmatter_lines(fp))
+
+
+def _strip_target(target):
+    target = target.strip()
+    if not target:
+        return ''
+    if target.startswith('<') and target.endswith('>'):
+        target = target[1:-1].strip()
+    if (target.startswith('"') and target.endswith('"')) or (
+        target.startswith("'") and target.endswith("'")
+    ):
+        target = target[1:-1].strip()
+    target = urllib.parse.unquote(target).replace('\\', '/')
+    if target.startswith('#'):
+        return ''
+    if _EXTERNAL_RE.match(target):
+        return ''
+    return target
+
+
+def _link_targets(fp):
+    try:
+        text = open(fp, encoding='utf-8', errors='replace').read()
+    except OSError:
+        return []
+    targets = []
+    targets.extend(m.group(1) for m in _WIKILINK_RE.finditer(text))
+    targets.extend(m.group(1) for m in _MDLINK_RE.finditer(text))
+    for line in _frontmatter_lines(fp):
+        m = _SOURCE_RE.match(line)
+        if m:
+            targets.append(m.group(1))
+    return targets
+
+
+def _norm_rel(path):
+    return os.path.normpath(path).replace('\\', '/')
+
+
+def _resolve_target(target, note_dir, candidate_set, basename_index):
+    target = _strip_target(target)
+    if not target:
+        return set()
+
+    variants = {target, target.split('#', 1)[0], target.split('?', 1)[0]}
+    variants.add(target.split('#', 1)[0].split('?', 1)[0])
+    raw_candidates = []
+    for variant in sorted(v for v in variants if v):
+        if os.path.isabs(variant):
+            raw_candidates.append(_norm_rel(os.path.relpath(variant)))
+        elif variant.startswith('raw/'):
+            raw_candidates.append(_norm_rel(variant))
+        else:
+            raw_candidates.append(_norm_rel(os.path.join(note_dir, variant)))
+            raw_candidates.append(_norm_rel(variant))
+            if '/' not in variant:
+                raw_candidates.extend(basename_index.get(os.path.basename(variant), []))
+
+    resolved = set()
+    for cand in raw_candidates:
+        if cand.startswith('raw/') and cand in candidate_set:
+            resolved.add(cand)
+    return resolved
+
+
+def _protected_paths(candidates):
+    candidate_set = set(candidates)
+    basename_index = {}
+    for fp in candidates:
+        basename_index.setdefault(os.path.basename(fp), set()).add(fp)
+
+    protected = set()
+    notes = []
+    for fp in candidates:
+        if not _has_ingest_false(fp):
+            continue
+        linked = set()
+        note_dir = os.path.dirname(fp)
+        for target in _link_targets(fp):
+            linked.update(_resolve_target(target, note_dir, candidate_set, basename_index))
+        linked.discard(fp)
+        protected.add(fp)
+        protected.update(linked)
+        notes.append({
+            'file': fp,
+            'name': os.path.basename(fp),
+            'linked_count': len(linked),
+        })
+    return protected, notes
+
+
+meta_file = sys.argv[1]
+log_files = sys.argv[2:]
 files_db = set()
 # Content identity added for rename/modify awareness:
 #   mtime_db      : set of (logged_path, int_mtime) — fast path, skip without hashing
@@ -217,9 +338,18 @@ for logfile in log_files:
     except Exception:
         pass
 
-for line in sys.stdin:
-    fp = line.rstrip('\n')
+candidates = [line.rstrip('\n') for line in sys.stdin if line.rstrip('\n')]
+protected_paths, protected_notes = _protected_paths(candidates)
+with open(meta_file, 'w', encoding='utf-8') as f:
+    json.dump({
+        'protected_notes': protected_notes,
+        'skipped_total': len(protected_paths),
+    }, f)
+
+for fp in candidates:
     if not fp:
+        continue
+    if fp in protected_paths:
         continue
     # 1. Fast path: same path AND same mtime as a logged entry -> already
     #    ingested, no hashing needed.
@@ -257,7 +387,7 @@ PYEOF
 remaining=()
 # Always run the filter: even without log files it skips non-Markdown sources
 # that already have a companion .md.
-filtered=$(echo "$all_files" | python3 "$_py" ${log_sources[@]+"${log_sources[@]}"})
+filtered=$(echo "$all_files" | python3 "$_py" "$_skip_meta" ${log_sources[@]+"${log_sources[@]}"})
 rm -f "$_py"
 
 while IFS= read -r line; do
@@ -267,13 +397,32 @@ done <<< "$filtered"
 
 scanned=$(printf '%s\n' "$all_files" | grep -c . || true)
 total=${#remaining[@]}
-already_imported=$(( scanned - total ))
+skipped_ingest_false=$(
+    python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1])).get("protected_notes", [])))' "$_skip_meta"
+)
+skipped_ingest_false_total=$(
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("skipped_total", 0))' "$_skip_meta"
+)
+already_imported=$(( scanned - total - skipped_ingest_false_total ))
+[[ $already_imported -lt 0 ]] && already_imported=0
 num_batches=$(( (total + MAX_FILES_PER_BATCH - 1) / MAX_FILES_PER_BATCH ))
 [[ $total -eq 0 ]] && num_batches=0
 
 echo "wiki/log.jsonl    : $log_status"
 echo "Files scanned     : $scanned"
 echo "Already imported  : $already_imported"
+if [[ $skipped_ingest_false -gt 0 ]]; then
+    echo "Skipped (ingest:false): $skipped_ingest_false"
+    python3 - "$_skip_meta" << 'PYEOF'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    data = json.load(f)
+for note in data.get('protected_notes', []):
+    linked = note.get('linked_count', 0)
+    suffix = f" (+{linked} linked files)" if linked else ""
+    print(f"  - {note.get('name', '')}{suffix}")
+PYEOF
+fi
 echo "New (un-ingested) : $total"
 echo "Max files/batch   : $MAX_FILES_PER_BATCH (--max-files-per-batch)"
 echo "Batches to create : $num_batches"

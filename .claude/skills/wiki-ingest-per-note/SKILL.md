@@ -5,10 +5,14 @@ description: Use when about to process individual notes during Wiki ingestion �
 
 # Per-Note Ingestion
 
+## Privacy opt-out
+
+Before reading a Markdown note body, inspect only its YAML frontmatter. If it contains `ingest: false` (also `ingest:false`, quoted `false`, or case variants like `False`), skip the note entirely: do not convert attachments, do not create or update Wiki pages, and do not append any batch-log or `wiki/log.jsonl` entry. Report only the skipped note basename. This is a privacy boundary for stale or manually edited batch files; the partition script normally prevents protected notes and their explicitly linked local `raw/` files from entering batches in the first place.
+
 > **⚠ MANDATORY LOGGING — DO NOT SKIP**
 > After finishing all Wiki pages for each note, you MUST immediately append a JSON log entry to the batch log file specified in your prompt (e.g. `Write session logs to .import/batch-log-1.jsonl`).
 > **Do this after every single note — do not wait until all notes are done.**
-> Failing to write the log entry means the note is treated as unprocessed and will be re-ingested.
+> Failing to write the log entry means the note is treated as unprocessed and will be re-ingested. The only exception is a Markdown note with `ingest: false`, which must be skipped without logging.
 
 **Non-Markdown files are never ingested directly.** Each one is converted FIRST — move + companion + text extraction must all happen BEFORE inferring any `wiki/` pages from it.
 
