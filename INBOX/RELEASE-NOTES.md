@@ -1,5 +1,9 @@
 # Release Notes
 
+## 2026-06-24 — Existing knowledge base migration script
+
+Added `scripts/wiki-migrate-existing.sh` as a safe dry-run-first migration wrapper for existing `raw/` + `wiki/` corpora. With `--apply`, it baselines existing raw files in `wiki/log.jsonl` by default so future ingest does not re-ingest the historical corpus; `--allow-reingest-existing` is the explicit reverse option. Added `wiki-baseline-raw-log.py`, root-aware date/QMD helpers, tests, README guidance, and a `wiki-migrate-existing` skill.
+
 ## 2026-06-24 — Freshness reminders and scratch ignore
 
 Ignored generated `.wiki-scratch/` queue files, updated `wiki-doctor.py` to emit a structured freshness follow-up recommendation, and made the ingest loop dry-run/output text explicitly mention the automatic freshness step.

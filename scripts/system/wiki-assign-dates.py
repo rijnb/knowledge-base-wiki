@@ -24,6 +24,7 @@ Usage:
   python3 scripts/system/wiki-assign-dates.py            # dry-run: report only
   python3 scripts/system/wiki-assign-dates.py --apply    # write frontmatter
   python3 scripts/system/wiki-assign-dates.py --revert   # strip all managed keys
+  python3 scripts/system/wiki-assign-dates.py --root /path/to/vault --apply
 
 Run automatically by wiki-finalize-ingest after index rebuild.
 """
@@ -41,7 +42,17 @@ def _find_vault(start):
             return os.getcwd()
         d = parent
 
-VAULT = _find_vault(os.path.dirname(os.path.abspath(__file__)))
+def _option_value(name):
+    if name not in sys.argv:
+        return None
+    i = sys.argv.index(name)
+    if i + 1 >= len(sys.argv):
+        print(f"ERROR: {name} requires a value", file=sys.stderr)
+        sys.exit(2)
+    return sys.argv[i + 1]
+
+ROOT_ARG = _option_value("--root")
+VAULT = os.path.abspath(ROOT_ARG) if ROOT_ARG else _find_vault(os.path.dirname(os.path.abspath(__file__)))
 WIKI = os.path.join(VAULT, "wiki")
 RAW = os.path.join(VAULT, "raw")
 APPLY = "--apply" in sys.argv

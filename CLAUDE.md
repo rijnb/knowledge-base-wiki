@@ -13,6 +13,7 @@ Use the appropriate `wiki` skill for each action:
 - **Ingest** (notes, Confluence, start bulk) — `wiki-ingest` skill
 - **Ingest next batch** (parallel sessions) — `wiki-ingest-next-batch` skill
 - **Finalize ingest** (merge logs, rebuild indexes) — `wiki-finalize-ingest` skill
+- **Migrate existing KB** (adopt framework without bulk re-ingesting) — `wiki-migrate-existing` skill
 - **Query** — `wiki-query` skill (default: use this when the user asks any question)
 - **Ground conversation in KB** — `wiki-ground` skill
 - **Health check / lint** — `wiki-doctor` skill

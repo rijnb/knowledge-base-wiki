@@ -2,19 +2,26 @@
 # Registers the vault root as a single QMD collection named "tomtom", then re-indexes and embeds.
 # Removes stale wiki-* and raw-* subdirectory collections if present.
 #
-# Usage: qmd-sync-collections.sh [--skip-embed]
+# Usage: qmd-sync-collections.sh [--root DIR] [--skip-embed]
+#   --root DIR    Vault root to register (default: this repository)
 #   --skip-embed  Skip the vector embedding step (text re-index only).
 set -euo pipefail
 
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 SKIP_EMBED=false
-for arg in "$@"; do
-  case "$arg" in
-    --skip-embed) SKIP_EMBED=true ;;
-    *) echo "ERROR: unknown arg: $arg" >&2; exit 2 ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --root)
+      REPO="$(cd "$2" && pwd)"
+      shift 2
+      ;;
+    --skip-embed)
+      SKIP_EMBED=true
+      shift
+      ;;
+    *) echo "ERROR: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
-
-REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 
 existing=$(qmd collection list 2>/dev/null | awk '/^[^ ]/ && NR>1 { sub(/ \(.*/, ""); print }')
 

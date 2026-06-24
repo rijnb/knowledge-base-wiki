@@ -74,6 +74,32 @@ ingest: false
 
 The batch importer skips that note and any local `raw/` files explicitly linked from it with wikilinks, embeds, or Markdown links/images. It prints the skipped note basename with the number of linked files skipped, and it does not write a skip entry to `wiki/log.jsonl`. Remove the field later to make the note eligible for ingestion again.
 
+## Migrating an Existing Knowledge Base
+
+If you already have a large `raw/` corpus and existing generated or curated `wiki/` pages, migrate it instead of bulk re-ingesting it.
+
+Start with a dry-run:
+
+```bash
+scripts/wiki-migrate-existing.sh --root .
+```
+
+Then apply the migration:
+
+```bash
+scripts/wiki-migrate-existing.sh --root . --apply
+```
+
+The migration script defaults to the safe behavior: existing raw files are baselined in `wiki/log.jsonl`, so a later `scripts/wiki-ingest.sh` run will not re-ingest the whole historical corpus. It still respects `ingest: false` protected notes and their explicitly linked local raw files, so private opt-out material is not logged.
+
+Use the reverse option only when you intentionally want old raw files to be eligible for fresh ingestion:
+
+```bash
+scripts/wiki-migrate-existing.sh --root . --apply --allow-reingest-existing
+```
+
+The migration flow checks structural health, optionally migrates legacy `converted/` layouts, assigns freshness dates, rebuilds index pages, syncs QMD, runs freshness/provenance queues, and writes `.wiki-scratch/migration-report.md`.
+
 ## Update the framework regularly
 
 The framework is updated regularly, so it's wise to `git pull` every now and then:
@@ -167,6 +193,7 @@ Less common / maintenance:
 | ----------------          | ----------- |
 | "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
 | "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
+| "migrate existing knowledge base" | Prepare an existing `raw/` + `wiki/` corpus without bulk re-ingesting historical raw notes |
 | freshness query packet    | Rank retrieved canonical blocks for one query using provenance freshness metadata |
 | provenance coverage backlog | List canonical Wiki pages that still lack block provenance |
 | minimal provenance stamp  | Add a query-time caution block to classifier-approved low-risk legacy pages |
@@ -449,6 +476,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | Script | Purpose |
 | ------ | ------- |
 | `wiki-ingest.sh` | Main ingestion pipeline: converts raw files (VTT, EML), creates batches if needed, and runs ingestion sessions in a loop until all notes are processed. The normal way to ingest new notes. |
+| `wiki-migrate-existing.sh` | Safe migration wrapper for existing raw/ + wiki/ corpora. Dry-run by default; with `--apply`, baselines existing raw files so they are not re-ingested wholesale. |
 | `wiki-doctor.py` | Health-check for the wiki: broken internal/external links, orphan pages, and unfilled stub pages. Runs as an interactive TUI by default, or in `--batch-mode` for text/JSON output. Run periodically to keep the wiki healthy. |
 | `wiki-freshness.sh` | One-command freshness check: provenance lint, freshness inventory, drift queue, and provenance coverage backlog. Run after ingest/finalize, or ask "freshness check". |
 
@@ -464,6 +492,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | ------ | ------- |
 | `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest.sh` and the `wiki-ingest` skill. |
 | `system/wiki-create-index-pages.py` | Rebuilds `_index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
+| `system/wiki-baseline-raw-log.py` | Adds migration-baseline entries to `wiki/log.jsonl` for existing raw files, while respecting `ingest: false`. Called by `wiki-migrate-existing.sh`. |
 | `system/wiki-freshness-query.py` | Builds a query-time packet from retrieved pages, ranking canonical blocks by provenance freshness and explaining demoted legacy evidence. |
 | `system/wiki-provenance-stamp-status.py` | Applies a minimal `Freshness Status` provenance block to reviewed legacy pages from a JSON manifest. |
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
