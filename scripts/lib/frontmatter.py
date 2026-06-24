@@ -8,6 +8,29 @@ import re
 from pathlib import Path
 
 
+FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n(?:---|\.\.\.)\n", re.DOTALL)
+
+
+def split_frontmatter(content: str) -> tuple[dict[str, str], str]:
+    """Split a document into a flat frontmatter dict and the remaining body.
+
+    Scalar values only — nested structures are ignored. Returns ``({}, content)``
+    when there is no leading frontmatter block.
+    """
+    match = FRONTMATTER_RE.match(content)
+    if not match:
+        return {}, content
+    data: dict[str, str] = {}
+    for line in match.group(1).splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        data[key.strip()] = value.strip().strip('"\'')
+    return data, content[match.end():]
+
+
 def _key_value_re(key: str, value: str) -> re.Pattern[str]:
     return re.compile(rf'\s*{re.escape(key)}\s*:\s*{re.escape(value)}\s*$')
 

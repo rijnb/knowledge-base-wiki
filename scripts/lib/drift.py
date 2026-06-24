@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .freshness_index import build_inventory
+from .paths import wikilink_target
 
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
@@ -95,10 +96,16 @@ def _status_reasons(page: dict[str, Any]) -> tuple[int, list[str]]:
 def _candidate(
     page: dict[str, Any],
     related_index: dict[str, list[dict[str, Any]]],
+    ambiguous_titles: set[str],
 ) -> dict[str, Any] | None:
-    related = related_index.get(_normalize_title(page["title"]), [])
+    normalized_title = _normalize_title(page["title"])
+    related = related_index.get(normalized_title, [])
     if not related:
         return None
+
+    # When several wiki pages share a title, a raw wikilink cannot be
+    # attributed to one of them, so the raw-recency signal is unreliable.
+    title_is_ambiguous = normalized_title in ambiguous_titles
 
     checked = _page_checked(page)
     latest_raw = _latest_date([note.get("date") for note in related])
@@ -119,7 +126,9 @@ def _candidate(
         score += 35
         reasons.append("legacy-page-no-block-provenance")
 
-    if checked_dt and latest_raw_dt and latest_raw_dt > checked_dt:
+    if title_is_ambiguous:
+        reasons.append("ambiguous-title")
+    elif checked_dt and latest_raw_dt and latest_raw_dt > checked_dt:
         score += 60
         reasons.append("newer-related-raw")
     elif not checked and latest_raw:
@@ -150,10 +159,18 @@ def detect_drift(root: Path) -> dict[str, Any]:
     root = root.resolve()
     inventory = build_inventory(root)
     related_index = _relation_index(root, inventory["raw_notes"])
+
+    title_counts: dict[str, int] = {}
+    for page in inventory["wiki_pages"]:
+        title_counts[_normalize_title(page["title"])] = (
+            title_counts.get(_normalize_title(page["title"]), 0) + 1
+        )
+    ambiguous_titles = {title for title, count in title_counts.items() if count > 1}
+
     candidates = [
         candidate
         for page in inventory["wiki_pages"]
-        for candidate in [_candidate(page, related_index)]
+        for candidate in [_candidate(page, related_index, ambiguous_titles)]
         if candidate
     ]
     candidates.sort(key=lambda item: (-item["score"], item["page"]))
@@ -178,7 +195,7 @@ def write_queue(root: Path, result: dict[str, Any]) -> Path:
         "",
     ]
     for candidate in result["candidates"]:
-        page_link = candidate["page"][:-3]
+        page_link = wikilink_target(candidate["page"])
         lines.append(
             f"- [ ] **[[{page_link}]]** score {candidate['score']} — "
             f"{', '.join(candidate['reasons'])}"

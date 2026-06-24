@@ -12,6 +12,7 @@ SKIP_EMBED=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root)
+      [[ $# -ge 2 ]] || { echo "ERROR: --root requires a directory argument" >&2; exit 2; }
       REPO="$(cd "$2" && pwd)"
       shift 2
       ;;

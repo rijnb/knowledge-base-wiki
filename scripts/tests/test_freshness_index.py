@@ -60,6 +60,22 @@ Current ownership sits with the map enrichment flow. ^claim-owner-01
         self.assertEqual(block["sources"], ["raw:meeting-2026-06-02#b08"])
         self.assertEqual(block["text"], "Current ownership sits with the map enrichment flow.")
 
+    def test_two_blocks_in_one_paragraph_get_their_own_text(self):
+        self.write(
+            "wiki/concepts/Dense.md",
+            """# Dense
+
+Claim one is here. ^claim-one
+Claim two is here. ^claim-two
+""",
+        )
+
+        inventory = build_inventory(self.root)
+        blocks = {b["id"]: b for b in inventory["wiki_pages"][0]["blocks"]}
+
+        self.assertEqual(blocks["claim-one"]["text"], "Claim one is here.")
+        self.assertEqual(blocks["claim-two"]["text"], "Claim two is here.")
+
     def test_counts_blocks_without_provenance(self):
         self.write(
             "wiki/concepts/Legacy.md",

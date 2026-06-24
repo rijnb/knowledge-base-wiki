@@ -143,6 +143,46 @@ Claim. ^claim-01
             ],
         )
 
+    def test_splits_unprefixed_source_identifiers(self):
+        # Sources without a recognized path/scheme prefix must still split on
+        # the list comma instead of being merged into one mangled element.
+        content = """# Concept
+
+Claim. ^claim-01
+
+> [!provenance]- Provenance
+> schema: kb-prov-v1
+> blocks:
+>   claim-01:
+>     sources: [alpha-note, beta-note]
+>     status: current
+"""
+        parsed = parse_provenance_callout(content)
+
+        self.assertEqual(
+            parsed["blocks"]["claim-01"]["sources"],
+            ["alpha-note", "beta-note"],
+        )
+
+    def test_splits_scheme_prefixed_source_identifiers(self):
+        content = """# Concept
+
+Claim. ^claim-01
+
+> [!provenance]- Provenance
+> schema: kb-prov-v1
+> blocks:
+>   claim-01:
+>     sources: [slack:C0123, confluence:42]
+>     status: current
+"""
+        parsed = parse_provenance_callout(content)
+
+        self.assertEqual(
+            parsed["blocks"]["claim-01"]["sources"],
+            ["slack:C0123", "confluence:42"],
+        )
+
 
 class ProvenanceValidationTests(unittest.TestCase):
     def issue_codes(self, content: str) -> set[str]:
@@ -177,6 +217,41 @@ class ProvenanceValidationTests(unittest.TestCase):
     def test_reports_malformed_date(self):
         content = VALID_PAGE.replace("checked: 2026-06-20", "checked: soon", 1)
         self.assertIn("invalid-date", self.issue_codes(content))
+
+    def test_warns_when_claim_block_has_no_sources(self):
+        content = """# Concept
+
+Current claim. ^claim-01
+
+> [!provenance]- Provenance
+> schema: kb-prov-v1
+> blocks:
+>   claim-01:
+>     checked: 2026-06-20
+>     status: current
+>     confidence: medium
+"""
+        issues = validate_provenance(content, path="wiki/concepts/x.md")
+        missing = [issue for issue in issues if issue.code == "missing-sources"]
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0].severity, "warning")
+
+    def test_minimal_stamp_is_exempt_from_missing_sources_warning(self):
+        content = """# Concept
+
+Freshness only. ^freshness-status
+
+> [!provenance]- Provenance
+> schema: kb-prov-v1
+> migration_status: legacy-inferred-minimal
+> blocks:
+>   freshness-status:
+>     checked: 2026-06-20
+>     status: current
+>     confidence: medium
+"""
+        codes = self.issue_codes(content)
+        self.assertNotIn("missing-sources", codes)
 
 
 class ProvenanceLintCliTests(VaultFixtureMixin, unittest.TestCase):
@@ -217,6 +292,29 @@ class ProvenanceLintCliTests(VaultFixtureMixin, unittest.TestCase):
         self.assertEqual(payload["summary"]["files_checked"], 1)
         self.assertEqual(payload["summary"]["issues"], 1)
         self.assertEqual(payload["issues"][0]["code"], "missing-block-id")
+
+    def test_cli_returns_zero_when_only_warnings(self):
+        self.write(
+            "wiki/concepts/Concept.md",
+            """# Concept
+
+Current claim. ^claim-01
+
+> [!provenance]- Provenance
+> schema: kb-prov-v1
+> blocks:
+>   claim-01:
+>     checked: 2026-06-20
+>     status: current
+>     confidence: medium
+""",
+        )
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["summary"]["errors"], 0)
+        self.assertEqual(payload["summary"]["warnings"], 1)
+        self.assertEqual(payload["issues"][0]["severity"], "warning")
 
 
 if __name__ == "__main__":

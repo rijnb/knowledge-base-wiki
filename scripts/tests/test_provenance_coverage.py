@@ -88,6 +88,31 @@ This page has a minimal provenance stamp only. ^freshness-status
         self.assertEqual(result["pages"][0]["coverage_status"], "minimal-stamp")
 
 
+    def test_missing_sources_warning_does_not_mark_page_invalid(self):
+        # A claim block with provenance but no sources is a quality *warning*,
+        # not a structural error; coverage must not classify it as invalid.
+        self.write(
+            "wiki/concepts/Warned.md",
+            """# Warned
+
+Current claim. ^warned-claim
+
+> [!provenance]- Provenance
+> schema: kb-prov-v1
+> blocks:
+>   warned-claim:
+>     checked: 2026-06-24
+>     status: current
+>     confidence: high
+""",
+        )
+
+        result = build_coverage_backlog(self.root)
+
+        self.assertEqual(result["summary"]["covered_pages"], 1)
+        self.assertNotIn("invalid-provenance", result["summary"]["by_status"])
+
+
 class ProvenanceCoverageCliTests(VaultFixtureMixin, unittest.TestCase):
     def test_cli_outputs_json(self):
         self.write("wiki/concepts/Legacy.md", "# Legacy\n")

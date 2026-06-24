@@ -30,7 +30,14 @@ CALLOUT_RE = re.compile(r"^\s*>\s*\[!provenance\]", re.IGNORECASE)
 TOP_LEVEL_RE = re.compile(r"^([A-Za-z0-9_-]+)\s*:\s*(.*)$")
 BLOCK_RE = re.compile(r"^  ([A-Za-z0-9][A-Za-z0-9_-]*)\s*:\s*$")
 FIELD_RE = re.compile(r"^    ([A-Za-z0-9_-]+)\s*:\s*(.*)$")
-SOURCE_BOUNDARY_RE = re.compile(r"\s*[\"']?(?:raw/|wiki/|raw:|wiki:|qmd://|https?://|/|\./)")
+# A source reference starts with a scheme (`raw:`, `slack:`, `https:`, …), a
+# path segment (`raw/notes/…`), an absolute path, or `./`. Used to decide
+# whether an unquoted comma separates two sources or sits inside one value.
+SOURCE_BOUNDARY_RE = re.compile(
+    r"""\s*["']?(?:[A-Za-z][A-Za-z0-9+.-]*:|[A-Za-z0-9._-]+/|/|\./)"""
+)
+# Statuses that assert a sourced claim and so warrant a missing-sources warning.
+CLAIM_STATUSES = ALLOWED_STATUSES - {"unknown", "open"}
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,11 @@ class ProvenanceIssue:
         if self.block_id:
             out["block_id"] = self.block_id
         return out
+
+
+def has_error_issues(issues: list[dict[str, Any]] | None) -> bool:
+    """True if any serialized issue is error-severity (warnings don't count)."""
+    return any((issue.get("severity", "error") == "error") for issue in (issues or []))
 
 
 def _non_fenced_lines(content: str):
@@ -98,6 +110,10 @@ def _parse_value(value: str) -> Any:
     return _unquote(value)
 
 
+def _looks_like_source(value: str) -> bool:
+    return bool(SOURCE_BOUNDARY_RE.match(value))
+
+
 def _parse_sources_value(value: str) -> Any:
     value = value.strip()
     if not (value.startswith("[") and value.endswith("]")):
@@ -113,8 +129,15 @@ def _parse_sources_value(value: str) -> Any:
         if char in ("'", '"') and (index == 0 or inner[index - 1] != "\\"):
             quote = None if quote == char else char if quote is None else quote
             continue
-        if char == "," and quote is None and SOURCE_BOUNDARY_RE.match(inner[index + 1:]):
-            parts.append(inner[start:index].strip())
+        if char == "," and quote is None:
+            # A comma separates two sources unless it sits inside an unquoted,
+            # recognized source value (e.g. a comma in a filename) and the next
+            # token does not itself start a new source.
+            current = inner[start:index]
+            following = inner[index + 1:]
+            if _looks_like_source(current) and not _looks_like_source(following):
+                continue
+            parts.append(current.strip())
             start = index + 1
     parts.append(inner[start:].strip())
     return [_unquote(part) for part in parts if part]
@@ -230,6 +253,9 @@ def validate_provenance(content: str, path: str = "") -> list[ProvenanceIssue]:
             path=path,
         )]
 
+    # Deliberately-minimal stamps are exempt from the missing-sources warning.
+    minimal_stamp = parsed.get("migration_status") == "legacy-inferred-minimal"
+
     for block_id, metadata in blocks.items():
         if block_id not in block_counts:
             issues.append(ProvenanceIssue(
@@ -257,6 +283,19 @@ def validate_provenance(content: str, path: str = "") -> list[ProvenanceIssue]:
             ))
 
         status = metadata.get("status")
+        if (
+            not minimal_stamp
+            and status in CLAIM_STATUSES
+            and not (isinstance(sources, list) and sources)
+        ):
+            issues.append(ProvenanceIssue(
+                code="missing-sources",
+                message=f"Block '{block_id}' asserts status '{status}' but lists no sources.",
+                path=path,
+                block_id=block_id,
+                severity="warning",
+            ))
+
         if status is not None and status not in ALLOWED_STATUSES:
             issues.append(ProvenanceIssue(
                 code="invalid-status",

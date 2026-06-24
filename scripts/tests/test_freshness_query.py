@@ -396,5 +396,33 @@ Use the current practice. ^practice-current
         self.assertEqual(payload["raw_evidence"], [])
 
 
+class FreshnessQueryCliGuardTests(VaultFixtureMixin, unittest.TestCase):
+    def run_cli(self, *args):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/system/wiki-freshness-query.py"),
+                "--root",
+                str(self.root),
+                "--query",
+                "current state",
+                *args,
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def test_rejects_negative_limit(self):
+        result = self.run_cli("--limit", "-1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("limit", result.stderr.lower())
+
+    def test_rejects_negative_qmd_limit(self):
+        result = self.run_cli("--qmd-limit", "-3")
+        self.assertNotEqual(result.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

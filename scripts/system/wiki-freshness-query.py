@@ -19,6 +19,13 @@ def _default_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("limit must be a non-negative integer")
+    return parsed
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Rank retrieved canonical blocks by query-time freshness.",
@@ -38,7 +45,7 @@ def parse_args():
     )
     parser.add_argument(
         "--qmd-limit",
-        type=int,
+        type=_non_negative_int,
         default=15,
         help="Number of QMD results to inspect when --qmd is used (default: 15).",
     )
@@ -54,7 +61,7 @@ def parse_args():
     )
     parser.add_argument(
         "--limit",
-        type=int,
+        type=_non_negative_int,
         default=10,
         help="Maximum ranked blocks to return (default: 10).",
     )

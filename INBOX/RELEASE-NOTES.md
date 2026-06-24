@@ -1,5 +1,16 @@
 # Release Notes
 
+## 2026-06-24 — Code-review fixes across provenance/freshness/drift tooling
+
+Fixed issues found in a code review of the new provenance/freshness/drift/migration tooling:
+- **Freshness ranking**: check date was dead weight (a capped, folded-in term that saturated for every real date). Recency is now a genuine secondary sort key (newer-checked first) after status+confidence; `score_block` no longer folds in the date.
+- **Provenance source lists**: unquoted, unprefixed identifiers (e.g. `[alpha, beta]` or `[slack:…, confluence:…]`) were silently merged into one element. The comma-splitter now only keeps a comma inside a value when it sits in a recognized, unterminated source reference.
+- **Freshness index**: two block IDs in one paragraph each cross-contaminated the other's `text`; each block now owns only its own line(s).
+- **Provenance lint severity**: added a `missing-sources` *warning* for claim blocks with no sources (minimal stamps exempt); lint now exits non-zero only on errors and reports error/warning counts. Coverage and query "invalid-provenance" classification now keys on error-severity only.
+- **wiki-migrate-existing.sh**: the legacy-layout step now runs inside `--root` so `migrate-converted-to-resources.py` resolves paths/log against the target vault instead of the caller's cwd; added `--strict` to propagate step failures to the exit code.
+- **wiki-baseline-raw-log.py**: log entries now match the canonical writer's insertion order (dropped `sort_keys`); the existing log is backed up to `.wiki-scratch/` before append, and append failures (e.g. OneDrive locks) surface as a clean error.
+- Minor: shared `wiki_pages`/`wikilink_target`/`split_frontmatter` helpers (de-duplication), non-negative `--limit`/`--qmd-limit` guards in `wiki-freshness-query.py`, `--root` arg guard in `qmd-sync-collections.sh`, and ambiguous-title handling in drift detection.
+
 ## 2026-06-24 — Existing knowledge base migration script
 
 Added `scripts/wiki-migrate-existing.sh` as a safe dry-run-first migration wrapper for existing `raw/` + `wiki/` corpora. With `--apply`, it baselines existing raw files in `wiki/log.jsonl` by default so future ingest does not re-ingest the historical corpus; `--allow-reingest-existing` is the explicit reverse option. Added `wiki-baseline-raw-log.py`, root-aware date/QMD helpers, tests, README guidance, and a `wiki-migrate-existing` skill.

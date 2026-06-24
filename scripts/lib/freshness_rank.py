@@ -75,19 +75,24 @@ def _status_score(status: str, intent: str) -> int:
 
 
 def score_block(block: dict[str, Any], intent: str) -> int:
+    """Primary suitability score from status and confidence.
+
+    Recency is intentionally excluded here so that status (up to 80) and
+    confidence (up to 20) fully determine the score; check date is applied as a
+    secondary tie-breaker in ``rank_blocks`` instead (see issue: a folded-in,
+    capped date term saturated and never affected ranking).
+    """
     status = block.get("status") or "unknown"
-    return (
-        _status_score(status, intent)
-        + _confidence_score(block.get("confidence"))
-        + min(_date_score(block.get("checked")) // 100, 30)
-    )
+    return _status_score(status, intent) + _confidence_score(block.get("confidence"))
 
 
 def rank_blocks(blocks: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     """Return blocks sorted by freshness suitability for the query.
 
-    Blocks are never removed here. Superseded/disputed evidence remains
-    inspectable, but current-state queries rank it lower.
+    Ordering is by primary score, then by most-recently-checked (newer first),
+    then by id for stable output. Blocks are never removed here: superseded or
+    disputed evidence stays inspectable, current-state queries just rank it
+    lower.
     """
     intent = classify_query_intent(query)
     ranked = []
@@ -96,4 +101,11 @@ def rank_blocks(blocks: list[dict[str, Any]], query: str) -> list[dict[str, Any]
         item["query_intent"] = intent
         item["freshness_score"] = score_block(block, intent)
         ranked.append(item)
-    return sorted(ranked, key=lambda item: (-item["freshness_score"], item.get("id", "")))
+    return sorted(
+        ranked,
+        key=lambda item: (
+            -item["freshness_score"],
+            -_date_score(item.get("checked")),
+            item.get("id", ""),
+        ),
+    )

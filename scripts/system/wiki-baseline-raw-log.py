@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -239,13 +240,28 @@ def build_entries(root: Path, log_path: Path) -> dict:
     }
 
 
+def backup_log(log_path: Path, backup_dir: Path) -> Path | None:
+    """Copy the existing log into backup_dir before appending. No-op if absent."""
+    if not log_path.is_file():
+        return None
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_path = backup_dir / (log_path.name + ".bak")
+    shutil.copy2(log_path, backup_path)
+    return backup_path
+
+
 def write_entries(log_path: Path, entries: list[dict]) -> None:
     if not entries:
         return
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as f:
-        for entry in entries:
-            f.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    # Match the canonical ingest log writer: insertion order, no sorted keys,
+    # so migration rows are byte-consistent with the rest of log.jsonl.
+    try:
+        with log_path.open("a", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise RuntimeError(f"failed to append to {log_path}: {exc}") from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -267,7 +283,12 @@ def main() -> int:
         log_path = root / log_path
     result = build_entries(root, log_path)
     if args.apply:
-        write_entries(log_path, result["entries"])
+        backup_log(log_path, root / ".wiki-scratch")
+        try:
+            write_entries(log_path, result["entries"])
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
     result["applied"] = args.apply
     result["log_path"] = _rel(log_path, root) if log_path.is_relative_to(root) else str(log_path)
 

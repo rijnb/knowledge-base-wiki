@@ -75,6 +75,24 @@ This follow-up is about [[Legacy Concept]].
         self.assertIn("legacy-page-no-block-provenance", candidate["reasons"])
         self.assertEqual(candidate["related_raw_count"], 1)
 
+    def test_ambiguous_page_title_suppresses_raw_signal(self):
+        # Two wiki pages share a filename/title in different folders, so a raw
+        # wikilink cannot be attributed to one of them. The newer-raw signal
+        # must be suppressed and the ambiguity flagged instead.
+        self.write("wiki/people/John.md", "# John\n\nA person.\n")
+        self.write("wiki/projects/John.md", "# John\n\nA project.\n")
+        self.write(
+            "raw/notes/Update.md",
+            "---\ndate: 2026-06-21\n---\n\nNotes about [[John]].\n",
+        )
+
+        result = detect_drift(self.root)
+        for candidate in result["candidates"]:
+            if candidate["title"].lower() == "john":
+                self.assertIn("ambiguous-title", candidate["reasons"])
+                self.assertNotIn("newer-related-raw", candidate["reasons"])
+                self.assertNotIn("unreviewed-related-raw", candidate["reasons"])
+
     def test_unrelated_raw_note_does_not_create_candidate(self):
         self.write("wiki/concepts/Concept.md", "# Concept\n\nKnown idea.\n")
         self.write("raw/notes/Other.md", "---\ndate: 2026-06-21\n---\n\nNothing related.\n")

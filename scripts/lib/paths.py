@@ -16,6 +16,21 @@ def truncate_path(path: str, max_len: int = 40, prefix_len: int = 20) -> str:
     return path[:prefix_len] + "..." + path[-tail_len:]
 
 
+def wiki_pages(root: Path) -> list[Path]:
+    """Sorted canonical wiki/ pages, excluding index/navigation/skill files."""
+    wiki = root / "wiki"
+    if not wiki.is_dir():
+        return []
+    return sorted(
+        path for path in wiki.rglob("*.md") if not should_skip_md(path, root)
+    )
+
+
+def wikilink_target(rel_path: str) -> str:
+    """Strip a trailing `.md` so a vault-relative path reads as a WikiLink."""
+    return rel_path[:-3] if rel_path.endswith(".md") else rel_path
+
+
 def should_skip_md(path: Path, root: Path) -> bool:
     """Return True if this .md file should be excluded from scanning."""
     rel = path.relative_to(root)

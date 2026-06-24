@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .frontmatter import split_frontmatter as _frontmatter
+from .paths import wiki_pages as _wiki_pages
 from .provenance import (
     BLOCK_ID_RE,
     parse_provenance_callout,
@@ -14,22 +16,6 @@ from .provenance import (
 
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
-FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n(?:---|\.\.\.)\n", re.DOTALL)
-
-
-def _frontmatter(content: str) -> tuple[dict[str, str], str]:
-    match = FRONTMATTER_RE.match(content)
-    if not match:
-        return {}, content
-    data: dict[str, str] = {}
-    for line in match.group(1).splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        data[key.strip()] = value.strip().strip('"\'')
-    return data, content[match.end():]
 
 
 def _clean_heading(text: str) -> str:
@@ -91,14 +77,24 @@ def _iter_blocks(body: str):
     yield from flush()
 
 
-def _wiki_pages(root: Path) -> list[Path]:
-    wiki = root / "wiki"
-    if not wiki.is_dir():
-        return []
-    return sorted(
-        path for path in wiki.rglob("*.md")
-        if path.name not in ("index.md", "_index.md", "START_HERE.md")
-    )
+def _blocks_in_paragraph(text: str) -> list[tuple[str, str]]:
+    """Split a paragraph into (block_id, owning-segment) pairs.
+
+    Each Obsidian `^block-id` terminates its block, so adjacent block IDs in one
+    paragraph must each own only their own line(s) rather than the whole
+    paragraph text.
+    """
+    results: list[tuple[str, str]] = []
+    segment: list[str] = []
+    for line in text.splitlines():
+        segment.append(line)
+        block_ids = BLOCK_ID_RE.findall(line)
+        if block_ids:
+            owned = "\n".join(segment)
+            for block_id in block_ids:
+                results.append((block_id, owned))
+            segment = []
+    return results
 
 
 def _raw_notes(root: Path) -> list[Path]:
@@ -141,10 +137,10 @@ def _index_wiki_page(root: Path, path: Path) -> dict[str, Any]:
 
     blocks: list[dict[str, Any]] = []
     for text, heading_path in _iter_blocks(body):
-        for match in BLOCK_ID_RE.finditer(text):
+        for block_id, segment in _blocks_in_paragraph(text):
             blocks.append(_block_entry(
-                match.group(1),
-                text,
+                block_id,
+                segment,
                 heading_path,
                 provenance_blocks,
             ))

@@ -16,11 +16,12 @@ SKIP_LEGACY_LAYOUT=false
 SKIP_QMD=false
 QMD_EMBED=false
 WRITE_REPORT=true
+STRICT=false
 LIMIT=25
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--root DIR] [--apply] [--allow-reingest-existing] [--skip-legacy-layout] [--skip-qmd] [--qmd-embed] [--limit N] [--no-report] [--help]
+Usage: $(basename "$0") [--root DIR] [--apply] [--allow-reingest-existing] [--skip-legacy-layout] [--skip-qmd] [--qmd-embed] [--limit N] [--no-report] [--strict] [--help]
 
 Migrates an existing knowledge base into the provenance/freshness workflow.
 
@@ -51,6 +52,7 @@ Options:
   --qmd-embed                Run QMD vector embedding too; default is text only
   --limit N                  Number of freshness entries to print (default: 25)
   --no-report                Do not write .wiki-scratch/migration-report.md
+  --strict                   Exit non-zero if any migration step fails
   --help                     Show this help and exit
 EOF
 }
@@ -90,6 +92,10 @@ while [[ $# -gt 0 ]]; do
             WRITE_REPORT=false
             shift
             ;;
+        --strict)
+            STRICT=true
+            shift
+            ;;
         --help|-h)
             usage
             exit 0
@@ -106,6 +112,14 @@ ROOT="$(cd "$ROOT" && pwd)"
 REPORT_PATH="$ROOT/.wiki-scratch/migration-report.md"
 declare -a REPORT_LINES=()
 declare -a STEP_STATUSES=()
+FAILED_STEPS=0
+
+# Run a command with the vault root as the working directory. Steps like
+# migrate-converted-to-resources.py resolve paths relative to cwd, so they must
+# execute inside $ROOT for --root to be honored.
+run_in_root() {
+    ( cd "$ROOT" && "$@" )
+}
 
 record() {
     REPORT_LINES+=("$1")
@@ -135,6 +149,7 @@ run_step() {
         say "status: ok"
     else
         say "status: warning/error ($rc)"
+        FAILED_STEPS=$((FAILED_STEPS + 1))
     fi
     return 0
 }
@@ -182,12 +197,14 @@ if [ "$SKIP_LEGACY_LAYOUT" = true ]; then
     section "Legacy converted/ layout"
     say "status: skipped"
 else
-    legacy_args=(--root "$ROOT")
+    # Scans raw/ relative to the vault root; run inside $ROOT so its cwd-based
+    # path/log resolution targets the vault being migrated, not the caller's cwd.
+    legacy_args=(--root raw)
     if [ "$APPLY" = true ]; then
         legacy_args+=(--apply)
     fi
     run_step "Legacy converted/ layout" \
-        python3 "$PROJECT_DIR/scripts/system/migrate-converted-to-resources.py" "${legacy_args[@]}"
+        run_in_root python3 "$PROJECT_DIR/scripts/system/migrate-converted-to-resources.py" "${legacy_args[@]}"
 fi
 
 if [ "$BASELINE_EXISTING" = true ]; then
@@ -251,3 +268,9 @@ else
     say "Dry-run complete. Re-run with --apply to write dates, indexes, freshness queues, and the migration raw baseline."
 fi
 write_report
+
+if [ "$STRICT" = true ] && [ "$FAILED_STEPS" -gt 0 ]; then
+    echo "" >&2
+    echo "ERROR: $FAILED_STEPS migration step(s) failed (--strict)." >&2
+    exit 1
+fi

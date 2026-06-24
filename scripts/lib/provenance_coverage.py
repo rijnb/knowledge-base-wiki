@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from .freshness_index import build_inventory
+from .paths import wikilink_target
+from .provenance import has_error_issues
 
 
 def _page_kind(path: str) -> str:
@@ -16,7 +18,7 @@ def _page_kind(path: str) -> str:
 
 
 def _coverage_status(page: dict[str, Any]) -> str:
-    if page.get("validation_issues"):
+    if has_error_issues(page.get("validation_issues")):
         return "invalid-provenance"
     if page.get("migration_status") == "legacy-inferred-minimal":
         return "minimal-stamp"
@@ -107,7 +109,7 @@ def write_backlog(root: Path, result: dict[str, Any]) -> Path:
         lines.append(f"- {status}: {count}")
     lines.extend(["", "## Backlog", ""])
     for page in result["pages"]:
-        page_link = page["path"][:-3]
+        page_link = wikilink_target(page["path"])
         lines.append(
             f"- [ ] **[[{page_link}]]** "
             f"`{page['coverage_status']}` priority {page['priority']}"

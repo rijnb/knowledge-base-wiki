@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -48,6 +49,46 @@ class WikiMigrateExistingScriptTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("future ingest may process the historical raw corpus", proc.stdout)
         self.assertFalse((self.root / "wiki/log.jsonl").exists())
+
+    def test_legacy_layout_step_uses_root_not_cwd(self):
+        # A converted/ tree under the target vault must be migrated against the
+        # vault even when the script is invoked from an unrelated directory.
+        (self.root / "raw/clips/converted").mkdir(parents=True)
+        (self.root / "raw/clips/converted/Doc.md").write_text(
+            "# Doc\n\nA standalone converted note with enough words to migrate.\n",
+            encoding="utf-8",
+        )
+        workdir = Path(tempfile.mkdtemp(prefix="wiki-migrate-cwd-"))
+        self.addCleanup(lambda: shutil.rmtree(workdir, ignore_errors=True))
+
+        proc = subprocess.run(
+            ["bash", str(SCRIPT), "--root", str(self.root), "--skip-qmd", "--limit", "1", "--apply"],
+            text=True,
+            capture_output=True,
+            timeout=120,
+            cwd=str(workdir),
+        )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        # The converted/ tree was consumed inside the vault, not the cwd.
+        self.assertFalse((self.root / "raw/clips/converted").exists())
+        self.assertFalse((workdir / "wiki").exists())
+        self.assertFalse((workdir / "raw").exists())
+
+    def test_strict_propagates_step_failure_to_exit_code(self):
+        if os.geteuid() == 0:
+            self.skipTest("cannot make a file unreadable as root")
+        unreadable = self.root / "raw/locked.md"
+        unreadable.write_text("# Locked\n", encoding="utf-8")
+        os.chmod(unreadable, 0o000)
+        self.addCleanup(lambda: os.chmod(unreadable, 0o644))
+
+        lenient = self.run_script("--apply")
+        self.assertEqual(lenient.returncode, 0, lenient.stderr)
+
+        strict = self.run_script("--apply", "--strict")
+        self.assertNotEqual(strict.returncode, 0)
 
 
 if __name__ == "__main__":

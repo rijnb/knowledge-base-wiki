@@ -8,21 +8,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.paths import wiki_pages as _wiki_pages  # noqa: E402
 from lib.provenance import validate_provenance  # noqa: E402
 
 
 def _default_root() -> Path:
     return Path(__file__).resolve().parents[2]
-
-
-def _wiki_pages(root: Path) -> list[Path]:
-    wiki = root / "wiki"
-    if not wiki.is_dir():
-        return []
-    return sorted(
-        path for path in wiki.rglob("*.md")
-        if path.name not in ("index.md", "_index.md", "START_HERE.md")
-    )
 
 
 def lint(root: Path) -> dict:
@@ -45,10 +36,13 @@ def lint(root: Path) -> dict:
             issue.as_dict()
             for issue in validate_provenance(content, path=rel)
         )
+    errors = sum(1 for issue in issues if issue.get("severity", "error") == "error")
     return {
         "summary": {
             "files_checked": files_checked,
             "issues": len(issues),
+            "errors": errors,
+            "warnings": len(issues) - errors,
         },
         "issues": issues,
     }
@@ -82,13 +76,15 @@ def main() -> int:
         summary = result["summary"]
         print("Provenance lint")
         print(f"  files checked : {summary['files_checked']}")
-        print(f"  issues        : {summary['issues']}")
+        print(f"  errors        : {summary['errors']}")
+        print(f"  warnings      : {summary['warnings']}")
         for issue in result["issues"]:
             path = issue.get("path", "")
             block_id = issue.get("block_id", "")
             suffix = f" ({block_id})" if block_id else ""
-            print(f"  - {path}{suffix}: {issue['code']}: {issue['message']}")
-    return 1 if result["issues"] else 0
+            severity = issue.get("severity", "error")
+            print(f"  - [{severity}] {path}{suffix}: {issue['code']}: {issue['message']}")
+    return 1 if result["summary"]["errors"] else 0
 
 
 if __name__ == "__main__":

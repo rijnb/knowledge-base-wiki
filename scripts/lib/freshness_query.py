@@ -13,6 +13,7 @@ from typing import Any
 
 from .freshness_index import build_inventory
 from .freshness_rank import classify_query_intent, rank_blocks
+from .provenance import has_error_issues
 
 
 QMD_URI_RE = re.compile(r"^qmd://([^/]+)/(.*)$")
@@ -308,7 +309,7 @@ def _selected_pages(
 
 
 def _legacy_reason(page: dict[str, Any]) -> str | None:
-    if page.get("validation_issues"):
+    if has_error_issues(page.get("validation_issues")):
         return "invalid-provenance"
     blocks = page.get("blocks", [])
     if not blocks:
