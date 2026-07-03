@@ -62,8 +62,11 @@ class VaultIndex:
       norm_index      — normalize_name(stem) → matching paths (fuzzy match
                         across filename-substituted characters).
       path_suffix_set — every "/"-joined trailing path component of every
-                        file under raw/ and wiki/, curly-quote normalized;
-                        lets [[x/y]] resolve to any file ending in x/y.
+                        file in the vault (hidden dirs excluded), curly-quote
+                        normalized; lets [[x/y]] resolve to any file ending
+                        in x/y. Vault-wide because Obsidian resolves a link
+                        against any file anywhere in the vault (e.g.
+                        _resources/ at the vault root).
 
     Replaces what used to be three separate rglob traversals plus a fourth
     walk inside check_vault — substantial perf win on iCloud-backed vaults.
@@ -83,22 +86,21 @@ class VaultIndex:
         from .resolve import normalize_name
 
         root = self.root
-        for top in ("raw", "wiki"):
-            top_dir = root / top
-            if not top_dir.is_dir():
-                continue
-            for dirpath, _dirnames, filenames in os.walk(top_dir):
-                base = Path(dirpath)
-                for fname in filenames:
-                    p = base / fname
-                    rel_parts = p.relative_to(root).parts
-                    for i in range(len(rel_parts)):
-                        self.path_suffix_set.add(
-                            "/".join(rel_parts[i:]).translate(CURLY_TO_STRAIGHT)
-                        )
-                    if fname.endswith(".md") and not should_skip_md(p, root):
-                        self.md_files.append(p)
-                        stem = p.stem
-                        self.stem_index.setdefault(stem, []).append(p)
-                        self.norm_index.setdefault(normalize_name(stem), []).append(p)
+        for dirpath, dirnames, filenames in os.walk(root):
+            # Obsidian ignores dot-directories (.git, .obsidian, ...); prune
+            # them in place so os.walk never descends into them.
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            base = Path(dirpath)
+            for fname in filenames:
+                p = base / fname
+                rel_parts = p.relative_to(root).parts
+                for i in range(len(rel_parts)):
+                    self.path_suffix_set.add(
+                        "/".join(rel_parts[i:]).translate(CURLY_TO_STRAIGHT)
+                    )
+                if fname.endswith(".md") and not should_skip_md(p, root):
+                    self.md_files.append(p)
+                    stem = p.stem
+                    self.stem_index.setdefault(stem, []).append(p)
+                    self.norm_index.setdefault(normalize_name(stem), []).append(p)
         self.md_files.sort()

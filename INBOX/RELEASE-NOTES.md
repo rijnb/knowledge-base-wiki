@@ -1,5 +1,9 @@
 # Release Notes
 
+## 2026-07-03 — wiki-doctor: vault-wide link resolution
+
+`wiki-doctor` reported false "file not found" for wikilinks whose targets live outside `raw/` and `wiki/` (e.g. `_resources/` at the vault root), because the link-resolution index only walked those two trees. Obsidian resolves a link against any file anywhere in the vault, so `VaultIndex` now builds its path-suffix index from a whole-vault walk (dot-directories like `.git`/`.obsidian` excluded, matching Obsidian). The set of `.md` files that get scanned/linted is unchanged — still `raw/` and `wiki/` only.
+
 ## 2026-06-25 — Freshness review follow-up fixes
 
 Fixed the actionable review findings in the freshness/provenance tooling:

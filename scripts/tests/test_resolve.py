@@ -69,6 +69,28 @@ class ResolveWikilinkTests(VaultFixtureMixin, unittest.TestCase):
         stems, suffixes = self._index()
         self.assertFalse(resolve_wikilink("does-not-exist", self.root, stems, suffixes))
 
+    def test_bare_image_in_root_resources(self):
+        # Obsidian resolves [[shot.jpeg]] to a file anywhere in the vault,
+        # including _resources/ at the vault root (outside raw/ and wiki/).
+        self.write("_resources/shot.jpeg", "x")
+        stems, suffixes = self._index()
+        self.assertTrue(resolve_wikilink("shot.jpeg", self.root, stems, suffixes))
+
+    def test_bare_unknown_extension_in_root_resources(self):
+        # Extensions outside KNOWN_EXTENSIONS (e.g. .py, .csv) must still
+        # resolve when the file exists somewhere in the vault.
+        self.write("_resources/critical_osv_monthly.py", "x")
+        self.write("_resources/linux_kernel_critical_monthly.csv", "x")
+        stems, suffixes = self._index()
+        self.assertTrue(resolve_wikilink("critical_osv_monthly.py", self.root, stems, suffixes))
+        self.assertTrue(resolve_wikilink("linux_kernel_critical_monthly.csv", self.root, stems, suffixes))
+
+    def test_hidden_directories_not_indexed(self):
+        # Obsidian does not index dot-directories; neither should we.
+        self.write(".obsidian/plugins/asset.jpeg", "x")
+        stems, suffixes = self._index()
+        self.assertFalse(resolve_wikilink("asset.jpeg", self.root, stems, suffixes))
+
 
 class ResolveMdlinkTests(VaultFixtureMixin, unittest.TestCase):
     def test_relative_link(self):
