@@ -130,3 +130,7 @@ After completing all steps, report to the user:
 - The number of source documents used
 - The pages that received backlinks
 - Any sections left empty due to insufficient information
+
+## Wikilink format
+
+When linking a note, the wikilink target is the note's **exact filename, with spaces** — never slugified. Write `[[Real-Time Map]]`, not `[[Real-Time-Map]]`; `[[1-N Device Association]]`, not `[[1-N-Device-Association]]`. Keep hyphens only where the real filename has them. Slugified links do not resolve in Obsidian.

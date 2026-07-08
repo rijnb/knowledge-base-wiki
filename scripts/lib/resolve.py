@@ -12,8 +12,12 @@ KNOWN_EXTENSIONS = {".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".we
 
 # Characters that are often replaced by '_' when a title becomes a filename.
 # Includes '_' itself (so file stems normalize the same as their original titles),
-# plus straight/curly quotes and any non-ASCII codepoint.
-_PROBLEMATIC_CHARS = re.compile(r'''[_:!#$%&*<>?/\\|'"]|[^\x00-\x7f]''')
+# plus straight/curly quotes and any non-ASCII codepoint. The hyphen is included
+# too, so slugified links like '[[Foo-Bar-Baz]]' normalize to the same key as the
+# real note 'Foo Bar Baz'. Because file stems normalize through this same function,
+# genuinely hyphenated titles (e.g. 'Cost-Aware Model Routing') still match
+# themselves, and the unique-match guard prevents false fixes on collisions.
+_PROBLEMATIC_CHARS = re.compile(r'''[_:!#$%&*<>?/\\|'"-]|[^\x00-\x7f]''')
 
 
 def normalize_name(name: str) -> str:
@@ -21,8 +25,9 @@ def normalize_name(name: str) -> str:
 
     Replaces '_' and chars typically substituted with '_' in filenames with a
     space, then collapses whitespace. This makes '[[foo: bar]]', '[[foo bar]]',
-    '[[foo's bar?]]', '[[café]]', and files 'foo_ bar.md' / 'foo_s bar_.md' /
-    'caf_.md' all map to the same key.
+    '[[foo-bar]]', '[[foo's bar?]]', '[[café]]', and files 'foo_ bar.md' /
+    'foo_s bar_.md' / 'caf_.md' all map to the same key. Hyphens normalize to
+    spaces too, so slugified links resolve back to their spaced filenames.
     """
     return re.sub(r'\s+', ' ', _PROBLEMATIC_CHARS.sub(' ', name)).strip().lower()
 

@@ -17,3 +17,7 @@ For the remainder of this conversation, treat the knowledge base (KB) as the sou
 If the user invoked this skill with a non-empty topic, immediately invoke `wiki-query` on that topic to front-load the relevant KB pages, then briefly summarize what you found and wait for the user's next request.
 
 If no topic was supplied, do not query yet. Confirm in one line that knowledge base grounding is active for this conversation, then wait for the user's next request.
+
+## Wikilink format
+
+When linking a note, the wikilink target is the note's **exact filename, with spaces** — never slugified. Write `[[Real-Time Map]]`, not `[[Real-Time-Map]]`; `[[1-N Device Association]]`, not `[[1-N-Device-Association]]`. Keep hyphens only where the real filename has them. Slugified links do not resolve in Obsidian.

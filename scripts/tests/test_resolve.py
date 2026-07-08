@@ -32,6 +32,18 @@ class NormalizeNameTests(unittest.TestCase):
     def test_case_insensitive(self):
         self.assertEqual(normalize_name("FooBar"), normalize_name("foobar"))
 
+    def test_hyphen_space_equivalence(self):
+        # Slugified link and spaced filename normalize to the same key.
+        self.assertEqual(normalize_name("Foo-Bar-Baz"), normalize_name("Foo Bar Baz"))
+
+    def test_genuinely_hyphenated_title_matches_itself(self):
+        # A real hyphenated title still normalizes consistently with itself,
+        # so correct links to it keep resolving.
+        self.assertEqual(
+            normalize_name("Cost-Aware Model Routing"),
+            normalize_name("Cost-Aware Model Routing"),
+        )
+
 
 class ResolveWikilinkTests(VaultFixtureMixin, unittest.TestCase):
     def _index(self):
@@ -134,6 +146,13 @@ class FindNormalizedMatchTests(VaultFixtureMixin, unittest.TestCase):
         self.write("wiki/concepts/foo.md", "x")
         v = VaultIndex(self.root)
         self.assertIsNone(find_normalized_match("totally different", self.root, v.norm_index))
+
+    def test_slug_link_resolves_to_spaced_filename(self):
+        # A slugified wikilink target maps back to the real spaced note name.
+        self.write("wiki/concepts/Note Links Like This.md", "x")
+        v = VaultIndex(self.root)
+        fix = find_normalized_match("Note-Links-Like-This", self.root, v.norm_index)
+        self.assertEqual(fix, "Note Links Like This")
 
 
 class FindWhitespaceBeforeExtTests(VaultFixtureMixin, unittest.TestCase):

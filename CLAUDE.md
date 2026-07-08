@@ -51,6 +51,10 @@ After any changes to scripts (`scripts/`) or skills (`~/.claude/skills/`), appen
 - No accents or diacritics (e, i, o — not é, î, ö)
 - No characters that have meaning for the file system: `:`, `/`, `\`, `*`, `?`, `"`, `<`, `>`, `|`
 
+## Linking to notes
+
+When citing or linking a note — in an answer or inside a page — the wikilink target must be the note's exact filename, with spaces. Never slugify. Write `[[Real-Time Map]]`, not `[[Real-Time-Map]]`; `[[1-N Device Association]]`, not `[[1-N-Device-Association]]`. Do not convert spaces to hyphens; keep hyphens only where the real filename has them. Slugified links do not resolve in Obsidian.
+
 ## Tests
 
 Tests live in `scripts/tests/`; run with: `python3 -m unittest discover -s scripts/tests -v`

@@ -1,5 +1,13 @@
 # Release Notes
 
+## 2026-07-08 — Stop slugified wikilinks in answers and generated pages
+
+Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Links-Like-This]]`) instead of the real spaced filename (`Note Links Like This`), so the links did not resolve in Obsidian. Root cause was weak/missing guidance plus a link resolver that could not repair the slugs. Changes:
+- **`wiki-query` skill**: the citation instruction now states explicitly that a wikilink target is the note's exact filename with spaces — never slugified/hyphenated — with correct/incorrect examples.
+- **`CLAUDE.md`**: added a "Linking to notes" section (always loaded) with the same rule, covering both answers and pages.
+- **`wiki-add-missing`, `wiki-curate-page`, `wiki-ground` skills**: added a one-line "Wikilink format" reminder.
+- **`scripts/lib/resolve.py`**: added the hyphen to `_PROBLEMATIC_CHARS` so `wiki-doctor`'s fuzzy resolver maps slug links back to their spaced filenames. Safe because file stems normalize through the same function (genuinely hyphenated titles still match themselves) and only unique matches are auto-fixed. Added three tests in `scripts/tests/test_resolve.py`; full suite passes (265 tests).
+
 ## 2026-07-03 — wiki-doctor: vault-wide link resolution
 
 `wiki-doctor` reported false "file not found" for wikilinks whose targets live outside `raw/` and `wiki/` (e.g. `_resources/` at the vault root), because the link-resolution index only walked those two trees. Obsidian resolves a link against any file anywhere in the vault, so `VaultIndex` now builds its path-suffix index from a whole-vault walk (dot-directories like `.git`/`.obsidian` excluded, matching Obsidian). The set of `.md` files that get scanned/linted is unchanged — still `raw/` and `wiki/` only.
