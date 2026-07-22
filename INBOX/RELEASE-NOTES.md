@@ -1,5 +1,9 @@
 # Release Notes
 
+## 2026-07-22 — Fix finalize step order so freshly-ingested notes aren't re-flagged
+
+`wiki-finalize-ingest` stamped log hashes (old Step 1) *before* running `wiki-assign-dates` (old Step 3). The date pass writes `date`/`date_span`/`date_confidence` frontmatter onto raw notes, changing their bytes — so every just-ingested note ended up with a stale hash and was re-flagged as "new" by `wiki-create-import-batches` on the next import (observed: two already-ingested clips reappeared in a later batch). Reordered the skill so hashing runs last: **Merge → Assign dates → Stamp/relink → Rebuild indexes → Summarize → Post-processing → End**, with an explicit "do not reorder" note explaining why. No code changes — `wiki-stamp-log-hashes.py` still never overwrites existing hashes; it now simply sees the final dated content when it first stamps each entry.
+
 ## 2026-07-08 — Stop slugified wikilinks in answers and generated pages
 
 Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Links-Like-This]]`) instead of the real spaced filename (`Note Links Like This`), so the links did not resolve in Obsidian. Root cause was weak/missing guidance plus a link resolver that could not repair the slugs. Changes:
