@@ -1,5 +1,9 @@
 # Release Notes
 
+## 2026-07-29 — Fix `finalize_lock: unbound variable` crash at end of `wiki-ingest.sh`
+
+`run_phase_finalize` installed `trap 'rmdir "$finalize_lock" ...' RETURN` to release the parallel-session finalize lock. A RETURN trap is *not* per-function: it stays installed after the function returns and fires again on every later function return, where the `local` no longer exists — so with `set -u` the script died with `line 1019: finalize_lock: unbound variable` (line 1019 is `main()`'s definition line) once `main` returned, after all ingest work had already completed. Fix: expand the lock path into the trap body at install time and have the trap clear itself (`trap - RETURN`), so it fires exactly once. Applied the same fix to the identical latent pattern for `hdr_file` in the usage-API call (harmless there only because that function always runs in a command-substitution subshell).
+
 ## 2026-07-22 — Fix finalize step order so freshly-ingested notes aren't re-flagged
 
 `wiki-finalize-ingest` stamped log hashes (old Step 1) *before* running `wiki-assign-dates` (old Step 3). The date pass writes `date`/`date_span`/`date_confidence` frontmatter onto raw notes, changing their bytes — so every just-ingested note ended up with a stale hash and was re-flagged as "new" by `wiki-create-import-batches` on the next import (observed: two already-ingested clips reappeared in a later batch). Reordered the skill so hashing runs last: **Merge → Assign dates → Stamp/relink → Rebuild indexes → Summarize → Post-processing → End**, with an explicit "do not reorder" note explaining why. No code changes — `wiki-stamp-log-hashes.py` still never overwrites existing hashes; it now simply sees the final dated content when it first stamps each entry.

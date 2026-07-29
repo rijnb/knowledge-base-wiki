@@ -224,7 +224,7 @@ print(token)
     local hdr_file
     hdr_file=$(mktemp) || return 1
     chmod 600 "$hdr_file"
-    trap 'rm -f "$hdr_file"' RETURN
+    trap "rm -f '$hdr_file'; trap - RETURN" RETURN
     printf 'Authorization: Bearer %s\n' "$access_token" > "$hdr_file"
 
     local response
@@ -898,7 +898,11 @@ run_phase_finalize() {
         echo "Another session is already finalizing (lock present) — skipping finalize here." >&2
         return 0
     fi
-    trap 'rmdir "$finalize_lock" 2>/dev/null || true' RETURN
+    # The path is expanded into the trap body now, and the trap clears itself:
+    # a RETURN trap stays installed after the function returns and would fire
+    # again on every later return, where the local is out of scope (`set -u` ->
+    # "finalize_lock: unbound variable").
+    trap "rmdir '$finalize_lock' 2>/dev/null || true; trap - RETURN" RETURN
 
     wait_for_capacity "before /wiki-finalize-ingest" > /dev/null  # usage % not needed here
     echo "Starting /wiki-finalize-ingest..."
