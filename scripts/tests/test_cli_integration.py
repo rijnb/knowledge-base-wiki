@@ -75,6 +75,20 @@ class CliIntegrationTests(unittest.TestCase):
         # non-zero if other issue classes exist, but here there are none.)
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
+    def test_misplaced_attachment_exits_one_with_json_entry(self):
+        (self.root / "raw/other/_resources").mkdir(parents=True)
+        (self.root / "raw/other/_resources/spec.pdf").write_bytes(b"x")
+        self.write("raw/notes/note.md",
+                   "Plenty of prose words so this page is clearly not a stub at all.\n"
+                   "\nEmbedded attachment: ![[spec.pdf]] appears mid sentence here.\n")
+        proc = self.run_doctor()
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["attachment_summary"]["misplaced_found"], 1)
+        entry = payload["misplaced_attachments"][0]
+        self.assertEqual(entry["file"], "raw/notes/note.md")
+        self.assertEqual(entry["expected_dir"], "raw/notes/_resources")
+
 
 if __name__ == "__main__":
     unittest.main()

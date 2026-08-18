@@ -6,6 +6,7 @@ import shlex
 import sys
 from pathlib import Path
 
+from .checks.attachments import check_misplaced_attachments
 from .checks.legacy import check_legacy_converted, run_migration
 from .checks.loose import check_loose_files
 from .checks.orphans import check_orphans, fix_orphans
@@ -120,7 +121,8 @@ Examples:
             " Also relocates loose non-markdown files in raw/, wiki/ and INBOX/ "
             "into sibling _resources/ directories via the Obsidian CLI (requires "
             "Obsidian running; clash-safe renaming) and converts them to companion "
-            ".md notes."
+            ".md notes. Attachments linked from raw/ or INBOX/ notes but stored "
+            "outside the note's own _resources/ are moved there the same way."
         ),
     )
     parser.add_argument(
@@ -240,6 +242,7 @@ def main():
                 or result.get("raw_refs_pending", 0) > 0
                 or result.get("log_pruned_pending", 0) > 0
                 or result.get("loose_pending", 0) > 0
+                or result.get("attachments_pending", 0) > 0
             )
             if has_fixable:
                 auto_fix_applied = ask_run_auto_fixes()
@@ -292,6 +295,10 @@ def main():
         result["loose_files"] = loose_result["loose_files"]
         result["loose_summary"] = loose_result["summary"]
 
+        attachment_result = check_misplaced_attachments(root, args.quiet)
+        result["misplaced_attachments"] = attachment_result["misplaced_attachments"]
+        result["attachment_summary"] = attachment_result["summary"]
+
         if getattr(args, "fix_orphans", False) and orphan_result["orphans"]:
             fix_result = fix_orphans(orphan_result["orphans"], root, args.quiet)
             result["orphan_fix"] = fix_result
@@ -306,6 +313,7 @@ def main():
         or result.get("stub_summary", {}).get("stubs_found", 0) > 0
         or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
         or result.get("loose_summary", {}).get("loose_found", 0) > 0
+        or result.get("attachment_summary", {}).get("misplaced_found", 0) > 0
     )
     result["recommendations"] = [_freshness_recommendation(root, has_issues)]
 

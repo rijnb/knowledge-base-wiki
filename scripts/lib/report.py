@@ -33,6 +33,14 @@ def format_text(result: dict) -> str:
                      f"(use --fix-simple-errors to relocate into _resources/ and convert).")
     if s.get("loose_warning"):
         lines.append(f"WARNING: {s['loose_warning']}")
+    if s.get("attachments_moved") or s.get("attachments_skipped"):
+        lines.append(f"Misplaced attachments: {s.get('attachments_moved', 0)} moved to "
+                     f"the note's _resources, {s.get('attachments_skipped', 0)} skipped.")
+    elif s.get("attachments_pending"):
+        lines.append(f"Misplaced attachments: {s['attachments_pending']} "
+                     f"(use --fix-simple-errors to relocate into the note's own _resources/).")
+    if s.get("attachment_warning"):
+        lines.append(f"WARNING: {s['attachment_warning']}")
     lines.append("")
 
     if result["errors"]:
@@ -106,6 +114,25 @@ def format_text(result: dict) -> str:
         else:
             lines.append("No loose files found.")
 
+    if "misplaced_attachments" in result:
+        lines.append("")
+        ma = result["misplaced_attachments"]
+        ma_s = result.get("attachment_summary", {})
+        lines.append(f"ATTACHMENT PLACEMENT CHECK: {ma_s.get('notes_scanned', '?')} "
+                     f"raw/INBOX note(s) scanned, "
+                     f"{ma_s.get('misplaced_found', len(ma))} misplaced attachment(s) found.")
+        if ma:
+            lines.append("MISPLACED ATTACHMENTS (linked from raw/ or INBOX/ notes but "
+                         "stored outside the note's own _resources/; "
+                         "--fix-simple-errors relocates via Obsidian CLI):")
+            for m in ma:
+                lines.append(f"  {m['file']}:{m['line']}")
+                lines.append(f"    target  : {m['target']}")
+                lines.append(f"    found at: {m['resolved']}")
+                lines.append(f"    expected: {m['expected_dir']}/")
+        else:
+            lines.append("No misplaced attachments found.")
+
     if "legacy_converted" in result:
         lines.append("")
         lc = result["legacy_converted"]
@@ -126,7 +153,8 @@ def format_text(result: dict) -> str:
 
     # Issues summary — shown at the end
     has_issues = (result["broken_links"] or result.get("orphans") or result.get("stubs")
-                  or result.get("legacy_converted") or result.get("loose_files"))
+                  or result.get("legacy_converted") or result.get("loose_files")
+                  or result.get("misplaced_attachments"))
     if has_issues:
         lines.append("")
         lines.append("ISSUES SUMMARY:")
@@ -171,6 +199,11 @@ def format_text(result: dict) -> str:
             n_loose = lf_s.get("loose_found", len(result["loose_files"]))
             lines.append(f"  loose files  : {n_loose} found "
                          f"(use --fix-simple-errors to relocate and convert)")
+        if result.get("misplaced_attachments"):
+            ma_s = result.get("attachment_summary", {})
+            n_ma = ma_s.get("misplaced_found", len(result["misplaced_attachments"]))
+            lines.append(f"  misplaced attachments: {n_ma} found "
+                         f"(use --fix-simple-errors to relocate)")
         if result.get("legacy_converted"):
             lc_s = result.get("legacy_summary", {})
             n_dirs = lc_s.get("converted_dirs_found", len(result["legacy_converted"]))

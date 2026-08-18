@@ -785,3 +785,74 @@ def fix_loose_files(loose_files: list, root: Path, quiet: bool,
             print(f"  loose: {rel_str} → {dest_rel}", file=sys.stderr)
     return {"moved": moved, "converted": converted, "skipped": skipped,
             "details": details, "warning": warning}
+
+
+def fix_misplaced_attachments(misplaced: list, root: Path, quiet: bool,
+                              mover=None, verify_timeout: float = 5.0) -> dict:
+    """Relocate misplaced attachments into the referencing note's _resources/.
+
+    Takes the findings of check_misplaced_attachments(). Each unique attachment
+    is moved once — to the _resources/ of the first note referencing it, which
+    satisfies the placement rule for every other referencing note too. Moves go
+    through the Obsidian CLI (mover) so links are rewritten; skipped when
+    Obsidian is unavailable. No companion conversion — the referencing note
+    already documents the attachment.
+    """
+    # One move per unique attachment, keyed by its current vault-relative path.
+    by_file: dict = {}
+    for m in misplaced:
+        by_file.setdefault(m["resolved"], m)
+
+    warning = None
+    if mover is None:
+        cli = _find_obsidian_cli()
+        if cli is None or (by_file and not _ensure_obsidian_running(cli, root)):
+            warning = ("Obsidian is not running and could not be started — "
+                       f"{len(by_file)} misplaced attachment(s) left in place.")
+            if not quiet:
+                print(f"  attachments: WARNING: {warning}", file=sys.stderr)
+            details = [
+                {"file": f, "action": "skipped", "reason": "Obsidian unavailable"}
+                for f in by_file
+            ]
+            return {"moved": 0, "skipped": len(by_file),
+                    "details": details, "warning": warning}
+        mover = _obsidian_mover
+
+    moved = skipped = 0
+    details = []
+    for rel_str, finding in by_file.items():
+        src = root / rel_str
+        if not src.is_file():  # disappeared since the scan
+            continue
+        target = root / finding["expected_dir"] / src.name
+        if target.exists():
+            try:
+                target = _numbered_fallback(target)
+            except RuntimeError as e:
+                skipped += 1
+                details.append({"file": rel_str, "action": "skipped", "reason": str(e)})
+                continue
+        target.parent.mkdir(exist_ok=True)
+        dest_rel = str(target.relative_to(root))
+
+        ok, reason = mover(root, rel_str, dest_rel)
+        if ok and not _confirm_move(src, target, verify_timeout):
+            ok = False
+            reason = "move not confirmed on disk (is Obsidian running?)"
+        if not ok:
+            skipped += 1
+            details.append({"file": rel_str, "action": "skipped", "reason": reason})
+            try:
+                target.parent.rmdir()  # remove the _resources dir if we just created it empty
+            except OSError:
+                pass  # non-empty or shared — leave it
+            if not quiet:
+                print(f"  attachments: SKIP {rel_str}: {reason}", file=sys.stderr)
+            continue
+
+        moved += 1
+        details.append({"file": rel_str, "action": "moved", "to": dest_rel})
+        if not quiet:
+            print(f"  attachments: {rel_str} → {dest_rel}", file=sys.stderr)
+    return {"moved": moved, "skipped": skipped, "details": details, "warning": warning}

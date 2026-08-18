@@ -6,10 +6,12 @@ from pathlib import Path
 from ..fixers import (
     fix_curly_quotes,
     fix_loose_files,
+    fix_misplaced_attachments,
     fix_raw_references,
     prune_log,
     relink_renamed_log_entries,
 )
+from .attachments import check_misplaced_attachments
 from .loose import check_loose_files
 from ..links import extract_links, is_external, strip_frontmatter
 from ..paths import VaultIndex
@@ -122,6 +124,7 @@ def check_vault(root: Path, args) -> dict:
     raw_refs_pending_files = 0
     log_pruned_pending = 0
     loose_pending = 0
+    attachments_pending = 0
     if not getattr(args, "fix_simple_errors", False):
         raw_refs_pending_files, raw_refs_pending = fix_raw_references(
             root, quiet=True, dry_run=True
@@ -131,6 +134,8 @@ def check_vault(root: Path, args) -> dict:
         )
         log_pruned_pending = log_pruned_pending_missing + log_pruned_pending_dupes
         loose_pending = check_loose_files(root, quiet=True)["summary"]["loose_found"]
+        attachments_pending = check_misplaced_attachments(root, quiet=True)[
+            "summary"]["misplaced_found"]
 
     fixed_links = 0
     fixed_files = 0
@@ -140,6 +145,7 @@ def check_vault(root: Path, args) -> dict:
     raw_files_changed = raw_changes = 0
     log_pruned_kept = log_pruned_skipped = log_pruned_malformed = log_pruned_dupes = 0
     loose_fix = None
+    attachment_fix = None
     if getattr(args, "fix_simple_errors", False):
         fixes_by_file: dict = {}
         for entry in broken:
@@ -231,6 +237,19 @@ def check_vault(root: Path, args) -> dict:
             if loose_fix.get("warning"):
                 print(f"WARNING: {loose_fix['warning']}", file=sys.stderr)
 
+        # After the loose fix: relocate misplaced attachments into the
+        # referencing note's own _resources/.
+        misplaced_now = check_misplaced_attachments(root, quiet=True)[
+            "misplaced_attachments"]
+        if misplaced_now:
+            attachment_fix = fix_misplaced_attachments(misplaced_now, root, args.quiet)
+            if not args.quiet:
+                print(f"  Misplaced attachments: {attachment_fix['moved']} moved to "
+                      f"the note's _resources, "
+                      f"{attachment_fix['skipped']} skipped.", file=sys.stderr)
+            if attachment_fix.get("warning"):
+                print(f"WARNING: {attachment_fix['warning']}", file=sys.stderr)
+
     removed_links = 0
     removed_files = 0
     if getattr(args, "remove_broken_links", False):
@@ -287,6 +306,12 @@ def check_vault(root: Path, args) -> dict:
                 summary["loose_skipped"] = loose_fix["skipped"]
             if loose_fix.get("warning"):
                 summary["loose_warning"] = loose_fix["warning"]
+        if attachment_fix:
+            summary["attachments_moved"] = attachment_fix["moved"]
+            if attachment_fix["skipped"]:
+                summary["attachments_skipped"] = attachment_fix["skipped"]
+            if attachment_fix.get("warning"):
+                summary["attachment_warning"] = attachment_fix["warning"]
     if getattr(args, "remove_broken_links", False):
         summary["removed_links"] = removed_links
         summary["removed_files"] = removed_files
@@ -297,6 +322,8 @@ def check_vault(root: Path, args) -> dict:
         summary["log_pruned_pending"] = log_pruned_pending
     if loose_pending:
         summary["loose_pending"] = loose_pending
+    if attachments_pending:
+        summary["attachments_pending"] = attachments_pending
 
     return {
         "broken_links": broken,
@@ -305,5 +332,7 @@ def check_vault(root: Path, args) -> dict:
         "raw_refs_pending": raw_refs_pending,
         "log_pruned_pending": log_pruned_pending,
         "loose_pending": loose_pending,
+        "attachments_pending": attachments_pending,
         "loose_fix": loose_fix,
+        "attachment_fix": attachment_fix,
     }
