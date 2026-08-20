@@ -17,22 +17,24 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CurationPacketTests(VaultFixtureMixin, unittest.TestCase):
-    def test_packet_contains_page_blocks_and_related_raw_notes(self):
+    def test_packet_contains_page_provenance_and_related_raw_notes(self):
         self.write(
             "wiki/concepts/Concept.md",
-            """# Concept
+            """---
+sources:
+  - id: s1
+    resource: "raw/notes/old-note.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-01-01
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-01-10
+---
 
-Current claim. ^claim-01
+# Concept
 
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     sources: [raw:old-note#b1]
->     observed: 2026-01-01
->     checked: 2026-01-10
->     status: current
->     confidence: medium
+Current claim.
 """,
         )
         self.write(
@@ -48,7 +50,8 @@ This update links to [[Concept]].
         packet = build_page_packet(self.root, "wiki/concepts/Concept.md")
 
         self.assertEqual(packet["page"]["path"], "wiki/concepts/Concept.md")
-        self.assertEqual(packet["page"]["blocks"][0]["id"], "claim-01")
+        self.assertEqual(packet["page"]["sources"], ["raw/notes/old-note.md"])
+        self.assertEqual(packet["page"]["checked"], "2026-01-10")
         self.assertEqual(packet["related_raw"][0]["path"], "raw/notes/Note.md")
         self.assertIn("newer-related-raw", packet["drift"]["reasons"])
         self.assertIn("revise", packet["suggested_actions"])

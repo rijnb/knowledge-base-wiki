@@ -17,22 +17,24 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class DriftDetectionTests(VaultFixtureMixin, unittest.TestCase):
-    def test_detects_newer_related_raw_note_than_checked_block(self):
+    def test_detects_newer_related_raw_note_than_verified_page(self):
         self.write(
             "wiki/concepts/Concept.md",
-            """# Concept
+            """---
+sources:
+  - id: s1
+    resource: "raw/notes/old-note.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-01-01
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-01-10
+---
 
-Current claim. ^claim-01
+# Concept
 
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     sources: [raw:old-note#b1]
->     observed: 2026-01-01
->     checked: 2026-01-10
->     status: current
->     confidence: medium
+Current claim.
 """,
         )
         self.write(
@@ -72,7 +74,7 @@ This follow-up is about [[Legacy Concept]].
         candidate = detect_drift(self.root)["candidates"][0]
 
         self.assertEqual(candidate["page"], "wiki/concepts/Legacy Concept.md")
-        self.assertIn("legacy-page-no-block-provenance", candidate["reasons"])
+        self.assertIn("no-page-provenance", candidate["reasons"])
         self.assertEqual(candidate["related_raw_count"], 1)
 
     def test_ambiguous_page_title_suppresses_raw_signal(self):

@@ -44,10 +44,8 @@ def main() -> int:
         print("Freshness inventory")
         print(f"  wiki pages               : {summary['wiki_pages']}")
         print(f"  raw notes                : {summary['raw_notes']}")
-        print(f"  canonical blocks         : {summary['canonical_blocks']}")
-        print(f"  blocks with provenance   : {summary['blocks_with_provenance']}")
-        print(f"  blocks without provenance: {summary['blocks_without_provenance']}")
-        print(f"  legacy-inferred pages    : {summary['legacy_inferred_pages']}")
+        print(f"  pages with provenance    : {summary['pages_with_provenance']}")
+        print(f"  pages without provenance : {summary['pages_without_provenance']}")
         print(f"  validation issues        : {summary['validation_issues']}")
     return 0
 

@@ -70,27 +70,14 @@ def _relation_index(root: Path, raw_notes: list[dict[str, Any]]) -> dict[str, li
 
 
 def _page_checked(page: dict[str, Any]) -> str | None:
-    return _latest_date([
-        block.get("checked")
-        for block in page.get("blocks", [])
-        if isinstance(block.get("checked"), str)
-    ])
+    checked = page.get("checked")
+    return checked if isinstance(checked, str) else None
 
 
 def _status_reasons(page: dict[str, Any]) -> tuple[int, list[str]]:
-    reasons: list[str] = []
-    score = 0
-    statuses = {block.get("status") for block in page.get("blocks", [])}
-    if "disputed" in statuses:
-        score += 30
-        reasons.append("disputed-block")
-    if "stale" in statuses:
-        score += 25
-        reasons.append("stale-block")
-    if "superseded" in statuses:
-        score += 15
-        reasons.append("superseded-block")
-    return score, reasons
+    if page.get("status") == "stale":
+        return 25, ["stale-page"]
+    return 0, []
 
 
 def _candidate(
@@ -115,16 +102,9 @@ def _candidate(
     score = 0
     reasons: list[str] = []
 
-    if page.get("blocks"):
-        without_provenance = [
-            block for block in page["blocks"] if not block.get("has_provenance")
-        ]
-        if without_provenance:
-            score += 20
-            reasons.append("blocks-without-provenance")
-    else:
+    if not page.get("has_provenance"):
         score += 35
-        reasons.append("legacy-page-no-block-provenance")
+        reasons.append("no-page-provenance")
 
     if title_is_ambiguous:
         reasons.append("ambiguous-title")

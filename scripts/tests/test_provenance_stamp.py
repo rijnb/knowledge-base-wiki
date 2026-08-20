@@ -1,4 +1,4 @@
-"""Tests for minimal provenance status stamping."""
+"""Tests for minimal frontmatter provenance stamping."""
 
 import json
 import subprocess
@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from _vault_fixture import VaultFixtureMixin  # noqa: E402
-from lib.provenance import parse_provenance_callout, validate_provenance  # noqa: E402
+from lib.provenance import parse_provenance, validate_provenance  # noqa: E402
 from lib.provenance_stamp import StampSpec, load_stamp_specs, stamp_content  # noqa: E402
 
 
@@ -18,8 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ProvenanceStampTests(unittest.TestCase):
-    def test_stamps_status_section_and_minimal_callout(self):
-        content, block_id = stamp_content(
+    def test_stamps_frontmatter_provenance_on_page_without_frontmatter(self):
+        content = stamp_content(
             "# Legacy\n\nOld claim.\n",
             StampSpec(
                 page="wiki/concepts/Legacy.md",
@@ -28,49 +28,65 @@ class ProvenanceStampTests(unittest.TestCase):
                 sources=("raw/notes/source.md",),
                 latest_related_raw_date="2015-07-01",
             ),
+            checked="2026-06-24",
         )
 
-        self.assertEqual(block_id, "freshness-status")
-        self.assertIn("## Freshness Status", content)
-        self.assertIn("^freshness-status", content)
-        parsed = parse_provenance_callout(content)
-        self.assertEqual(parsed["migration_status"], "legacy-inferred-minimal")
-        self.assertEqual(parsed["blocks"]["freshness-status"]["status"], "current")
-        self.assertEqual(parsed["blocks"]["freshness-status"]["sources"], ["raw/notes/source.md"])
-        self.assertEqual(parsed["blocks"]["freshness-status"]["review_mode"], "historical")
+        self.assertTrue(content.startswith("---\n"))
+        self.assertIn("# Legacy", content)
+        parsed = parse_provenance(content)
+        self.assertEqual(
+            parsed["sources"],
+            [{"id": "s1", "resource": "raw/notes/source.md"}],
+        )
+        self.assertEqual(
+            parsed["generated"],
+            {"by": "agent:wiki-ingest", "at": "2026-06-24"},
+        )
+        self.assertEqual(parsed["verified"], [])
         self.assertEqual(validate_provenance(content), [])
 
-    def test_stamps_currentness_review_mode(self):
-        content, _ = stamp_content(
-            "# Current Topic\n\nClaim.\n",
+    def test_stamps_into_existing_frontmatter(self):
+        content = stamp_content(
+            "---\ntype: concept\nstate: active\n---\n\n# Topic\n\nClaim.\n",
             StampSpec(
-                page="wiki/systems/Current Topic.md",
+                page="wiki/systems/Topic.md",
                 mode="needs-currentness-answer",
-                reason="Current system state needs owner confirmation.",
-                sources=("raw/notes/current.md",),
+                sources=("raw/notes/a.md", "raw/notes/b.md"),
             ),
+            checked="2026-06-24",
         )
 
-        parsed = parse_provenance_callout(content)
-        block = parsed["blocks"]["freshness-status"]
-        self.assertEqual(block["review_mode"], "needs-currentness-answer")
-        self.assertIn("authoritative currentness answer", content)
+        self.assertIn("type: concept", content)
+        parsed = parse_provenance(content)
+        self.assertEqual(
+            [entry["id"] for entry in parsed["sources"]],
+            ["s1", "s2"],
+        )
+        self.assertEqual(parsed["generated"]["at"], "2026-06-24")
+        self.assertEqual(validate_provenance(content), [])
+
+    def test_optionally_records_a_verified_entry(self):
+        content = stamp_content(
+            "# Topic\n\nClaim.\n",
+            StampSpec(page="wiki/concepts/Topic.md", sources=("raw/notes/a.md",)),
+            checked="2026-06-24",
+            verified=True,
+        )
+
+        parsed = parse_provenance(content)
+        self.assertEqual(
+            parsed["verified"],
+            [{"by": "agent:wiki-freshness", "at": "2026-06-24"}],
+        )
         self.assertEqual(validate_provenance(content), [])
 
     def test_refuses_page_that_already_has_provenance(self):
-        content = """# Covered
-
-Claim. ^claim
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim:
->     checked: 2026-06-24
->     status: current
-"""
-        with self.assertRaises(ValueError):
-            stamp_content(content, StampSpec(page="wiki/concepts/Covered.md"))
+        for existing in (
+            "---\ngenerated:\n  by: \"agent:wiki-ingest\"\n  at: 2026-06-24\n---\n\n# Covered\n",
+            "---\nsources:\n  - id: s1\n    resource: \"raw/notes/a.md\"\n---\n\n# Covered\n",
+        ):
+            with self.assertRaises(ValueError):
+                stamp_content(existing, StampSpec(page="wiki/concepts/Covered.md"))
 
 
 class ProvenanceStampCliTests(VaultFixtureMixin, unittest.TestCase):
@@ -115,6 +131,8 @@ class ProvenanceStampCliTests(VaultFixtureMixin, unittest.TestCase):
                 str(ROOT / "scripts/system/wiki-provenance-stamp-status.py"),
                 "--root",
                 str(self.root),
+                "--checked",
+                "2026-06-24",
                 ".wiki-scratch/auto-ok.json",
             ],
             text=True,
@@ -125,7 +143,10 @@ class ProvenanceStampCliTests(VaultFixtureMixin, unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("stamped: 1", result.stdout)
-        self.assertIn("legacy-inferred-minimal", self.read("wiki/concepts/Legacy.md"))
+        stamped = self.read("wiki/concepts/Legacy.md")
+        parsed = parse_provenance(stamped)
+        self.assertEqual(parsed["generated"], {"by": "agent:wiki-ingest", "at": "2026-06-24"})
+        self.assertEqual(parsed["sources"][0]["resource"], "raw/notes/source.md")
 
     def test_cli_rejects_manifest_page_outside_wiki_root(self):
         outside = self.root.parent / f"{self.root.name}-outside.md"
@@ -159,7 +180,7 @@ class ProvenanceStampCliTests(VaultFixtureMixin, unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("invalid-path", result.stdout)
-        self.assertNotIn("legacy-inferred-minimal", outside.read_text(encoding="utf-8"))
+        self.assertNotIn("generated:", outside.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -46,19 +46,37 @@ The packet includes current block inventory, provenance validation, drift reason
 - Preserve useful human-written prose.
 - Preserve stable block IDs when the meaning remains continuous.
 - Add new block IDs only to meaningful claims, decisions, open questions, tables, or historical notes.
-- Add one compact `> [!provenance]- Provenance` callout if the page lacks one.
-- Use `provenance_quality: inferred` when source lineage is reconstructed during migration.
-- `migration_status: legacy-inferred-minimal` is only for classifier-reviewed status/caution stamps; it reduces query-time risk but does not count as full block-level curation.
+- Ensure the page has OKF v0.2 provenance frontmatter (`sources:`, `generated:`, `verified:`); add it if the page lacks it. The legacy provenance callouts are abolished — if one remains, fold its source lineage into the `sources:` list and delete the callout.
+- Ensure a one-line `description:` frontmatter field exists (plain text, wikilinks allowed, ~160 chars max, YAML double-quoted); write or refresh it as part of curation.
+- Add the raw notes you used as `sources:` entries (`- id: s<N>` / `resource: "raw/..."`).
+- **Per-claim source footnotes:** cite each claim with `[^s<N>]` refs placed before its `^block-id` anchor (anchor stays last), and keep the footnote-definitions block at the end of the page in sync — one `[^s<N>]: [[<resource>]]` line per referenced id.
+- **When the human curates/confirms the page, APPEND a `verified:` entry with `by: "human:rijn.buve"` and `at: <today, YYYY-MM-DD>`.** Never remove existing `verified:` entries; `human:*` actors are the human-reviewed tier, `agent:*` ids the machine tier.
 - Prefer local edits: confirm, revise, split, supersede, move to history, or delete stale text that has no audit value.
 - Keep old material only if it explains history, rationale, or past assumptions.
-- Durable `status: superseded` requires clear evidence and a `superseded_by` target.
-- If evidence conflicts but is unresolved, mark the block `status: disputed` instead of forcing a single answer.
+- Durable `state: superseded` requires clear evidence and a `superseded_by` target.
+- If evidence conflicts but is unresolved, mark the contradiction in prose and set frontmatter `contradiction: true` instead of forcing a single answer.
 
 ## Recommended page shape
 
 Use the existing page structure when it is already clear. When a page needs restructuring, prefer:
 
 ```markdown
+---
+type: concept
+description: "One-line summary of the page, ~160 chars max."
+sources:
+  - id: s1
+    resource: "raw/notes/2024-04-04 Foo.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2024-04-04
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-06-25
+  - by: "human:rijn.buve"
+    at: YYYY-MM-DD
+stale_after: 2027-01-01
+---
 # Page Title
 
 ## Current Understanding
@@ -76,19 +94,9 @@ What this means operationally. ^claim-implication-01
 ## Historical Context
 
 Past framing that remains useful. ^claim-history-01
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> migration_status: legacy-inferred
-> blocks:
->   claim-current-01:
->     sources: [raw:example#b1]
->     observed: YYYY-MM-DD
->     checked: YYYY-MM-DD
->     status: current
->     confidence: medium
->     provenance_quality: inferred
 ```
+
+`stale_after` is optional. `^block-id` anchors remain allowed as plain anchors for citation, but carry no per-block metadata.
 
 ## Verification
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a full block-provenance coverage backlog for wiki/ pages."""
+"""Build a full frontmatter-provenance coverage backlog for wiki/ pages."""
 
 import argparse
 import json
@@ -17,7 +17,7 @@ def _default_root() -> Path:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Report block-provenance coverage for all wiki/ pages.",
+        description="Report frontmatter-provenance coverage for all wiki/ pages.",
     )
     parser.add_argument("--root", default=None, help="Vault root to scan.")
     parser.add_argument(

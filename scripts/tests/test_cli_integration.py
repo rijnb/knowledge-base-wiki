@@ -35,13 +35,16 @@ class CliIntegrationTests(unittest.TestCase):
 
     def test_clean_vault_exits_zero(self):
         self.write("wiki/concepts/a.md",
+                   "---\ntype: concept\ndescription: Page a\n---\n"
                    "This page has plenty of real prose words here.\n\nSee also [[b]].\n")
         self.write("wiki/concepts/b.md",
+                   "---\ntype: concept\ndescription: Page b\n---\n"
                    "This page also has plenty of real prose words here.\n\nSee also [[a]].\n")
         proc = self.run_doctor()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["summary"]["broken"], 0)
+        self.assertEqual(payload["frontmatter_summary"]["frontmatter_errors"], 0)
         self.assertEqual(payload["recommendations"][0]["id"], "freshness-check")
         self.assertEqual(payload["recommendations"][0]["skill"], "wiki-freshness")
 
@@ -59,9 +62,11 @@ class CliIntegrationTests(unittest.TestCase):
         # Regression for Bug 4: a fully-fixed run must report 0 remaining broken
         # and exit 0, with the file actually rewritten on disk.
         self.write("wiki/concepts/foo_ bar.md",
+                   "---\ntype: concept\ndescription: Target page\n---\n"
                    "Target page with plenty of prose words to avoid the stub check entirely.\n")
         page = self.write(
             "wiki/concepts/a.md",
+            "---\ntype: concept\ndescription: Source page\n---\n"
             "Plenty of additional prose words here to dodge any stub flagging at all.\n"
             "\nThis sentence references [[foo: bar]] mid sentence for the link test.\n",
         )
@@ -74,6 +79,22 @@ class CliIntegrationTests(unittest.TestCase):
         # No remaining broken-link issue from the vault scan. (Exit may still be
         # non-zero if other issue classes exist, but here there are none.)
         self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_frontmatter_error_exits_one_with_json_entry(self):
+        self.write("wiki/concepts/a.md",
+                   "---\ntype: gadget\ndescription: Mistyped page\n---\n"
+                   "Plenty of real prose words so this is clearly not a stub page.\n"
+                   "\nSee also [[b]].\n")
+        self.write("wiki/concepts/b.md",
+                   "---\ntype: concept\ndescription: Page b\n---\n"
+                   "This page also has plenty of real prose words here.\n\nSee also [[a]].\n")
+        proc = self.run_doctor()
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["frontmatter_summary"]["frontmatter_errors"], 1)
+        entry = payload["frontmatter_issues"][0]
+        self.assertEqual(entry["file"], "wiki/concepts/a.md")
+        self.assertEqual(entry["severity"], "error")
 
     def test_misplaced_attachment_exits_one_with_json_entry(self):
         (self.root / "raw/other/_resources").mkdir(parents=True)

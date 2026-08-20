@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .checks.attachments import check_misplaced_attachments
+from .checks.frontmatter import check_frontmatter
 from .checks.legacy import check_legacy_converted, run_migration
 from .checks.loose import check_loose_files
 from .checks.orphans import check_orphans, fix_orphans
@@ -290,6 +291,10 @@ def main():
         result["stubs"] = stub_result["stubs"]
         result["stub_summary"] = stub_result["summary"]
 
+        frontmatter_result = check_frontmatter(root, args.quiet)
+        result["frontmatter_issues"] = frontmatter_result["frontmatter_issues"]
+        result["frontmatter_summary"] = frontmatter_result["summary"]
+
         # After check_vault: with --fix-simple-errors this reports what REMAINS loose.
         loose_result = check_loose_files(root, args.quiet)
         result["loose_files"] = loose_result["loose_files"]
@@ -311,6 +316,7 @@ def main():
         result["summary"]["broken"] > 0
         or result.get("orphan_summary", {}).get("orphans_found", 0) > 0
         or result.get("stub_summary", {}).get("stubs_found", 0) > 0
+        or result.get("frontmatter_summary", {}).get("frontmatter_errors", 0) > 0
         or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
         or result.get("loose_summary", {}).get("loose_found", 0) > 0
         or result.get("attachment_summary", {}).get("misplaced_found", 0) > 0

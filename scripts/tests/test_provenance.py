@@ -1,4 +1,4 @@
-"""Tests for kb-prov-v1 block provenance parsing and validation."""
+"""Tests for frontmatter provenance parsing and validation (OKF v0.2)."""
 
 import json
 import subprocess
@@ -12,7 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _vault_fixture import VaultFixtureMixin  # noqa: E402
 from lib.provenance import (  # noqa: E402
     extract_block_ids,
-    parse_provenance_callout,
+    parse_provenance,
+    provenance_dates,
     validate_provenance,
 )
 
@@ -20,30 +21,31 @@ from lib.provenance import (  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 
 
-VALID_PAGE = """# Concept
+VALID_PAGE = """---
+type: concept
+tags: [tomtom, maps]
+state: active
+sources:
+  - id: s1
+    resource: "raw/notes/2024-04-04 Foo.md"
+  - id: s2
+    resource: "raw/notes/2026-06-02 Bar.md"
+    title: "Bar meeting"
+    last_modified: 2026-06-02
+generated:
+  by: "agent:wiki-ingest"
+  at: 2024-04-04
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-06-25
+  - by: "human:ribu"
+    at: 2026-07-01
+stale_after: 2027-01-01
+---
+
+# Concept
 
 Current ownership sits with the map enrichment flow. ^claim-owner-01
-
-Older ownership sat with the prototype team. ^claim-owner-old
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> migration_status: legacy-inferred
-> blocks:
->   claim-owner-01:
->     sources: [raw:meeting-2026-06-02#b08]
->     observed: 2026-06-02
->     checked: 2026-06-20
->     status: current
->     confidence: medium
->     provenance_quality: inferred
->   claim-owner-old:
->     sources: [raw:meeting-2025-12-12#b03]
->     observed: 2025-12-12
->     checked: 2026-06-20
->     status: superseded
->     confidence: high
->     superseded_by: claim-owner-01
 """
 
 
@@ -67,121 +69,54 @@ Another claim. ^claim-second
         self.assertEqual(extract_block_ids(content), {"claim-dup": 2})
 
 
-class ProvenanceCalloutParsingTests(unittest.TestCase):
-    def test_parses_page_level_callout(self):
-        parsed = parse_provenance_callout(VALID_PAGE)
+class ProvenanceParsingTests(unittest.TestCase):
+    def test_parses_frontmatter_provenance(self):
+        parsed = parse_provenance(VALID_PAGE)
+
         self.assertIsNotNone(parsed)
-        self.assertEqual(parsed["schema"], "kb-prov-v1")
-        self.assertEqual(parsed["migration_status"], "legacy-inferred")
         self.assertEqual(
-            parsed["blocks"]["claim-owner-01"]["sources"],
-            ["raw:meeting-2026-06-02#b08"],
+            parsed["sources"][0],
+            {"id": "s1", "resource": "raw/notes/2024-04-04 Foo.md"},
         )
-        self.assertEqual(parsed["blocks"]["claim-owner-01"]["checked"], "2026-06-20")
-        self.assertIsNone(parse_provenance_callout("# No provenance\n\nBody\n"))
-
-    def test_parses_quoted_source_paths_containing_commas(self):
-        content = """# Concept
-
-Claim. ^claim-01
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     sources: ["raw/notes/2015 Speed Cam, NDS and Perseus Discussion.md", raw/notes/Other.md]
->     status: current
-"""
-        parsed = parse_provenance_callout(content)
-
+        self.assertEqual(parsed["sources"][1]["title"], "Bar meeting")
+        self.assertEqual(parsed["sources"][1]["last_modified"], "2026-06-02")
         self.assertEqual(
-            parsed["blocks"]["claim-01"]["sources"],
+            parsed["generated"],
+            {"by": "agent:wiki-ingest", "at": "2024-04-04"},
+        )
+        self.assertEqual(
+            parsed["verified"],
             [
-                "raw/notes/2015 Speed Cam, NDS and Perseus Discussion.md",
-                "raw/notes/Other.md",
+                {"by": "agent:wiki-freshness", "at": "2026-06-25"},
+                {"by": "human:ribu", "at": "2026-07-01"},
             ],
         )
+        self.assertEqual(parsed["stale_after"], "2027-01-01")
 
-    def test_parses_all_quoted_source_paths(self):
-        content = """# Concept
+    def test_returns_none_without_provenance_keys(self):
+        self.assertIsNone(parse_provenance("# No frontmatter\n\nBody\n"))
+        self.assertIsNone(parse_provenance("---\ntype: concept\nstate: active\n---\n\n# Page\n"))
 
-Claim. ^claim-01
+    def test_missing_optional_keys_default_to_empty(self):
+        content = """---
+generated:
+  by: "agent:wiki-ingest"
+  at: 2024-04-04
+---
 
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     sources: ["raw/notes/First.md", "raw/notes/Second.md"]
->     status: current
+# Page
 """
-        parsed = parse_provenance_callout(content)
+        parsed = parse_provenance(content)
 
-        self.assertEqual(
-            parsed["blocks"]["claim-01"]["sources"],
-            ["raw/notes/First.md", "raw/notes/Second.md"],
-        )
+        self.assertEqual(parsed["sources"], [])
+        self.assertEqual(parsed["verified"], [])
+        self.assertIsNone(parsed["stale_after"])
 
-    def test_parses_unquoted_source_paths_containing_commas(self):
-        content = """# Concept
+    def test_provenance_dates_returns_generated_and_latest_verified(self):
+        parsed = parse_provenance(VALID_PAGE)
 
-Claim. ^claim-01
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     sources: [raw/notes/2015 Speed Cam, NDS and Perseus Discussion.md, raw/notes/Other.md]
->     status: current
-"""
-        parsed = parse_provenance_callout(content)
-
-        self.assertEqual(
-            parsed["blocks"]["claim-01"]["sources"],
-            [
-                "raw/notes/2015 Speed Cam, NDS and Perseus Discussion.md",
-                "raw/notes/Other.md",
-            ],
-        )
-
-    def test_splits_unprefixed_source_identifiers(self):
-        # Sources without a recognized path/scheme prefix must still split on
-        # the list comma instead of being merged into one mangled element.
-        content = """# Concept
-
-Claim. ^claim-01
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     sources: [alpha-note, beta-note]
->     status: current
-"""
-        parsed = parse_provenance_callout(content)
-
-        self.assertEqual(
-            parsed["blocks"]["claim-01"]["sources"],
-            ["alpha-note", "beta-note"],
-        )
-
-    def test_splits_scheme_prefixed_source_identifiers(self):
-        content = """# Concept
-
-Claim. ^claim-01
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     sources: [slack:C0123, confluence:42]
->     status: current
-"""
-        parsed = parse_provenance_callout(content)
-
-        self.assertEqual(
-            parsed["blocks"]["claim-01"]["sources"],
-            ["slack:C0123", "confluence:42"],
-        )
+        self.assertEqual(provenance_dates(parsed), ("2024-04-04", "2026-07-01"))
+        self.assertEqual(provenance_dates(None), (None, None))
 
 
 class ProvenanceValidationTests(unittest.TestCase):
@@ -191,67 +126,116 @@ class ProvenanceValidationTests(unittest.TestCase):
     def test_accepts_valid_provenance(self):
         self.assertEqual(validate_provenance(VALID_PAGE), [])
 
-    def test_reports_provenance_block_missing_from_page(self):
-        content = VALID_PAGE.replace(" ^claim-owner-01", "")
-        self.assertIn("missing-block-id", self.issue_codes(content))
+    def test_page_without_provenance_yields_no_issues(self):
+        self.assertEqual(validate_provenance("# Page\n\nA claim. ^claim-01\n"), [])
 
     def test_reports_duplicate_block_ids(self):
         content = VALID_PAGE + "\nDuplicate paragraph. ^claim-owner-01\n"
         self.assertIn("duplicate-block-id", self.issue_codes(content))
 
-    def test_reports_invalid_status_and_confidence(self):
-        content = VALID_PAGE.replace("status: current", "status: fresh", 1)
-        content = content.replace("confidence: medium", "confidence: certain", 1)
-        codes = self.issue_codes(content)
-        self.assertIn("invalid-status", codes)
-        self.assertIn("invalid-confidence", codes)
+    def test_reports_source_without_id(self):
+        content = VALID_PAGE.replace("  - id: s1\n    resource:", "  - resource:", 1)
+        self.assertIn("missing-source-id", self.issue_codes(content))
 
-    def test_superseded_block_requires_target(self):
-        content = VALID_PAGE.replace(">     superseded_by: claim-owner-01\n", "")
-        self.assertIn("missing-superseded-by", self.issue_codes(content))
+    def test_reports_duplicate_source_ids(self):
+        content = VALID_PAGE.replace("- id: s2", "- id: s1", 1)
+        self.assertIn("duplicate-source-id", self.issue_codes(content))
 
-    def test_observed_must_not_be_after_checked(self):
-        content = VALID_PAGE.replace("observed: 2026-06-02", "observed: 2026-07-02", 1)
-        self.assertIn("date-order", self.issue_codes(content))
+    def test_reports_source_without_resource(self):
+        content = VALID_PAGE.replace('    resource: "raw/notes/2024-04-04 Foo.md"\n', "", 1)
+        self.assertIn("missing-source-resource", self.issue_codes(content))
 
-    def test_reports_malformed_date(self):
-        content = VALID_PAGE.replace("checked: 2026-06-20", "checked: soon", 1)
-        self.assertIn("invalid-date", self.issue_codes(content))
+    def test_reports_generated_without_by_or_at(self):
+        content = VALID_PAGE.replace('  by: "agent:wiki-ingest"\n', "", 1)
+        self.assertIn("missing-generated-by", self.issue_codes(content))
+        content = VALID_PAGE.replace("  at: 2024-04-04\n", "", 1)
+        self.assertIn("missing-generated-at", self.issue_codes(content))
 
-    def test_warns_when_claim_block_has_no_sources(self):
-        content = """# Concept
+    def test_reports_verified_entry_without_at(self):
+        content = VALID_PAGE.replace("    at: 2026-06-25\n", "", 1)
+        self.assertIn("missing-verified-at", self.issue_codes(content))
 
-Current claim. ^claim-01
+    def test_reports_malformed_dates(self):
+        for broken in (
+            VALID_PAGE.replace("at: 2024-04-04", "at: soon", 1),
+            VALID_PAGE.replace("at: 2026-06-25", "at: 2026-6-25", 1),
+            VALID_PAGE.replace("stale_after: 2027-01-01", "stale_after: someday", 1),
+        ):
+            self.assertIn("invalid-date", self.issue_codes(broken))
 
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     checked: 2026-06-20
->     status: current
->     confidence: medium
+    def test_generated_at_may_be_later_than_verified_at(self):
+        # There is deliberately no date-order rule between generated and verified.
+        content = VALID_PAGE.replace("at: 2024-04-04", "at: 2026-12-31", 1)
+        self.assertEqual(validate_provenance(content), [])
+
+    def test_warns_when_generated_page_lists_no_sources(self):
+        content = """---
+generated:
+  by: "agent:wiki-ingest"
+  at: 2024-04-04
+---
+
+# Page
 """
         issues = validate_provenance(content, path="wiki/concepts/x.md")
         missing = [issue for issue in issues if issue.code == "missing-sources"]
         self.assertEqual(len(missing), 1)
         self.assertEqual(missing[0].severity, "warning")
 
-    def test_minimal_stamp_is_exempt_from_missing_sources_warning(self):
-        content = """# Concept
 
-Freshness only. ^freshness-status
+FOOTNOTE_PAGE = VALID_PAGE.replace(
+    "Current ownership sits with the map enrichment flow. ^claim-owner-01",
+    "Current ownership sits with the map enrichment flow. [^s1] ^claim-owner-01",
+) + "\n[^s1]: [[raw/notes/2024-04-04 Foo.md]]\n"
 
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> migration_status: legacy-inferred-minimal
-> blocks:
->   freshness-status:
->     checked: 2026-06-20
->     status: current
->     confidence: medium
-"""
-        codes = self.issue_codes(content)
-        self.assertNotIn("missing-sources", codes)
+
+class FootnoteConsistencyTests(unittest.TestCase):
+    def issues(self, content: str) -> dict[str, str]:
+        return {
+            issue.code: issue.severity
+            for issue in validate_provenance(content, path="wiki/concepts/x.md")
+        }
+
+    def test_accepts_consistent_footnotes(self):
+        self.assertEqual(self.issues(FOOTNOTE_PAGE), {})
+
+    def test_reports_undefined_footnote_ref(self):
+        content = FOOTNOTE_PAGE.replace(
+            "\n[^s1]: [[raw/notes/2024-04-04 Foo.md]]\n", ""
+        )
+        self.assertEqual(self.issues(content).get("undefined-footnote-ref"), "error")
+
+    def test_reports_footnote_with_unknown_source_id(self):
+        content = FOOTNOTE_PAGE.replace("[^s1]", "[^s9]")
+        self.assertEqual(self.issues(content).get("unknown-footnote-id"), "error")
+
+    def test_warns_on_unreferenced_footnote_definition(self):
+        content = FOOTNOTE_PAGE + "[^s2]: [[raw/notes/2026-06-02 Bar.md]]\n"
+        self.assertEqual(
+            self.issues(content).get("unreferenced-footnote-def"), "warning"
+        )
+
+    def test_reports_definition_resource_mismatch(self):
+        content = FOOTNOTE_PAGE.replace(
+            "[^s1]: [[raw/notes/2024-04-04 Foo.md]]",
+            "[^s1]: [[raw/notes/2024-04-04 Wrong.md]]",
+        )
+        self.assertEqual(
+            self.issues(content).get("footnote-resource-mismatch"), "error"
+        )
+
+    def test_ignores_footnote_examples_in_code(self):
+        content = FOOTNOTE_PAGE + (
+            "\n```markdown\nExample ref. [^s9]\n```\n\n"
+            "Inline example: `[^s8]` stays out of scope.\n"
+        )
+        self.assertEqual(self.issues(content), {})
+
+    def test_ignores_non_source_footnotes(self):
+        content = FOOTNOTE_PAGE + (
+            "\nProse footnote. [^note]\n\n[^note]: An ordinary aside.\n"
+        )
+        self.assertEqual(self.issues(content), {})
 
 
 class ProvenanceLintCliTests(VaultFixtureMixin, unittest.TestCase):
@@ -281,32 +265,47 @@ class ProvenanceLintCliTests(VaultFixtureMixin, unittest.TestCase):
         self.assertEqual(payload["summary"]["issues"], 0)
         self.assertEqual(payload["issues"], [])
 
+    def test_cli_accepts_page_without_provenance(self):
+        self.write("wiki/concepts/Plain.md", "# Plain\n\nNo provenance here.\n")
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["issues"], [])
+
     def test_cli_returns_nonzero_for_invalid_page(self):
         self.write(
             "wiki/concepts/Concept.md",
-            VALID_PAGE.replace(" ^claim-owner-01", ""),
+            VALID_PAGE.replace("at: 2024-04-04", "at: soon", 1),
         )
         result = self.run_cli()
         self.assertEqual(result.returncode, 1)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["summary"]["files_checked"], 1)
         self.assertEqual(payload["summary"]["issues"], 1)
-        self.assertEqual(payload["issues"][0]["code"], "missing-block-id")
+        self.assertEqual(payload["issues"][0]["code"], "invalid-date")
+
+    def test_cli_flags_legacy_callout_residue(self):
+        self.write(
+            "wiki/concepts/Legacy.md",
+            "# Legacy\n\n> [!provenance]- Provenance\n> schema: kb-prov-v1\n",
+        )
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["issues"][0]["code"], "legacy-provenance-callout")
 
     def test_cli_returns_zero_when_only_warnings(self):
         self.write(
             "wiki/concepts/Concept.md",
-            """# Concept
+            """---
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-06-20
+---
+
+# Concept
 
 Current claim. ^claim-01
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   claim-01:
->     checked: 2026-06-20
->     status: current
->     confidence: medium
 """,
         )
         result = self.run_cli()

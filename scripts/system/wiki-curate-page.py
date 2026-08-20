@@ -50,7 +50,7 @@ def main() -> int:
         print("Curation packet")
         print(f"  page             : {page['path']}")
         print(f"  title            : {page['title']}")
-        print(f"  blocks           : {len(page['blocks'])}")
+        print(f"  sources          : {len(page['sources'])}")
         print(f"  validation issues: {len(page['validation_issues'])}")
         print(f"  drift score      : {drift['score']}")
         print(f"  drift reasons    : {', '.join(drift['reasons']) or '-'}")

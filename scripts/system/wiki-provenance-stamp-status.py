@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply minimal query-time provenance status blocks to reviewed pages."""
+"""Apply minimal frontmatter provenance stamps to reviewed pages."""
 
 import argparse
 import json
@@ -17,7 +17,7 @@ def _default_root() -> Path:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Stamp reviewed legacy pages with a minimal freshness status block.",
+        description="Stamp reviewed legacy pages with minimal frontmatter provenance.",
     )
     parser.add_argument(
         "manifest",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate kb-prov-v1 block provenance in wiki/ pages."""
+"""Validate frontmatter provenance (OKF v0.2) in wiki/ pages."""
 
 import argparse
 import json
@@ -32,6 +32,13 @@ def lint(root: Path) -> dict:
                 "severity": "error",
             })
             continue
+        if "kb-prov-v1" in content:
+            issues.append({
+                "code": "legacy-provenance-callout",
+                "message": "Page still contains legacy kb-prov-v1 provenance markup.",
+                "path": rel,
+                "severity": "error",
+            })
         issues.extend(
             issue.as_dict()
             for issue in validate_provenance(content, path=rel)
@@ -50,7 +57,7 @@ def lint(root: Path) -> dict:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Validate kb-prov-v1 provenance callouts in wiki/ pages.",
+        description="Validate frontmatter provenance in wiki/ pages.",
     )
     parser.add_argument(
         "--root",

@@ -31,14 +31,11 @@ def _raw_lookup(inventory: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def _suggested_actions(page: dict[str, Any], drift: dict[str, Any] | None) -> list[str]:
     actions = ["confirm", "revise", "split", "move-to-history"]
-    statuses = {block.get("status") for block in page.get("blocks", [])}
     reasons = set(drift.get("reasons", []) if drift else [])
-    if "superseded" in statuses or "newer-related-raw" in reasons:
+    if "newer-related-raw" in reasons:
         actions.append("supersede")
-    if "disputed" in statuses:
-        actions.append("resolve-dispute")
-    if not page.get("blocks"):
-        actions.append("add-block-provenance")
+    if not page.get("has_provenance"):
+        actions.append("add-provenance")
     return actions
 
 

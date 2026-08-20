@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from _vault_fixture import VaultFixtureMixin  # noqa: E402
+from lib.checks.frontmatter import check_frontmatter  # noqa: E402
 from lib.checks.legacy import check_legacy_converted  # noqa: E402
 from lib.checks.orphans import check_orphans  # noqa: E402
 from lib.checks.stubs import check_stubs  # noqa: E402
@@ -148,6 +149,81 @@ class CheckStubsTests(VaultFixtureMixin, unittest.TestCase):
         self.write("wiki/concepts/nofm-thin.md", "two words\n")
         result = check_stubs(self.root, quiet=True)
         self.assertIn("wiki/concepts/nofm-thin.md", result["stubs"])
+
+
+class CheckFrontmatterTests(VaultFixtureMixin, unittest.TestCase):
+    def issues_for(self, rel):
+        result = check_frontmatter(self.root, quiet=True)
+        return [i for i in result["frontmatter_issues"] if i["file"] == rel]
+
+    def test_valid_page_passes(self):
+        self.write("wiki/concepts/good.md",
+                   "---\ntype: concept\ndescription: A well-formed page\n---\nbody\n")
+        result = check_frontmatter(self.root, quiet=True)
+        self.assertEqual(result["frontmatter_issues"], [])
+        self.assertEqual(result["summary"]["wiki_pages_checked"], 1)
+        self.assertEqual(result["summary"]["frontmatter_errors"], 0)
+        self.assertEqual(result["summary"]["frontmatter_warnings"], 0)
+
+    def test_missing_frontmatter_is_error(self):
+        self.write("wiki/concepts/bare.md", "just a body, no frontmatter\n")
+        issues = self.issues_for("wiki/concepts/bare.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "error")
+        self.assertIn("frontmatter", issues[0]["reason"])
+
+    def test_bad_type_is_error(self):
+        self.write("wiki/concepts/bad.md",
+                   "---\ntype: gizmo\ndescription: d\n---\nbody\n")
+        issues = self.issues_for("wiki/concepts/bad.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "error")
+        self.assertIn("gizmo", issues[0]["reason"])
+
+    def test_missing_type_is_error(self):
+        self.write("wiki/concepts/untyped.md",
+                   "---\ndescription: d\n---\nbody\n")
+        issues = self.issues_for("wiki/concepts/untyped.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "error")
+        self.assertIn("type", issues[0]["reason"])
+
+    def test_old_style_status_value_is_error(self):
+        self.write("wiki/systems/sys.md",
+                   "---\ntype: system\ndescription: d\nstatus: active\n---\nbody\n")
+        issues = self.issues_for("wiki/systems/sys.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "error")
+        self.assertIn("active", issues[0]["reason"])
+
+    def test_okf_status_value_accepted(self):
+        self.write("wiki/systems/sys.md",
+                   "---\ntype: system\ndescription: d\nstatus: stable\n---\nbody\n")
+        self.assertEqual(self.issues_for("wiki/systems/sys.md"), [])
+
+    def test_kb_prov_remnant_is_error(self):
+        self.write("wiki/concepts/prov.md",
+                   "---\ntype: concept\ndescription: d\n---\nbody kb-prov-v1 remnant\n")
+        issues = self.issues_for("wiki/concepts/prov.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "error")
+        self.assertIn("kb-prov-v1", issues[0]["reason"])
+
+    def test_missing_description_is_warning(self):
+        self.write("wiki/concepts/nodesc.md",
+                   "---\ntype: concept\n---\nbody\n")
+        issues = self.issues_for("wiki/concepts/nodesc.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "warning")
+        result = check_frontmatter(self.root, quiet=True)
+        self.assertEqual(result["summary"]["frontmatter_errors"], 0)
+        self.assertEqual(result["summary"]["frontmatter_warnings"], 1)
+
+    def test_index_md_exempt(self):
+        self.write("wiki/concepts/index.md", "no frontmatter at all\n")
+        result = check_frontmatter(self.root, quiet=True)
+        self.assertEqual(result["frontmatter_issues"], [])
+        self.assertEqual(result["summary"]["wiki_pages_checked"], 0)
 
 
 class CheckLegacyTests(VaultFixtureMixin, unittest.TestCase):

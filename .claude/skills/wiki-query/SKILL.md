@@ -28,19 +28,21 @@ This Wiki was built from notes going back to ~2006, so it mixes current and long
 Rules when answering (today's date is available in context):
 1. **Surface the date.** State the "as of" date for time-sensitive facts: "As of 2024 (per the page's `date`)…". Never present dated info as if it were necessarily current.
 2. **Flag stale data.** If `date` is more than ~2–3 years old, explicitly warn that it may be outdated and worth verifying — especially for org structure, people's roles, projects, systems, and decisions.
-3. **Prefer newer on conflict.** When two pages/sources disagree, trust the one with the more recent `date` and say which you chose and why. Note `status: superseded` / `deprecated` pages as historical.
+3. **Prefer newer on conflict.** When two pages/sources disagree, trust the one with the more recent `date` and say which you chose and why. Note `state: superseded` / `deprecated` pages as historical.
 4. **Distrust low confidence.** For `date_confidence: low`, caveat that the date is uncertain.
 5. **Call out era-mixing.** For a wide `date_span`, separate "historically" from "more recently" rather than blending them.
 6. **Unknown freshness.** If a page has no `date` field, its recency is unknown — say so rather than assuming it is current.
 
 Prefer recent sources when gathering evidence, but don't discard old pages — they're valuable for history, just label them as such.
 
-## Block provenance and query-time freshness
+## Provenance and query-time freshness
 
-Some canonical Wiki pages now carry block-level provenance:
+Canonical Wiki pages carry provenance in YAML frontmatter (OKF v0.2; the legacy provenance callouts are abolished):
 
-- Claim paragraphs use stable Obsidian block IDs such as `^claim-owner-01`.
-- A page-level `> [!provenance]` callout with `schema: kb-prov-v1` maps block IDs to sources, `observed`, `checked`, `status`, `confidence`, `superseded_by`, and contradiction metadata.
+- `sources:` lists the raw evidence (`- id: s1` / `resource: "raw/..."`); `generated:` records who/when created the content (`by: "agent:wiki-ingest"`, `at: YYYY-MM-DD`); `verified:` is an append-only list of checks (`by`, `at`); `stale_after:` is an optional expiry date.
+- **Trust tiers come from the `by:` prefix of `verified:` entries:** `human:*` (e.g. `human:rijn.buve`) = human-reviewed tier, strongest; `agent:*` = machine tier; a page with only `generated:` is unverified — weakest.
+- Freshness derives from `generated.at` and the **latest** `verified.at`; a passed `stale_after` means treat the page as stale.
+- Claim paragraphs may still use stable Obsidian block IDs such as `^claim-owner-01` — plain anchors for citation, with no per-block metadata.
 - `scripts/system/wiki-provenance-lint.py` validates that metadata.
 - `scripts/system/wiki-freshness-inventory.py` builds a read-only inventory of canonical blocks and raw notes.
 - `scripts/system/wiki-drift-detect.py` finds pages that likely need one-page curation.
@@ -49,17 +51,17 @@ Some canonical Wiki pages now carry block-level provenance:
 
 For current, recent, policy, people, project, system, cost, customer, or otherwise freshness-sensitive questions, build the freshness packet automatically after retrieval. Do not ask the user to remember the script.
 
-When retrieved pages contain `kb-prov-v1` or the question is freshness-sensitive:
+When retrieved pages carry provenance frontmatter (`sources` / `generated` / `verified`) or the question is freshness-sensitive:
 
 1. **Build a freshness packet after retrieval.** Run `python3 scripts/system/wiki-freshness-query.py --query "<user query>" --page "<retrieved page>" ... --format json` over the retrieved page paths. If candidate pages have not already been collected, run `python3 scripts/system/wiki-freshness-query.py --query "<user query>" --qmd --format json`; it can run QMD discovery first, resolve returned Wiki pages, map returned raw notes to canonical pages through wikilinks/title matches, and keep unmapped raw hits as `raw_evidence`.
-2. **Answer from blocks, not whole pages.** Prefer packet blocks with `freshness_action: prefer`, `status: current`, recent `checked`, and `confidence: high|medium`.
-3. **Use minimal stamps as cautions.** `freshness_action: use-as-page-caution` means the page has only a page-level migration stamp; use the block text to qualify the answer, but do not treat the rest of the page as fully block-verified.
-4. **Rank lower, explain, don't erase.** `stale`, `historical`, and `disputed` blocks may still be useful, but should not silently win current-state answers.
-5. **Confirmed supersession is strongest.** A block with `status: superseded` or `superseded_by` must not be used as the main current answer unless the user asks for history.
+2. **Prefer verified evidence.** Prefer packet entries with `freshness_action: prefer` and pages with a recent latest `verified.at` — `human:*`-verified beats `agent:*`-verified beats generated-only.
+3. **Treat unverified pages as cautions.** A page with only `generated:` (no `verified:` entries) is machine-generated and unchecked; use it, but qualify the answer accordingly.
+4. **Rank lower, explain, don't erase.** Stale pages (old `generated.at` / `verified.at`, or a passed `stale_after`) and disputed content may still be useful, but should not silently win current-state answers.
+5. **Confirmed supersession is strongest.** A page with `state: superseded` or `superseded_by` must not be used as the main current answer unless the user asks for history.
 6. **Use raw notes as evidence.** `raw_mappings` explain which raw hits pulled in canonical pages. `raw_evidence` contains relevant raw hits that do not yet map to a canonical page; mention them as uncategorized evidence instead of treating the query as evidence-free.
 7. **Explain only when it matters.** If freshness affects confidence, say why: "The canonical block is unchecked, and newer raw notes mention the topic" or "Older evidence is superseded by block X."
 
-For freshness-sensitive questions where the retrieved page has no block provenance yet, treat it as a legacy page: use ordinary date/frontmatter rules, then mention if newer raw notes or drift candidates make the answer uncertain.
+For freshness-sensitive questions where the retrieved page has no provenance frontmatter yet, treat it as a legacy page: use ordinary date/frontmatter rules, then mention if newer raw notes or drift candidates make the answer uncertain.
 
 ## Supersession (explicit replacements)
 

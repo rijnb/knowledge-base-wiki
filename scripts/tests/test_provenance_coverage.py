@@ -20,22 +20,25 @@ class ProvenanceCoverageTests(VaultFixtureMixin, unittest.TestCase):
     def test_reports_covered_and_backlog_pages(self):
         self.write(
             "wiki/concepts/Covered.md",
-            """# Covered
+            """---
+sources:
+  - id: s1
+    resource: "raw/notes/source.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-06-01
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-06-24
+---
+
+# Covered
 
 Current claim. ^covered-claim
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   covered-claim:
->     sources: [raw/notes/source.md]
->     checked: 2026-06-24
->     status: current
->     confidence: high
 """,
         )
-        self.write("wiki/concepts/Legacy.md", "# Legacy\n\nNo block IDs yet.\n")
-        self.write("wiki/systems/Partial.md", "# Partial\n\nKnown claim. ^partial-claim\n")
+        self.write("wiki/concepts/Legacy.md", "# Legacy\n\nNo provenance yet.\n")
+        self.write("wiki/systems/System.md", "# System\n\nKnown claim. ^system-claim\n")
 
         result = build_coverage_backlog(self.root)
 
@@ -43,11 +46,10 @@ Current claim. ^covered-claim
         self.assertEqual(result["summary"]["covered_pages"], 1)
         self.assertEqual(result["summary"]["backlog_pages"], 2)
         self.assertEqual(result["summary"]["by_status"]["covered"], 1)
-        self.assertEqual(result["summary"]["by_status"]["legacy-no-block-ids"], 1)
-        self.assertEqual(result["summary"]["by_status"]["block-ids-without-provenance"], 1)
+        self.assertEqual(result["summary"]["by_status"]["no-provenance"], 2)
         self.assertEqual(
             [page["path"] for page in result["pages"]],
-            ["wiki/systems/Partial.md", "wiki/concepts/Legacy.md"],
+            ["wiki/systems/System.md", "wiki/concepts/Legacy.md"],
         )
 
     def test_writes_backlog_markdown(self):
@@ -59,51 +61,45 @@ Current claim. ^covered-claim
         self.assertEqual(path.relative_to(self.root).as_posix(), ".wiki-scratch/provenance-coverage-backlog.md")
         content = self.read(".wiki-scratch/provenance-coverage-backlog.md")
         self.assertIn("[[wiki/concepts/Legacy]]", content)
-        self.assertIn("legacy-no-block-ids", content)
+        self.assertIn("no-provenance", content)
 
-    def test_minimal_stamp_remains_in_coverage_backlog(self):
+    def test_invalid_provenance_ranks_first_in_backlog(self):
         self.write(
-            "wiki/concepts/Minimal.md",
-            """# Minimal
+            "wiki/concepts/Broken.md",
+            """---
+generated:
+  by: "agent:wiki-ingest"
+  at: soon
+sources:
+  - id: s1
+    resource: "raw/notes/source.md"
+---
 
-## Freshness Status
-
-This page has a minimal provenance stamp only. ^freshness-status
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> migration_status: legacy-inferred-minimal
-> blocks:
->   freshness-status:
->     checked: 2026-06-24
->     status: current
->     confidence: medium
+# Broken
 """,
         )
+        self.write("wiki/concepts/Legacy.md", "# Legacy\n")
 
         result = build_coverage_backlog(self.root)
 
-        self.assertEqual(result["summary"]["covered_pages"], 0)
-        self.assertEqual(result["summary"]["by_status"]["minimal-stamp"], 1)
-        self.assertEqual(result["pages"][0]["coverage_status"], "minimal-stamp")
-
+        self.assertEqual(result["summary"]["by_status"]["invalid-provenance"], 1)
+        self.assertEqual(result["pages"][0]["path"], "wiki/concepts/Broken.md")
+        self.assertEqual(result["pages"][0]["coverage_status"], "invalid-provenance")
 
     def test_missing_sources_warning_does_not_mark_page_invalid(self):
-        # A claim block with provenance but no sources is a quality *warning*,
-        # not a structural error; coverage must not classify it as invalid.
+        # Generated provenance without sources is a quality *warning*, not a
+        # structural error; coverage must not classify it as invalid.
         self.write(
             "wiki/concepts/Warned.md",
-            """# Warned
+            """---
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-06-24
+---
+
+# Warned
 
 Current claim. ^warned-claim
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> blocks:
->   warned-claim:
->     checked: 2026-06-24
->     status: current
->     confidence: high
 """,
         )
 

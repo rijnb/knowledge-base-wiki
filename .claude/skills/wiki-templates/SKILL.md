@@ -20,6 +20,36 @@ description: Use when creating or structuring a new Wiki page — decisions, sys
     - item-2
   ```
 
+## Required and reserved frontmatter (OKF v0.2)
+
+Every content page carries:
+
+- `type:` — exactly one of: `competition`, `concept`, `conversation`, `decision`, `person`, `problem`, `project`, `system`. (`competitor` and `systems` were drift — never emit them.)
+- `description:` — **REQUIRED** one-line summary: plain text, wikilinks allowed, ~160 chars max, YAML double-quoted. Index pages draw their bullet descriptions from it (`scripts/system/wiki-create-index-pages.py`).
+- `state:` — the subject's state, with a per-type enum (see the templates below). This is the renamed former `status` field.
+- `status:` — RESERVED for the optional OKF page lifecycle enum: `draft | stable | deprecated`. Never use `status` for subject state.
+
+### Provenance frontmatter (set by ingest/curation, optional on manual create)
+
+Provenance lives in YAML frontmatter (the legacy provenance callouts are abolished):
+
+```yaml
+sources:
+  - id: s1
+    resource: "raw/notes/2024-04-04 Foo.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2024-04-04
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-06-25
+stale_after: 2027-01-01   # optional
+```
+
+Actor convention: `human:rijn.buve` = human-reviewed tier; `agent:*` ids = machine tier. All dates `YYYY-MM-DD`. `^block-id` anchors in the body remain allowed as plain anchors (no metadata attached).
+
+Per-claim attribution uses markdown footnotes keyed to `sources[].id`: a claim ends with `[^s<N>]` refs (placed before any `^block-id` anchor — the anchor stays last in the block), and the page ends with a footnote-definitions block, one `[^s<N>]: [[<resource path>]]` line per id referenced in the body.
+
 ## Freshness metadata (auto-managed — do NOT hand-edit)
 
 Every content page may carry three machine-managed frontmatter fields:
@@ -47,7 +77,7 @@ supersedes: [[wiki/systems/Old Map Pipeline]]
 ```
 
 Rules:
-- The **presence of `superseded_by`** is what marks a page as historical — it works on every topic type (people/concepts/competition have no `status` field). Do not encode supersession in the free-text `status` field.
+- The **presence of `superseded_by`** is what marks a page as historical — it works on every topic type (people/concepts/competition have no `state` field). Do not encode supersession in the free-text `state` field.
 - Always add the reciprocal `supersedes:` on the successor so navigation works both ways.
 - The `superseded_by` target **must be an existing page** (no dangling links). Chains are allowed (A→B→C); queries follow them to the newest live page.
 - Only assert supersession when a source **explicitly** states the replacement — never guess. Uncertain candidates belong in the lint review queue (see `wiki-doctor`), not applied directly.
@@ -78,7 +108,7 @@ One per section, **no frontmatter** (OKF v0.2 §8 — reserved filename). Fully 
 - Byline: back-link, page count, rebuild date.
 - `## Recently updated` — top 10 pages by frontmatter `date` (only when ≥10 dated pages).
 - Topics with >100 pages: entries grouped under letter headings (`## A` … plus `## 0-9`), preceded by a `Sections:` jump line with per-letter counts, so a consumer reads one letter section instead of the whole file. Smaller topics: one flat list.
-- Entries sorted by title; summaries are the page's first sentence, capped at 160 chars.
+- Entries sorted by title; bullet summaries come from the page's `description:` frontmatter (capped at 160 chars).
 
 ```markdown
 # <Type>
@@ -103,7 +133,8 @@ Sections: [[#0-9|0-9]] (12) · [[#A|A]] (98) · …
 ```markdown
 ---
 type: decision
-status: accepted | superseded | proposed
+description: "<one-line summary, ~160 chars, double-quoted>"
+state: accepted | superseded | proposed
 date: YYYY-MM-DD HH:mm:ss
 systems:
   - system-name
@@ -135,9 +166,10 @@ people:
 ```markdown
 ---
 type: system
+description: "<one-line summary, ~160 chars, double-quoted>"
 owner:
   - team-name
-status: active | deprecated | planned
+state: active | deprecated | planned
 ---
 # <System Name>
 ## What it does
@@ -157,7 +189,8 @@ status: active | deprecated | planned
 
 ```markdown
 ---
-type: person | team
+type: person
+description: "<one-line summary, ~160 chars, double-quoted>"
 ---
 # <Name>
 ## Role and scope
@@ -177,6 +210,7 @@ type: person | team
 ```markdown
 ---
 type: concept
+description: "<one-line summary, ~160 chars, double-quoted>"
 date: YYYY-MM-DD HH:mm:ss
 tags: []
 ---
@@ -200,7 +234,8 @@ tags: []
 
 ```markdown
 ---
-type: competitor
+type: competition
+description: "<one-line summary, ~160 chars, double-quoted>"
 ---
 # <Competitor Name>
 ## What they do
@@ -219,6 +254,7 @@ type: competitor
 ```markdown
 ---
 type: conversation
+description: "<one-line summary, ~160 chars, double-quoted>"
 ---
 # <Title>
 ## Summary
@@ -232,7 +268,8 @@ type: conversation
 ```markdown
 ---
 type: project
-status: active | closed | paused
+description: "<one-line summary, ~160 chars, double-quoted>"
+state: active | closed | paused
 started: YYYY-MM-DD HH:mm:ss
 ---
 # <Title>
@@ -256,7 +293,8 @@ started: YYYY-MM-DD HH:mm:ss
 ```markdown
 ---
 type: problem
-status: open | closed | deferred
+description: "<one-line summary, ~160 chars, double-quoted>"
+state: open | closed | deferred
 started: YYYY-MM-DD HH:mm:ss
 ---
 # <Title>

@@ -17,11 +17,21 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class FreshnessInventoryTests(VaultFixtureMixin, unittest.TestCase):
-    def test_indexes_wiki_blocks_with_heading_and_provenance(self):
+    def test_indexes_wiki_page_with_frontmatter_provenance(self):
         self.write(
             "wiki/concepts/Concept.md",
             """---
 title: Concept
+state: active
+sources:
+  - id: s1
+    resource: "raw/notes/2026-06-02 Meeting.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-06-02
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-06-20
 ---
 
 # Concept
@@ -29,70 +39,91 @@ title: Concept
 ## Current Understanding
 
 Current ownership sits with the map enrichment flow. ^claim-owner-01
-
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> migration_status: legacy-inferred
-> blocks:
->   claim-owner-01:
->     sources: [raw:meeting-2026-06-02#b08]
->     observed: 2026-06-02
->     checked: 2026-06-20
->     status: current
->     confidence: medium
 """,
         )
 
         inventory = build_inventory(self.root)
 
         self.assertEqual(inventory["summary"]["wiki_pages"], 1)
-        self.assertEqual(inventory["summary"]["canonical_blocks"], 1)
-        self.assertEqual(inventory["summary"]["blocks_with_provenance"], 1)
+        self.assertEqual(inventory["summary"]["pages_with_provenance"], 1)
+        self.assertEqual(inventory["summary"]["pages_without_provenance"], 0)
         page = inventory["wiki_pages"][0]
         self.assertEqual(page["path"], "wiki/concepts/Concept.md")
         self.assertEqual(page["title"], "Concept")
-        self.assertEqual(page["migration_status"], "legacy-inferred")
-        block = page["blocks"][0]
-        self.assertEqual(block["id"], "claim-owner-01")
-        self.assertEqual(block["heading_path"], ["Concept", "Current Understanding"])
-        self.assertEqual(block["status"], "current")
-        self.assertEqual(block["confidence"], "medium")
-        self.assertEqual(block["sources"], ["raw:meeting-2026-06-02#b08"])
-        self.assertEqual(block["text"], "Current ownership sits with the map enrichment flow.")
+        self.assertEqual(page["state"], "active")
+        self.assertTrue(page["has_provenance"])
+        self.assertEqual(page["generated_at"], "2026-06-02")
+        self.assertEqual(page["verified_at"], "2026-06-20")
+        self.assertEqual(page["checked"], "2026-06-20")
+        self.assertEqual(page["status"], "current")
+        self.assertEqual(page["confidence"], "medium")
+        self.assertEqual(page["sources"], ["raw/notes/2026-06-02 Meeting.md"])
+        self.assertEqual(page["validation_issues"], [])
 
-    def test_two_blocks_in_one_paragraph_get_their_own_text(self):
-        self.write(
-            "wiki/concepts/Dense.md",
-            """# Dense
-
-Claim one is here. ^claim-one
-Claim two is here. ^claim-two
-""",
-        )
-
-        inventory = build_inventory(self.root)
-        blocks = {b["id"]: b for b in inventory["wiki_pages"][0]["blocks"]}
-
-        self.assertEqual(blocks["claim-one"]["text"], "Claim one is here.")
-        self.assertEqual(blocks["claim-two"]["text"], "Claim two is here.")
-
-    def test_counts_blocks_without_provenance(self):
+    def test_counts_pages_without_provenance(self):
         self.write(
             "wiki/concepts/Legacy.md",
             """# Legacy
 
-This block has an ID but no provenance yet. ^claim-legacy-01
+This page has no provenance yet. ^claim-legacy-01
 """,
         )
 
         inventory = build_inventory(self.root)
 
-        self.assertEqual(inventory["summary"]["canonical_blocks"], 1)
-        self.assertEqual(inventory["summary"]["blocks_with_provenance"], 0)
-        self.assertEqual(inventory["summary"]["blocks_without_provenance"], 1)
-        block = inventory["wiki_pages"][0]["blocks"][0]
-        self.assertEqual(block["status"], "unknown")
-        self.assertEqual(block["sources"], [])
+        self.assertEqual(inventory["summary"]["pages_with_provenance"], 0)
+        self.assertEqual(inventory["summary"]["pages_without_provenance"], 1)
+        page = inventory["wiki_pages"][0]
+        self.assertFalse(page["has_provenance"])
+        self.assertEqual(page["status"], "unknown")
+        self.assertEqual(page["confidence"], "unknown")
+        self.assertEqual(page["sources"], [])
+
+    def test_human_verification_raises_confidence(self):
+        self.write(
+            "wiki/concepts/Reviewed.md",
+            """---
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-06-02
+verified:
+  - by: "human:ribu"
+    at: 2026-06-20
+sources:
+  - id: s1
+    resource: "raw/notes/source.md"
+---
+
+# Reviewed
+""",
+        )
+
+        inventory = build_inventory(self.root)
+
+        self.assertEqual(inventory["wiki_pages"][0]["confidence"], "high")
+
+    def test_passed_stale_after_marks_page_stale(self):
+        self.write(
+            "wiki/concepts/Stale.md",
+            """---
+generated:
+  by: "agent:wiki-ingest"
+  at: 2020-01-01
+sources:
+  - id: s1
+    resource: "raw/notes/source.md"
+stale_after: 2020-06-01
+---
+
+# Stale
+""",
+        )
+
+        inventory = build_inventory(self.root)
+
+        page = inventory["wiki_pages"][0]
+        self.assertEqual(page["status"], "stale")
+        self.assertEqual(page["stale_after"], "2020-06-01")
 
     def test_indexes_raw_notes_with_frontmatter_date_and_headings(self):
         self.write(
@@ -107,7 +138,7 @@ source_type: meeting
 
 ## Decisions
 
-We agreed to pilot block provenance.
+We agreed to pilot page provenance.
 """,
         )
 
@@ -179,7 +210,7 @@ class FreshnessInventoryCliTests(VaultFixtureMixin, unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["summary"]["wiki_pages"], 1)
         self.assertEqual(payload["summary"]["raw_notes"], 1)
-        self.assertEqual(payload["summary"]["canonical_blocks"], 1)
+        self.assertEqual(payload["summary"]["pages_without_provenance"], 1)
 
 
 if __name__ == "__main__":

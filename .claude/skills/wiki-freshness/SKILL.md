@@ -15,7 +15,7 @@ scripts/wiki-freshness.sh --root .
 
 This command:
 
-- validates `kb-prov-v1` provenance blocks;
+- validates OKF v0.2 provenance frontmatter (`sources` / `generated` / `verified` / optional `stale_after`); freshness is derived from `generated.at` and the latest `verified.at`, with `human:*` verified entries as the human-reviewed tier;
 - builds a freshness inventory;
 - writes `.wiki-scratch/freshness-curation-candidates.md`;
 - writes `.wiki-scratch/provenance-coverage-backlog.md`.

@@ -1,4 +1,4 @@
-"""Minimal provenance stamping for reviewed legacy Wiki pages."""
+"""Minimal frontmatter provenance stamping for reviewed legacy Wiki pages."""
 
 from __future__ import annotations
 
@@ -9,53 +9,24 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .provenance import extract_block_ids, parse_provenance_callout
+from .frontmatter import FRONTMATTER_RE
 
 
-DEFAULT_BLOCK_ID = "freshness-status"
 DEFAULT_CHECKED = date.today().isoformat()
+GENERATED_BY = "agent:wiki-ingest"
+VERIFIED_BY = "agent:wiki-freshness"
 
-MODE_TEXT = {
-    "historical": (
-        "This page has a minimal provenance stamp only. The listed evidence was "
-        "used to judge freshness risk, not to verify every claim. Treat the "
-        "existing content as a dated historical or source-specific snapshot "
-        "until detailed block provenance is added."
-    ),
-    "source-specific": (
-        "This page has a minimal provenance stamp only. The listed evidence was "
-        "used to judge freshness risk, not to verify every claim. Treat the "
-        "existing content as source-specific, not as a broad current-state "
-        "claim, until detailed block provenance is added."
-    ),
-    "no-source-claim": (
-        "This page has a minimal provenance stamp only. The automatic review "
-        "did not use the related raw hit as evidence for page claims. Treat the "
-        "existing content as legacy material until detailed block provenance is "
-        "added."
-    ),
-    "source-mismatch": (
-        "This page has a minimal provenance stamp only. Automatic review found "
-        "that the related raw hit may be tangential or mismatched to the page's "
-        "main claims. Treat the existing content as unverified until detailed "
-        "block provenance is added."
-    ),
-    "needs-currentness-answer": (
-        "This page has a minimal provenance stamp only. It contains current or "
-        "recent claims that need an authoritative currentness answer before they "
-        "are used as the main answer to present-state queries."
-    ),
-    "sensitive-review": (
-        "This page has a minimal provenance stamp only. It may contain people, "
-        "customer, commercial, privacy, security, or operational claims that "
-        "need manual review before being used as current evidence."
-    ),
-    "manual-review": (
-        "This page has a minimal provenance stamp only. It needs manual "
-        "block-level curation before its detailed claims should be treated as "
-        "verified canonical evidence."
-    ),
+MODES = {
+    "historical",
+    "source-specific",
+    "no-source-claim",
+    "source-mismatch",
+    "needs-currentness-answer",
+    "sensitive-review",
+    "manual-review",
 }
+
+_PROVENANCE_KEY_RE = re.compile(r"^(?:sources|generated)\s*:", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -91,79 +62,43 @@ def load_stamp_specs(path: Path) -> list[StampSpec]:
 
 
 def _safe_mode(mode: str) -> str:
-    return mode if mode in MODE_TEXT else "historical"
+    return mode if mode in MODES else "historical"
 
 
-def _unique_block_id(content: str, base: str = DEFAULT_BLOCK_ID) -> str:
-    existing = extract_block_ids(content)
-    if base not in existing:
-        return base
-    suffix = 2
-    while f"{base}-{suffix}" in existing:
-        suffix += 1
-    return f"{base}-{suffix}"
+def _provenance_lines(spec: StampSpec, checked: str, verified: bool) -> list[str]:
+    lines: list[str] = []
+    if spec.sources:
+        lines.append("sources:")
+        for index, resource in enumerate(spec.sources, start=1):
+            lines.append(f"  - id: s{index}")
+            lines.append(f"    resource: {json.dumps(resource, ensure_ascii=False)}")
+    lines.append("generated:")
+    lines.append(f'  by: "{GENERATED_BY}"')
+    lines.append(f"  at: {checked}")
+    if verified:
+        lines.append("verified:")
+        lines.append(f'  - by: "{VERIFIED_BY}"')
+        lines.append(f"    at: {checked}")
+    return lines
 
 
-def _quote_list(values: tuple[str, ...]) -> str:
-    if not values:
-        return "[]"
-    return "[" + ", ".join(json.dumps(value, ensure_ascii=False) for value in values) + "]"
-
-
-def _insert_after_title(content: str, section: str) -> str:
-    lines = content.splitlines()
-    start = 0
-    if lines and lines[0].strip() == "---":
-        for index, line in enumerate(lines[1:], start=1):
-            if line.strip() in {"---", "..."}:
-                start = index + 1
-                break
-
-    title_index = None
-    for index in range(start, len(lines)):
-        if re.match(r"^#\s+\S", lines[index]):
-            title_index = index
-            break
-
-    insert_at = start if title_index is None else title_index + 1
-    section_lines = ["", *section.splitlines(), ""]
-    new_lines = lines[:insert_at] + section_lines + lines[insert_at:]
-    return "\n".join(new_lines).rstrip() + "\n"
-
-
-def _callout(spec: StampSpec, block_id: str, checked: str) -> str:
-    lines = [
-        "> [!provenance]- Provenance",
-        "> schema: kb-prov-v1",
-        "> migration_status: legacy-inferred-minimal",
-        "> blocks:",
-        f">   {block_id}:",
-        f">     sources: {_quote_list(spec.sources)}",
-        f">     checked: {checked}",
-        ">     status: current",
-        ">     confidence: medium",
-        ">     provenance_quality: minimal-risk-stamp",
-        ">     scope: page-level caution only; detailed claims not yet block-mapped",
-        f">     review_mode: {_safe_mode(spec.mode)}",
-    ]
-    if spec.latest_related_raw_date:
-        lines.append(f">     evidence_latest: {spec.latest_related_raw_date}")
-    if spec.reason:
-        lines.append(f">     review_note: {spec.reason}")
-    return "\n".join(lines)
-
-
-def stamp_content(content: str, spec: StampSpec, checked: str = DEFAULT_CHECKED) -> tuple[str, str]:
-    """Return stamped content and block id, or raise ValueError if unsafe."""
-    if parse_provenance_callout(content) is not None:
+def stamp_content(
+    content: str,
+    spec: StampSpec,
+    checked: str = DEFAULT_CHECKED,
+    verified: bool = False,
+) -> str:
+    """Return content with frontmatter provenance, or raise ValueError if unsafe."""
+    match = FRONTMATTER_RE.match(content)
+    if match and _PROVENANCE_KEY_RE.search(match.group(1)):
         raise ValueError("page already has provenance")
-    mode = _safe_mode(spec.mode)
-    block_id = _unique_block_id(content)
-    status_text = MODE_TEXT[mode]
-    section = f"## Freshness Status\n\n{status_text} ^{block_id}"
-    stamped = _insert_after_title(content, section)
-    stamped = stamped.rstrip() + "\n\n" + _callout(spec, block_id, checked) + "\n"
-    return stamped, block_id
+    lines = _provenance_lines(spec, checked, verified)
+    if match:
+        head = content[:match.end()].splitlines()
+        # Insert before the closing frontmatter delimiter.
+        head = head[:-1] + lines + [head[-1]]
+        return "\n".join(head) + "\n" + content[match.end():]
+    return "---\n" + "\n".join(lines) + "\n---\n" + content
 
 
 def stamp_page(root: Path, spec: StampSpec, checked: str = DEFAULT_CHECKED, dry_run: bool = False) -> dict[str, Any]:
@@ -181,7 +116,7 @@ def stamp_page(root: Path, spec: StampSpec, checked: str = DEFAULT_CHECKED, dry_
         return {"page": spec.page, "action": "missing"}
     content = page_path.read_text(encoding="utf-8", errors="replace")
     try:
-        stamped, block_id = stamp_content(content, spec, checked)
+        stamped = stamp_content(content, spec, checked)
     except ValueError as error:
         return {"page": spec.page, "action": "skipped", "reason": str(error)}
     if not dry_run:
@@ -189,7 +124,6 @@ def stamp_page(root: Path, spec: StampSpec, checked: str = DEFAULT_CHECKED, dry_
     return {
         "page": spec.page,
         "action": "would-stamp" if dry_run else "stamped",
-        "block_id": block_id,
         "mode": _safe_mode(spec.mode),
     }
 

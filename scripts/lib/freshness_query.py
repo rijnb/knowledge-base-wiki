@@ -1,8 +1,8 @@
 """Query-time freshness packet generation.
 
 Semantic search finds candidate pages. This module turns those retrieved pages
-into a block-level packet so current/history/change queries can rank canonical
-claims by freshness instead of treating each page as a single blob.
+into a freshness packet so current/history/change queries can rank canonical
+pages by their frontmatter provenance (generated/verified dates).
 """
 
 from __future__ import annotations
@@ -311,97 +311,75 @@ def _selected_pages(
 def _legacy_reason(page: dict[str, Any]) -> str | None:
     if has_error_issues(page.get("validation_issues")):
         return "invalid-provenance"
-    blocks = page.get("blocks", [])
-    if not blocks:
-        return "no-block-provenance"
-    if any(not block.get("has_provenance") for block in blocks):
-        return "blocks-without-provenance"
+    if not page.get("has_provenance"):
+        return "no-page-provenance"
     return None
 
 
-def _freshness_action(block: dict[str, Any], intent: str) -> str:
-    provenance = block.get("provenance", {})
-    if provenance.get("provenance_quality") == "minimal-risk-stamp":
-        return "use-as-page-caution"
-    status = block.get("status") or "unknown"
+def _freshness_action(page: dict[str, Any], intent: str) -> str:
+    status = page.get("status") or "unknown"
     if intent == "history":
-        if status in {"historical", "superseded"}:
-            return "prefer"
         if status == "current":
             return "current-context"
         return "rank-lower-explain"
     if intent == "change":
-        if status in {"current", "historical", "superseded", "stale"}:
+        if status in {"current", "stale"}:
             return "compare"
         return "rank-lower-explain"
     if status == "current":
         return "prefer"
-    if status == "superseded":
-        return "do-not-use-as-current"
-    if status in {"historical", "stale", "disputed"}:
+    if status == "stale":
         return "rank-lower-explain"
     return "verify-before-using"
 
 
-def _date_fragment(block: dict[str, Any]) -> str:
-    observed = block.get("observed")
-    checked = block.get("checked")
+def _date_fragment(page: dict[str, Any]) -> str:
+    generated_at = page.get("generated_at")
+    verified_at = page.get("verified_at")
     parts = []
-    if observed:
-        parts.append(f"observed {observed}")
-    if checked:
-        parts.append(f"checked {checked}")
+    if generated_at:
+        parts.append(f"generated {generated_at}")
+    if verified_at:
+        parts.append(f"verified {verified_at}")
     return ", ".join(parts) if parts else "no dates recorded"
 
 
-def _freshness_note(block: dict[str, Any], intent: str) -> str:
-    status = block.get("status") or "unknown"
-    confidence = block.get("confidence") or "unknown"
-    dates = _date_fragment(block)
-    provenance = block.get("provenance", {})
-    if provenance.get("provenance_quality") == "minimal-risk-stamp":
-        evidence_latest = provenance.get("evidence_latest")
-        latest = f" latest related evidence {evidence_latest};" if evidence_latest else ""
-        review_mode = provenance.get("review_mode")
-        mode = f" review mode {review_mode};" if review_mode else ""
-        return (
-            "Minimal page-level freshness stamp only;"
-            f"{latest}{mode} detailed page claims are not yet block-mapped; "
-            f"{confidence} confidence; {dates}."
-        )
+def _freshness_note(page: dict[str, Any], intent: str) -> str:
+    status = page.get("status") or "unknown"
+    confidence = page.get("confidence") or "unknown"
+    dates = _date_fragment(page)
     if intent == "history":
-        if status == "historical":
-            return f"historical block; {confidence} confidence; {dates}."
-        if status == "superseded":
-            target = block.get("provenance", {}).get("superseded_by")
-            suffix = f" Superseded by {target}." if target else ""
-            return f"Superseded block remains useful for history; {confidence} confidence; {dates}.{suffix}"
-        return f"{status} block used as supporting context for a history query; {confidence} confidence; {dates}."
+        return f"{status} page used as supporting context for a history query; {confidence} confidence; {dates}."
     if intent == "change":
-        return f"{status} block can be compared in a change-over-time answer; {confidence} confidence; {dates}."
+        return f"{status} page can be compared in a change-over-time answer; {confidence} confidence; {dates}."
     if status == "current":
-        return f"current block; {confidence} confidence; {dates}."
-    if status == "historical":
-        return f"historical block; rank lower for current-state answers; {confidence} confidence; {dates}."
+        return f"current page; {confidence} confidence; {dates}."
     if status == "stale":
-        return f"Stale block; rank lower and explain freshness uncertainty; {confidence} confidence; {dates}."
-    if status == "disputed":
-        return f"Disputed block; do not present without explaining the dispute; {confidence} confidence; {dates}."
-    if status == "superseded":
-        target = block.get("provenance", {}).get("superseded_by")
-        suffix = f" Superseded by {target}." if target else ""
-        return f"Superseded block; do not use as the current answer; {confidence} confidence; {dates}.{suffix}"
+        stale_after = page.get("stale_after")
+        suffix = f" Stale after {stale_after}." if stale_after else ""
+        return f"Stale page; rank lower and explain freshness uncertainty; {confidence} confidence; {dates}.{suffix}"
     return f"Freshness is {status}; verify before using for a current-state answer; {confidence} confidence; {dates}."
 
 
 def _block_candidates(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for page in pages:
-        for block in page.get("blocks", []):
-            item = dict(block)
-            item["page_path"] = page["path"]
-            item["page_title"] = page["title"]
-            candidates.append(item)
+        if not page.get("has_provenance"):
+            continue
+        candidates.append({
+            "id": page["path"],
+            "page_path": page["path"],
+            "page_title": page["title"],
+            "state": page.get("state"),
+            "status": page.get("status"),
+            "confidence": page.get("confidence"),
+            "observed": page.get("observed"),
+            "checked": page.get("checked"),
+            "generated_at": page.get("generated_at"),
+            "verified_at": page.get("verified_at"),
+            "stale_after": page.get("stale_after"),
+            "sources": page.get("sources", []),
+        })
     return candidates
 
 
@@ -425,7 +403,7 @@ def build_query_packet(
     pages: list[str] | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Build a block-level freshness packet for retrieved candidate pages."""
+    """Build a page-level freshness packet for retrieved candidate pages."""
     root = root.resolve()
     inventory = build_inventory(root)
     return _build_query_packet_from_inventory(inventory, query=query, pages=pages, limit=limit)

@@ -1,4 +1,4 @@
-"""Coverage backlog for block provenance migration."""
+"""Coverage backlog for frontmatter provenance migration."""
 
 from __future__ import annotations
 
@@ -20,27 +20,14 @@ def _page_kind(path: str) -> str:
 def _coverage_status(page: dict[str, Any]) -> str:
     if has_error_issues(page.get("validation_issues")):
         return "invalid-provenance"
-    if page.get("migration_status") == "legacy-inferred-minimal":
-        return "minimal-stamp"
-    blocks = page.get("blocks", [])
-    if not blocks:
-        return "legacy-no-block-ids"
-    if all(block.get("has_provenance") for block in blocks):
+    if page.get("has_provenance"):
         return "covered"
-    if any(block.get("has_provenance") for block in blocks):
-        return "partial-provenance"
-    return "block-ids-without-provenance"
+    return "no-provenance"
 
 
 def _priority(status: str, kind: str) -> int:
     if status == "invalid-provenance":
         return 100
-    if status == "partial-provenance":
-        return 80
-    if status == "block-ids-without-provenance":
-        return 70
-    if status == "minimal-stamp":
-        return 45
     if kind in {"decisions", "problems", "systems", "projects"}:
         return 50
     if kind in {"concepts", "competition"}:
@@ -51,7 +38,7 @@ def _priority(status: str, kind: str) -> int:
 
 
 def build_coverage_backlog(root: Path) -> dict[str, Any]:
-    """Return a complete wiki-page block-provenance coverage backlog."""
+    """Return a complete wiki-page frontmatter-provenance coverage backlog."""
     root = root.resolve()
     inventory = build_inventory(root)
     pages: list[dict[str, Any]] = []
@@ -69,7 +56,6 @@ def build_coverage_backlog(root: Path) -> dict[str, Any]:
                 "title": page["title"],
                 "kind": kind,
                 "coverage_status": status,
-                "block_count": len(page.get("blocks", [])),
                 "priority": _priority(status, kind),
                 "validation_issues": page.get("validation_issues", []),
             })
@@ -114,9 +100,6 @@ def write_backlog(root: Path, result: dict[str, Any]) -> Path:
             f"- [ ] **[[{page_link}]]** "
             f"`{page['coverage_status']}` priority {page['priority']}"
         )
-        lines.append(
-            f"      <sub>kind: {page['kind']}; "
-            f"blocks: {page['block_count']}</sub>"
-        )
+        lines.append(f"      <sub>kind: {page['kind']}</sub>")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

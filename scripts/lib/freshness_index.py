@@ -1,7 +1,8 @@
-"""Read-only inventory for freshness-aware Wiki migration."""
+"""Read-only inventory for freshness-aware Wiki queries."""
 
 from __future__ import annotations
 
+from datetime import date
 import re
 from pathlib import Path
 from typing import Any
@@ -9,8 +10,8 @@ from typing import Any
 from .frontmatter import split_frontmatter as _frontmatter
 from .paths import wiki_pages as _wiki_pages
 from .provenance import (
-    BLOCK_ID_RE,
-    parse_provenance_callout,
+    parse_provenance,
+    provenance_dates,
     validate_provenance,
 )
 from .raw_privacy import protected_raw_paths
@@ -42,62 +43,6 @@ def _headings(body: str) -> list[str]:
     return result
 
 
-def _strip_block_ids(text: str) -> str:
-    return BLOCK_ID_RE.sub("", text).strip()
-
-
-def _iter_blocks(body: str):
-    heading_stack: list[str] = []
-    paragraph: list[str] = []
-    paragraph_headings: list[str] = []
-
-    def flush():
-        nonlocal paragraph, paragraph_headings
-        if paragraph:
-            yield "\n".join(paragraph).strip(), list(paragraph_headings)
-            paragraph = []
-
-    for raw_line in body.splitlines():
-        line = raw_line.rstrip()
-        heading = HEADING_RE.match(line)
-        if heading:
-            yield from flush()
-            level = len(heading.group(1))
-            title = _clean_heading(heading.group(2))
-            heading_stack[:] = heading_stack[:level - 1]
-            heading_stack.append(title)
-            paragraph_headings = list(heading_stack)
-            continue
-        if not line.strip():
-            yield from flush()
-            paragraph_headings = list(heading_stack)
-            continue
-        if not paragraph:
-            paragraph_headings = list(heading_stack)
-        paragraph.append(line)
-    yield from flush()
-
-
-def _blocks_in_paragraph(text: str) -> list[tuple[str, str]]:
-    """Split a paragraph into (block_id, owning-segment) pairs.
-
-    Each Obsidian `^block-id` terminates its block, so adjacent block IDs in one
-    paragraph must each own only their own line(s) rather than the whole
-    paragraph text.
-    """
-    results: list[tuple[str, str]] = []
-    segment: list[str] = []
-    for line in text.splitlines():
-        segment.append(line)
-        block_ids = BLOCK_ID_RE.findall(line)
-        if block_ids:
-            owned = "\n".join(segment)
-            for block_id in block_ids:
-                results.append((block_id, owned))
-            segment = []
-    return results
-
-
 def _raw_notes(root: Path) -> list[Path]:
     raw = root / "raw"
     if not raw.is_dir():
@@ -110,54 +55,75 @@ def _raw_notes(root: Path) -> list[Path]:
     )
 
 
-def _block_entry(
-    block_id: str,
-    text: str,
-    heading_path: list[str],
-    provenance: dict[str, Any],
-) -> dict[str, Any]:
-    metadata = provenance.get(block_id, {})
-    if not isinstance(metadata, dict):
-        metadata = {}
-    return {
-        "id": block_id,
-        "text": _strip_block_ids(text),
-        "heading_path": heading_path,
-        "status": metadata.get("status", "unknown"),
-        "confidence": metadata.get("confidence", "unknown"),
-        "sources": metadata.get("sources", []),
-        "observed": metadata.get("observed"),
-        "checked": metadata.get("checked"),
-        "provenance": metadata,
-        "has_provenance": bool(metadata),
-    }
+def _has_provenance(provenance: dict[str, Any] | None) -> bool:
+    if not provenance:
+        return False
+    return provenance.get("generated") is not None or bool(provenance.get("sources"))
 
 
-def _index_wiki_page(root: Path, path: Path) -> dict[str, Any]:
+def _actors(provenance: dict[str, Any]) -> list[str]:
+    actors: list[str] = []
+    generated = provenance.get("generated")
+    if isinstance(generated, dict) and generated.get("by"):
+        actors.append(str(generated["by"]))
+    for entry in provenance.get("verified") or []:
+        if isinstance(entry, dict) and entry.get("by"):
+            actors.append(str(entry["by"]))
+    return actors
+
+
+def _page_status(provenance: dict[str, Any] | None, today: str) -> str:
+    if not _has_provenance(provenance):
+        return "unknown"
+    stale_after = provenance.get("stale_after")
+    if isinstance(stale_after, str) and stale_after <= today:
+        return "stale"
+    return "current"
+
+
+def _page_confidence(provenance: dict[str, Any] | None) -> str:
+    if not _has_provenance(provenance):
+        return "unknown"
+    if any(actor.startswith("human:") for actor in _actors(provenance)):
+        return "high"
+    return "medium"
+
+
+def _page_sources(provenance: dict[str, Any] | None) -> list[str]:
+    if not provenance or not isinstance(provenance.get("sources"), list):
+        return []
+    return [
+        entry["resource"]
+        for entry in provenance["sources"]
+        if isinstance(entry, dict) and entry.get("resource")
+    ]
+
+
+def _index_wiki_page(root: Path, path: Path, today: str) -> dict[str, Any]:
     content = path.read_text(encoding="utf-8", errors="replace")
     frontmatter, body = _frontmatter(content)
-    parsed_provenance = parse_provenance_callout(content) or {}
-    provenance_blocks = parsed_provenance.get("blocks", {})
-    if not isinstance(provenance_blocks, dict):
-        provenance_blocks = {}
-
-    blocks: list[dict[str, Any]] = []
-    for text, heading_path in _iter_blocks(body):
-        for block_id, segment in _blocks_in_paragraph(text):
-            blocks.append(_block_entry(
-                block_id,
-                segment,
-                heading_path,
-                provenance_blocks,
-            ))
+    provenance = parse_provenance(content)
+    generated_at, verified_at = provenance_dates(provenance)
+    checked = max(
+        (value for value in (generated_at, verified_at) if value),
+        default=None,
+    )
 
     rel = str(path.relative_to(root))
     return {
         "path": rel,
         "title": _title_from(path, frontmatter, body),
-        "migration_status": parsed_provenance.get("migration_status"),
-        "provenance_schema": parsed_provenance.get("schema"),
-        "blocks": blocks,
+        "state": frontmatter.get("state"),
+        "provenance": provenance,
+        "has_provenance": _has_provenance(provenance),
+        "generated_at": generated_at,
+        "verified_at": verified_at,
+        "observed": generated_at,
+        "checked": checked,
+        "stale_after": provenance.get("stale_after") if provenance else None,
+        "status": _page_status(provenance, today),
+        "confidence": _page_confidence(provenance),
+        "sources": _page_sources(provenance),
         "validation_issues": [
             issue.as_dict() for issue in validate_provenance(content, path=rel)
         ],
@@ -179,27 +145,20 @@ def _index_raw_note(root: Path, path: Path) -> dict[str, Any]:
 def build_inventory(root: Path) -> dict[str, Any]:
     """Build a disposable, read-only inventory of `wiki/` and `raw/`."""
     root = root.resolve()
-    wiki_pages = [_index_wiki_page(root, path) for path in _wiki_pages(root)]
+    today = date.today().isoformat()
+    wiki_pages = [_index_wiki_page(root, path, today) for path in _wiki_pages(root)]
     raw_notes = [_index_raw_note(root, path) for path in _raw_notes(root)]
 
-    canonical_blocks = [
-        block for page in wiki_pages for block in page["blocks"]
-    ]
     validation_issues = [
         issue for page in wiki_pages for issue in page["validation_issues"]
     ]
-    blocks_with_provenance = sum(1 for block in canonical_blocks if block["has_provenance"])
-    legacy_inferred_pages = sum(
-        1 for page in wiki_pages if page.get("migration_status") == "legacy-inferred"
-    )
+    pages_with_provenance = sum(1 for page in wiki_pages if page["has_provenance"])
     return {
         "summary": {
             "wiki_pages": len(wiki_pages),
             "raw_notes": len(raw_notes),
-            "canonical_blocks": len(canonical_blocks),
-            "blocks_with_provenance": blocks_with_provenance,
-            "blocks_without_provenance": len(canonical_blocks) - blocks_with_provenance,
-            "legacy_inferred_pages": legacy_inferred_pages,
+            "pages_with_provenance": pages_with_provenance,
+            "pages_without_provenance": len(wiki_pages) - pages_with_provenance,
             "validation_issues": len(validation_issues),
         },
         "wiki_pages": wiki_pages,

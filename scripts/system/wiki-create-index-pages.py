@@ -12,7 +12,9 @@ Format follows OKF v0.2 progressive disclosure (§8):
   - Topics with more than LETTER_BUCKET_THRESHOLD pages are grouped under
     letter headings with a jump line, so a consumer can read one section
     instead of the whole file.
-  - Entry summaries are capped at SUMMARY_MAX_CHARS characters.
+  - Entry summaries come from each page's `description:` frontmatter when
+    present and non-empty; otherwise they are derived (and capped at
+    SUMMARY_MAX_CHARS) by lib/descriptions.py.
   - Topics with at least RECENT_MIN_DATED dated pages get a
     "Recently updated" block (top RECENT_COUNT by frontmatter date).
 
@@ -25,6 +27,11 @@ import datetime
 import os
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.descriptions import extract_description, yaml_unquote  # noqa: E402
 
 TOPIC_DIRS: dict[str, tuple[str, str]] = {
     "competition":   ("Competitors",   "Competing companies, products, and approaches."),
@@ -38,7 +45,6 @@ TOPIC_DIRS: dict[str, tuple[str, str]] = {
 }
 
 OKF_VERSION = "0.2"
-SUMMARY_MAX_CHARS = 160
 LETTER_BUCKET_THRESHOLD = 100
 RECENT_COUNT = 10
 RECENT_MIN_DATED = 10
@@ -46,39 +52,26 @@ RECENT_MIN_DATED = 10
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
 
-def _balance_wikilinks(text: str) -> str:
-    """Trim a truncated string so it never ends inside an unclosed [[wikilink."""
-    while text.count("[[") != text.count("]]"):
-        cut = text.rfind("[[")
-        if cut < 0:
-            break
-        text = text[:cut].rstrip()
-    return text
-
-
-def _cap_summary(summary: str) -> str:
-    """Truncate a summary to SUMMARY_MAX_CHARS without breaking wikilinks."""
-    if len(summary) <= SUMMARY_MAX_CHARS:
-        return summary
-    cut = summary.rfind(" ", 0, SUMMARY_MAX_CHARS)
-    if cut <= 0:
-        cut = SUMMARY_MAX_CHARS
-    return _balance_wikilinks(summary[:cut].rstrip(" ,;:—-")) + " …"
-
-
 def get_page_info(filepath: str) -> tuple[str, str, str | None]:
-    """Return (h1 title, first-sentence summary, frontmatter date) from a markdown file."""
+    """Return (h1 title, one-line summary, frontmatter date) from a markdown file.
+
+    The summary is the page's `description:` frontmatter when present and
+    non-empty; otherwise it is derived via lib.descriptions.extract_description().
+    """
     stem = os.path.splitext(os.path.basename(filepath))[0]
     try:
         with open(filepath, encoding="utf-8") as f:
-            lines = f.readlines()
+            content = f.read()
     except OSError as exc:
         print(f"WARNING: cannot read {filepath}: {exc}", file=sys.stderr)
         return stem, "No summary available.", None
 
-    # Scan (and skip) YAML front matter, capturing the date field
+    lines = content.splitlines()
+
+    # Scan (and skip) YAML front matter, capturing date and description
     start = 0
     date: str | None = None
+    description: str | None = None
     if lines and lines[0].strip() == "---":
         for i in range(1, len(lines)):
             stripped = lines[i].strip()
@@ -89,31 +82,21 @@ def get_page_info(filepath: str) -> tuple[str, str, str | None]:
                 m = DATE_RE.search(stripped)
                 if m:
                     date = m.group(1)
+            if stripped.startswith("description:") and description is None:
+                value = yaml_unquote(stripped[len("description:"):])
+                if value:
+                    description = value
 
     title: str | None = None
-    summary: str | None = None
     for line in lines[start:]:
         stripped = line.strip()
-        if not stripped:
-            continue
-        if title is None and stripped.startswith("#"):
+        if stripped.startswith("#"):
             title = re.sub(r"^#+\s*", "", stripped)
-        elif title is not None and summary is None and not stripped.startswith("#"):
-            summary = stripped
             break
 
     if title is None:
         title = stem
-    if summary is None:
-        summary = "No summary available."
-
-    # Truncate to first sentence (never inside a wikilink), then cap length
-    m = re.match(r"^(.+?[.!?])\s", summary + " ")
-    if m:
-        candidate = _balance_wikilinks(m.group(1)).rstrip()
-        if candidate:
-            summary = candidate
-    summary = _cap_summary(summary)
+    summary = description or extract_description(content) or "No summary available."
 
     return title, summary, date
 
