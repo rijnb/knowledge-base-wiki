@@ -296,7 +296,7 @@ def is_managed_page(path):
     return ap.startswith(WIKI + os.sep) or ap.startswith(RAW + os.sep)
 
 def is_content_page(path):
-    return is_managed_page(path) and os.path.basename(path) not in ("_index.md", "index.md")
+    return is_managed_page(path) and os.path.basename(path) != "index.md"
 
 def upsert_frontmatter(txt, fields):
     if txt.startswith("---"):

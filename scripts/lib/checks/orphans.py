@@ -44,7 +44,7 @@ def check_orphans(root: Path, quiet: bool) -> dict:
     # Exclude index files and pages that explicitly declare orphan: false
     wiki_pages: list[Path] = []
     for md_file in sorted(wiki_dir.glob("*/*.md")):
-        if md_file.name in ("index.md", "_index.md"):
+        if md_file.name == "index.md":
             continue
         try:
             content = md_file.read_text(encoding="utf-8", errors="replace")
@@ -74,7 +74,7 @@ def check_orphans(root: Path, quiet: bool) -> dict:
         # skipped files (e.g. wiki/log.md, START_HERE.md) never count as backlinks.
         if should_skip_md(md_file, root):
             continue
-        if md_file.name in ("index.md", "_index.md"):
+        if md_file.name == "index.md":
             continue  # index pages don't count as backlink sources
 
         try:

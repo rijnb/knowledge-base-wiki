@@ -14,7 +14,7 @@ When the user asks any question:
   - **Never drop the only source on a topic** just because it is old, and don't penalise low-relevance-but-unique evidence.
   - **Skip the penalty for historical questions** ("what was the original…", "who led X in 2015", "history of…") — there, old pages are the right answer.
   - When two candidates cover the same fact, lead with the newer one and note the older as historical.
-- If QMD returns no results, fall back to reading `wiki/<type>/_index.md` directly, or `wiki/index.md` for top-level navigation.
+- If QMD returns no results, fall back to reading `wiki/<type>/index.md` directly, or `wiki/index.md` for top-level navigation.
 - Synthesize an answer with citations. **A wikilink target is the note's exact filename, with spaces — never slugified or hyphenated.** Body text uses bare links (`[[1-N Device Association]]`, `[[Sensor Data Platform]]`); index-style or cross-type references use the vault path (`[[wiki/systems/Sensor Data Platform]]`). Do **not** convert spaces to hyphens: `[[Sensor-Data-Platform]]` is wrong and will not resolve. Only keep hyphens that are part of the real filename (`[[Cost-Aware Model Routing]]`, `[[Real-Time Map]]`). When unsure of the exact title, prefer the filename as returned by QMD rather than reconstructing it.
 
 ## Freshness awareness (IMPORTANT)

@@ -633,7 +633,7 @@ class VaultState:
                 self.new_dirs.add(p.as_posix())
                 p = p.parent
         self.md_stems: set[str] = set()
-        skip_names = {"SKILL.md", "index.md", "_index.md", "START_HERE.md"}
+        skip_names = {"SKILL.md", "index.md", "START_HERE.md"}
         for f in new_files:
             p = Path(f)
             if p.suffix != ".md" or p.name in skip_names or f == "wiki/log.md":

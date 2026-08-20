@@ -44,7 +44,7 @@ def should_skip_md(path: Path, root: Path) -> bool:
     if path.name == "SKILL.md":
         return True
     # Skip index and navigation files
-    if path.name in ("index.md", "_index.md", "START_HERE.md"):
+    if path.name in ("index.md", "START_HERE.md"):
         return True
     # Skip the log file — it contains ingest headers with individual page links
     if rel == Path("wiki/log.md"):

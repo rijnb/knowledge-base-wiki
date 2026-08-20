@@ -128,7 +128,7 @@ def main():
 
     for p in glob.glob(os.path.join(WIKI, "**", "*.md"), recursive=True):
         rel = os.path.relpath(p, VAULT)
-        if os.path.basename(p) in ("_index.md", "index.md"):
+        if os.path.basename(p) == "index.md":
             continue
         fm, body = read_fm(p)
 

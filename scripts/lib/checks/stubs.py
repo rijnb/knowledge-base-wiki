@@ -52,7 +52,7 @@ def check_stubs(root: Path, quiet: bool) -> dict:
     stubs = []
     wiki_pages_checked = 0
     for md_file in sorted(wiki_dir.glob("*/*.md")):
-        if md_file.name in ("index.md", "_index.md"):
+        if md_file.name == "index.md":
             continue
         wiki_pages_checked += 1
         try:

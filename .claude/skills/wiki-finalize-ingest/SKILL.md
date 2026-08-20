@@ -78,7 +78,7 @@ Run the index-page script from the project root:
 python3 scripts/system/wiki-create-index-pages.py
 ```
 
-This rebuilds `wiki/index.md` and all `wiki/<topic>/_index.md` files.
+This rebuilds `wiki/index.md` and all `wiki/<topic>/index.md` files.
 
 ## Step 5 — Summarize
 

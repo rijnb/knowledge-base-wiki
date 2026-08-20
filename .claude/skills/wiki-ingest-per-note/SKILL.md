@@ -100,7 +100,7 @@ Then, for each Markdown file to ingest:
   - Every named person (first + last name) mentioned in the note has a page in `wiki/people/`.
   - The number of pages touched is reasonable relative to the length and density of the note (a dense meeting note should produce many pages, not one or two).
   - If any of these checks fail, go back and fill in the gaps before moving on.
-- Do NOT update `wiki/<topic>/_index.md` during a session (deferred to finalization).
+- Do NOT update `wiki/<topic>/index.md` during a session (deferred to finalization).
 - **After finishing each note's Wiki pages** (immediately, before moving to the next note): append its log entries to the batch log file specified in your prompt. Write one JSON object per line.
   - Write one entry for the file you were asked to ingest. If that batch entry was a non-Markdown file that you moved, use its NEW `_resources/` path (the batch path no longer exists after the move).
   - **In addition, for every conversion you performed during processing**, write entries for BOTH the moved original AND the companion `.md`. This includes:
