@@ -24,22 +24,17 @@ ls .import/batch-import-[0-9]*.txt 2>/dev/null | grep -v '\.claimed\.'
 
 ## Step 1 — Merge logs
 
-Append all `.import/batch-log-*.jsonl` to `wiki/log.jsonl` (create `wiki/log.jsonl` if it doesn't exist), then delete all `.import/batch-log-*.jsonl` and any remaining `.import/batch-import-*.txt`:
+Merge all `.import/batch-log-*.jsonl` into `wiki/log.jsonl` (created if it doesn't exist), then delete the batch files. Run from the vault root:
 
 ```bash
-# Wrapped in `bash -c` with `shopt -s nullglob` so unmatched globs expand to
-# nothing instead of aborting (zsh nomatch) or being passed as a literal pattern.
-# This runs identically whether the caller is bash or zsh (the Bash tool uses zsh).
-bash -c '
-  shopt -s nullglob
-  logs=(.import/batch-log-*.jsonl)
-  imports=(.import/batch-import-*.txt)
-  [ ${#logs[@]} -gt 0 ] && cat "${logs[@]}" >> wiki/log.jsonl
-  [ ${#logs[@]} -gt 0 ] && rm -f "${logs[@]}"
-  [ ${#imports[@]} -gt 0 ] && rm -f "${imports[@]}"
-  true  # always exit 0 when cleanup completes without error
-'
+python3 scripts/system/wiki-merge-batch-logs.py
 ```
+
+Every line is validated as a JSON object before anything is written. Do **not** replace this with `cat .import/batch-log-*.jsonl >> wiki/log.jsonl`: that appends half-written lines from a crashed batch session verbatim, fuses two entries into one corrupt line whenever a batch log lacks a trailing newline, and deletes the batch logs even when the append itself failed.
+
+The script writes the merged log through a temp file and removes the batch-log and `batch-import-*.txt` files only once that has succeeded. If it exits non-zero, the merge did not happen: `wiki/log.jsonl` is untouched and the batch logs are still in `.import/` — report the error and stop rather than continuing to Step 2.
+
+If it warns that lines were quarantined in `.import/batch-log-rejected.jsonl`, **tell the user** — those are ingest records that could not be parsed, and the notes they describe will be re-ingested on the next import unless the entries are repaired by hand.
 
 The merged entries do **not** yet carry a `hash`/`mtime` — those are stamped in Step 3, after the date pass has finished mutating the raw files.
 
@@ -78,7 +73,7 @@ Run the index-page script from the project root:
 python3 scripts/system/wiki-create-index-pages.py
 ```
 
-This rebuilds `wiki/index.md` and all `wiki/<topic>/_index.md` files.
+This rebuilds `wiki/index.md` and all `wiki/<topic>/index.md` files.
 
 ## Step 5 — Summarize
 

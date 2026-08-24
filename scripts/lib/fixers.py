@@ -250,6 +250,12 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
     """Drop entries from wiki/log.jsonl whose 'file' field no longer exists,
     and collapse duplicate entries that share the same 'file' value.
 
+    Entries with no 'file' field at all (the 'email-fetch' and 'slack-fetch'
+    records written by the wiki-fetch-* skills) are preserved verbatim and in
+    their original position: they name no path to orphan-check, and repeated
+    fetches of the same source are history, not duplicates. They count towards
+    `kept` and are never counted as dropped or duplicate.
+
     For duplicates, the entry with the latest 'date' (lexicographic on the
     ISO-style timestamp, falling back to last-seen position) is kept; its
     'pages_created' and 'pages_updated' lists are merged with those from every
@@ -269,6 +275,7 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
         return 0, 0, 0, 0
 
     best_by_file: dict[str, dict] = {}
+    passthrough: list[tuple[int, dict]] = []
     dropped = malformed = duplicates = 0
     with log_path.open("r", encoding="utf-8") as src:
         for lineno, raw in enumerate(src, start=1):
@@ -285,7 +292,14 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
                 continue
             file_field = entry.get("file")
             if not file_field:
-                dropped += 1
+                # Not every log entry names a file. 'email-fetch' and
+                # 'slack-fetch' records written by the wiki-fetch-* skills
+                # describe an inbox or a channel, and wiki-fetch-slack reads
+                # the newest slack-fetch entry back as its incremental fetch
+                # watermark. These are passed through untouched: there is no
+                # path to orphan-check, and repeated fetches of one source are
+                # history rather than duplicates, so they are never collapsed.
+                passthrough.append((lineno, entry))
                 continue
             if not (root / file_field).exists():
                 dropped += 1
@@ -324,14 +338,19 @@ def prune_log(root: Path, quiet: bool, dry_run: bool = False) -> tuple[int, int,
                         prev["pages_updated"], entry.get("pages_updated") or []
                     )
 
-    kept_lines: list[str] = []
-    for slot in sorted(best_by_file.values(), key=lambda v: v["lineno"]):
+    # Merge the deduplicated file entries back with the untouched fileless ones,
+    # restoring the log's original line order.
+    kept_entries: list[tuple[int, dict]] = list(passthrough)
+    for slot in best_by_file.values():
         entry = dict(slot["entry"])
         if "pages_created" in entry or slot["pages_created"]:
             entry["pages_created"] = slot["pages_created"]
         if "pages_updated" in entry or slot["pages_updated"]:
             entry["pages_updated"] = slot["pages_updated"]
-        kept_lines.append(json.dumps(entry, ensure_ascii=False))
+        kept_entries.append((slot["lineno"], entry))
+
+    kept_lines = [json.dumps(entry, ensure_ascii=False)
+                  for _, entry in sorted(kept_entries, key=lambda pair: pair[0])]
     kept = len(kept_lines)
 
     if dry_run:

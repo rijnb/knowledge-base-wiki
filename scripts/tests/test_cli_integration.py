@@ -33,6 +33,43 @@ class CliIntegrationTests(unittest.TestCase):
             capture_output=True, text=True, timeout=120,
         )
 
+    def run_doctor_no_batch(self, *extra):
+        """Run without --batch-mode. stdout/stderr are pipes, so this is not a
+        tty — the review TUI must not be started."""
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--quiet", *extra, str(self.root)],
+            capture_output=True, text=True, timeout=120,
+        )
+
+    def _clean_pages(self):
+        self.write("wiki/concepts/a.md",
+                   "---\ntype: concept\ndescription: Page a\n---\n"
+                   "This page has plenty of real prose words here.\n\nSee also [[b]].\n")
+        self.write("wiki/concepts/b.md",
+                   "---\ntype: concept\ndescription: Page b\n---\n"
+                   "This page also has plenty of real prose words here.\n\nSee also [[a]].\n")
+
+    def test_json_format_without_batch_mode_emits_json_not_tui(self):
+        # --format json is a machine interface. Without a tty there is no TUI to
+        # run; starting one anyway aborted the whole run with a curses error
+        # after a full scan, so the documented JSON output never appeared.
+        self._clean_pages()
+        proc = self.run_doctor_no_batch("--format", "json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("_curses.error", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["summary"]["broken"], 0)
+
+    def test_text_format_without_batch_mode_on_non_tty_prints_report(self):
+        # Same path for the human format: fall back to the plain text report
+        # instead of a TUI that cannot run.
+        self._clean_pages()
+        proc = self.run_doctor_no_batch("--format", "text")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertTrue(proc.stdout.strip(), "expected a text report on stdout")
+
     def test_clean_vault_exits_zero(self):
         self.write("wiki/concepts/a.md",
                    "---\ntype: concept\ndescription: Page a\n---\n"

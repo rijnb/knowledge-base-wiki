@@ -18,9 +18,42 @@ class IsExternalTests(unittest.TestCase):
         for url in ("http://x", "https://x", "ftp://x", "mailto:a@b"):
             self.assertTrue(is_external(url))
 
+    def test_non_http_uri_schemes_are_external(self):
+        # These are real URI schemes that appear in converted email and chat
+        # exports. Treating them as internal makes the doctor report every one
+        # of them as a broken link.
+        for url in (
+            "cid:e30e779e-ceba-4f2e-aaf8-4359979915a2",
+            "tel:+31612345678",
+            "sms:+31612345678",
+            "callto:someone",
+            "data:text/plain,hi",
+            "file:///tmp/a",
+            "obsidian://open?vault=x",
+            "slack://channel?id=1",
+            "zoommtg://zoom.us/join?confno=1",
+            "msteams://l/meetup-join/x",
+            "webcal://example.com/c.ics",
+            "geo:52.37,4.89",
+        ):
+            self.assertTrue(is_external(url), url)
+
     def test_relative_and_wikilink_targets_are_not_external(self):
         for t in ("foo/bar.md", "people/me", "image.png", ""):
             self.assertFalse(is_external(t))
+
+    def test_note_titles_containing_colons_are_not_external(self):
+        # Filenames in this vault may contain ':' (see AGENTS.md naming rules
+        # and --fix-simple-errors). A generic "anything before a colon is a
+        # scheme" rule would silently hide these as external and stop
+        # reporting them when they really are broken.
+        for t in (
+            "Meeting: 2026 plan",
+            "wiki/decisions/Decision: pick TPEG.md",
+            "Note:subtitle",
+            "C:/not/a/scheme",
+        ):
+            self.assertFalse(is_external(t), t)
 
 
 class StripFrontmatterTests(unittest.TestCase):

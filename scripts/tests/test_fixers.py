@@ -211,6 +211,52 @@ class PruneLogTests(VaultFixtureMixin, unittest.TestCase):
         self.assertEqual(log.read_text(), original)
         self.assertFalse((self.root / "wiki/log.jsonl.bak").exists())
 
+    def test_fileless_fetch_entries_are_preserved(self):
+        # email-fetch / slack-fetch entries legitimately have no 'file' field.
+        # wiki-fetch-slack reads the newest slack-fetch entry back as its
+        # incremental fetch watermark, so dropping these silently resets it.
+        self.write("wiki/concepts/exists.md", "x")
+        slack = {"date": "2026-01-03 10:00:00", "type": "slack-fetch",
+                 "source": "eng-team", "id": "C123",
+                 "window_start": "2026-01-01 00:00:00"}
+        email = {"date": "2026-01-04 10:00:00", "type": "email-fetch",
+                 "inbox": "/tmp/in", "files_copied": 3, "files_skipped": 1}
+        self._write_log([
+            json.dumps({"file": "wiki/concepts/exists.md", "date": "2026-01-01"}),
+            json.dumps(slack),
+            json.dumps({"file": "wiki/concepts/gone.md", "date": "2026-01-02"}),
+            json.dumps(email),
+        ])
+        kept, dropped, malformed, dupes = prune_log(self.root, quiet=True)
+        self.assertEqual(dropped, 1)  # only the genuinely missing file
+        self.assertEqual(kept, 3)     # exists.md + both fetch entries
+        entries = [json.loads(l) for l
+                   in (self.root / "wiki/log.jsonl").read_text().splitlines()]
+        self.assertIn(slack, entries)
+        self.assertIn(email, entries)
+
+    def test_fileless_entries_keep_original_order_and_are_not_deduped(self):
+        # Repeated fetches of the same source are history, not duplicates:
+        # collapsing them would destroy the watermark trail.
+        self.write("wiki/concepts/exists.md", "x")
+        first = {"date": "2026-01-01 09:00:00", "type": "slack-fetch",
+                 "source": "eng-team", "window_start": "2025-12-01 00:00:00"}
+        second = {"date": "2026-01-02 09:00:00", "type": "slack-fetch",
+                  "source": "eng-team", "window_start": "2026-01-01 09:00:00"}
+        self._write_log([
+            json.dumps(first),
+            json.dumps({"file": "wiki/concepts/exists.md", "date": "2026-01-01"}),
+            json.dumps(second),
+        ])
+        kept, dropped, malformed, dupes = prune_log(self.root, quiet=True)
+        self.assertEqual(kept, 3)
+        self.assertEqual(dupes, 0)
+        entries = [json.loads(l) for l
+                   in (self.root / "wiki/log.jsonl").read_text().splitlines()]
+        self.assertEqual(entries[0], first)
+        self.assertEqual(entries[1]["file"], "wiki/concepts/exists.md")
+        self.assertEqual(entries[2], second)
+
 
 class StampLogHashesTests(VaultFixtureMixin, unittest.TestCase):
     def _entry(self, **kw):

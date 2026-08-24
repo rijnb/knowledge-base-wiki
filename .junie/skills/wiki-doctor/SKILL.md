@@ -16,6 +16,7 @@ python3 scripts/wiki-doctor.py --format json --fix-orphans --batch-mode
 
 - `--fix-simple-errors` repairs WikiLinks where a unique normalized match exists (e.g. colons vs underscores in filenames), and relocates loose non-markdown files (in `raw/`, `wiki/`, `INBOX/`) into sibling `_resources/` directories via the Obsidian CLI, converting them to companion `.md` notes. These are applied immediately without requiring user confirmation. Loose-file moves need Obsidian: the doctor starts it automatically when it is not running, and if it cannot be started the files are skipped with a WARNING in the output.
 - `--fix-orphans` repairs orphaned pages by replacing matching plain text WikiLink names in files with an actual link.
+- The doctor also validates OKF v0.2 frontmatter: `type` vocabulary (exactly competition, concept, conversation, decision, person, problem, project, system), the reserved `status:` lifecycle enum (`draft | stable | deprecated` — subject state belongs in `state:`), and `description:` presence on every page. Report violations for manual fixing.
 - Report how many links were fixed, and list any remaining broken links for the user to review manually.
 - If there are problems left, suggest the user to run:
 ```bash

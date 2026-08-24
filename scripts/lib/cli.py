@@ -215,12 +215,24 @@ def main():
             print(msg, file=sys.stderr)
         sys.exit(1)
 
+    # Whether this run may draw curses UI and ask questions. Needs a real
+    # terminal on both ends, and is never right for '--format json', which is a
+    # machine interface: even the progress TUI writes escape sequences to stdout
+    # and corrupts the payload. Decided once, before the scan, so every prompt
+    # and dialog below agrees.
+    interactive = (
+        not args.batch_mode
+        and args.format != "json"
+        and sys.stdin.isatty()
+        and sys.stdout.isatty()
+    )
+
     # Legacy converted/ layout: detect before scanning (a migration moves files
     # around, so it must happen before links are resolved). In interactive mode
-    # offer to run the migration script; in batch mode it is reported only.
+    # offer to run the migration script; otherwise it is reported only.
     legacy_result = check_legacy_converted(root, args.quiet)
     migration_result = None
-    if not args.batch_mode and legacy_result["legacy_converted"]:
+    if interactive and legacy_result["legacy_converted"]:
         if ask_run_migration(legacy_result["legacy_converted"]):
             migration_result = run_migration(root)
             if migration_result.get("error"):
@@ -235,7 +247,7 @@ def main():
 
     auto_fix_applied = False
     try:
-        if not args.batch_mode:
+        if interactive:
             result = run_scan_with_dialog(root, args)
             has_fixable = (
                 any("suggested_fix" in b for b in result["broken_links"])
@@ -323,7 +335,7 @@ def main():
     )
     result["recommendations"] = [_freshness_recommendation(root, has_issues)]
 
-    if not args.batch_mode:
+    if interactive:
         broken_for_review = result["broken_links"]
         if auto_fix_applied:
             broken_for_review = [b for b in broken_for_review if not b.get("fixed") and not b.get("fm_deleted")]

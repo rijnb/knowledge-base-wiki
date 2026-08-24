@@ -195,7 +195,7 @@ The email integration uses Microsoft Power Automate to save emails to a OneDrive
 	- LLM converts non-Markdown inputs (`.vtt` transcripts, `.eml`/`.html` emails, `.pdf`/`.jpg` scans): the original file is moved into a `_resources/` subdirectory of its directory, and a companion `.md` note is written next to it (in the same directory as the original was).
 	- Markdown notes with `ingest: false` frontmatter, plus local `raw/` files explicitly linked from them, are excluded from batch ingestion and are not logged.
 	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
-	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `_index.md` files, and run post-processing (QMD re-index + health check).
+	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `index.md` files, and run post-processing (QMD re-index + health check).
    
 - **Query wiki:**
 	- User asks a high-level question.
@@ -469,7 +469,7 @@ The database is automatically checked for errors after ingesting new notes. To c
 │   ├── index.md         ← top-level navigation to section indexes
 │   ├── log.jsonl        ← append-only ingest log (JSON Lines)
 │   ├── concepts/        ← mental models and domain concepts
-│   │   └── _index.md    ← alphabetical index of concept pages
+│   │   └── index.md     ← alphabetical index of concept pages
 │   ├── competition/     ← competitor profiles
 │   ├── conversations/   ← interesting and valuable conversations (query results)
 │   ├── decisions/       ← decision records
@@ -506,7 +506,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 
 - `raw/` is immutable — LLM never writes there (except `raw/confluence/` as a fetch cache).
 - `wiki/` is LLM-owned — LLM writes, the user reads.
-- The relevant `wiki/<type>/_index.md` files are rebuilt and `wiki/log.jsonl` is updated on every finalized ingest.
+- The relevant `wiki/<type>/index.md` files are rebuilt and `wiki/log.jsonl` is updated on every finalized ingest.
 - Hand-curated content in Wiki pages is never deleted or overwritten.
 
 ## Scripts
@@ -531,7 +531,7 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | Script | Purpose |
 | ------ | ------- |
 | `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest.sh` and the `wiki-ingest` skill. |
-| `system/wiki-create-index-pages.py` | Rebuilds `_index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
+| `system/wiki-create-index-pages.py` | Rebuilds `index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
 | `system/wiki-baseline-raw-log.py` | Adds migration-baseline entries to `wiki/log.jsonl` for existing raw files, while respecting `ingest: false`. Called by `wiki-migrate-existing.sh`. |
 | `system/wiki-freshness-query.py` | Builds a query-time packet from retrieved pages, ranking canonical blocks by provenance freshness and explaining demoted legacy evidence. |
 | `system/wiki-provenance-stamp-status.py` | Applies a minimal `Freshness Status` provenance block to reviewed legacy pages from a JSON manifest. |

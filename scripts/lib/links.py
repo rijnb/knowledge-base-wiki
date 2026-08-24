@@ -29,8 +29,39 @@ CURLY_TO_STRAIGHT = str.maketrans({
 _CURLY_RE = re.compile(r'[‘’“”]')
 
 
+# URI schemes that are never vault-internal. An explicit allowlist, not a
+# generic "<scheme>:" regex: note filenames in this vault may contain ':'
+# (e.g. [[Meeting: 2026 plan]]), and a generic rule would classify those as
+# external and silently stop reporting them when they are genuinely broken.
+#
+# 'cid:' comes from converted email (inline attachment refs), 'tel:'/'sms:'/
+# 'callto:' from signatures, 'obsidian://' from in-vault deep links, and
+# 'slack://'/'zoommtg://'/'msteams://' from chat and meeting exports.
+EXTERNAL_SCHEMES = (
+    "http://",
+    "https://",
+    "ftp://",
+    "ftps://",
+    "mailto:",
+    "cid:",
+    "tel:",
+    "sms:",
+    "callto:",
+    "data:",
+    "file://",
+    "obsidian://",
+    "slack://",
+    "zoommtg://",
+    "zoomus://",
+    "msteams://",
+    "webcal://",
+    "news:",
+    "geo:",
+)
+
+
 def is_external(target: str) -> bool:
-    return target.startswith(("http://", "https://", "ftp://", "mailto:"))
+    return target.lower().startswith(EXTERNAL_SCHEMES)
 
 
 def strip_frontmatter(content: str) -> tuple[str, int]:

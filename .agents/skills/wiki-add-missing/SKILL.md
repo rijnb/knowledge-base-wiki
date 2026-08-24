@@ -92,7 +92,10 @@ Use `minScore: 0.5` to filter noise. Use `intent` on every call to improve snipp
 
 Apply the correct template for the chosen topic type. Fill every section with synthesized content from Step 4. Omit any section for which no relevant information was found.
 
-Additional rule: cite sources inline: `Source: raw/notes/2024-03-15 Meeting.md`
+Additional rules:
+- Cite sources inline: `Source: raw/notes/2024-03-15 Meeting.md`
+- Set the required `description:` frontmatter field from the Step 2 description (plain text, wikilinks allowed, ~160 chars max, YAML double-quoted) — index entries are drawn from it.
+- Set the OKF v0.2 provenance frontmatter per `wiki-templates`: `sources:` listing the raw notes used, and `generated: {by: "agent:wiki-add-missing", at: <today, YYYY-MM-DD>}`.
 
 Write the completed page to: `wiki/<topic>/<Name>.md`
 
