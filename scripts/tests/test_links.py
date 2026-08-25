@@ -150,6 +150,17 @@ class ExtractLinksTests(unittest.TestCase):
         self.assertEqual(len(links), 1)
         self.assertEqual(links[0][1], "image")
 
+    def test_footnote_ref_is_not_a_link(self):
+        # [^s2] points at a footnote definition in the same page, not at a
+        # vault path — it must never be resolved (and reported broken) as one.
+        # Integrity of the ref itself is checked by lib/checks/footnotes.py.
+        self.assertEqual(collect("A claim. [^s2] and another. [^export-schema]\n"), [])
+
+    def test_footnote_definition_yields_only_its_target(self):
+        links = collect("[^s2]: [[raw/notes/x.md]]\n")
+        self.assertEqual([(l[1], l[3]) for l in links],
+                         [("wikilink", "raw/notes/x.md")])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-"""Tests for the check modules: vault, orphans, stubs, legacy."""
+"""Tests for the check modules: vault, orphans, stubs, footnotes, legacy."""
 
 import argparse
 import sys
@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from _vault_fixture import VaultFixtureMixin  # noqa: E402
+from lib.checks.footnotes import check_footnotes  # noqa: E402
 from lib.checks.frontmatter import check_frontmatter  # noqa: E402
 from lib.checks.legacy import check_legacy_converted  # noqa: E402
 from lib.checks.orphans import check_orphans  # noqa: E402
@@ -223,6 +224,81 @@ class CheckFrontmatterTests(VaultFixtureMixin, unittest.TestCase):
         self.write("wiki/concepts/index.md", "no frontmatter at all\n")
         result = check_frontmatter(self.root, quiet=True)
         self.assertEqual(result["frontmatter_issues"], [])
+        self.assertEqual(result["summary"]["wiki_pages_checked"], 0)
+
+
+class CheckFootnotesTests(VaultFixtureMixin, unittest.TestCase):
+    def issues_for(self, rel):
+        result = check_footnotes(self.root, quiet=True)
+        return [i for i in result["footnote_issues"] if i["file"] == rel]
+
+    def test_matching_ref_and_definition_passes(self):
+        self.write("wiki/concepts/good.md",
+                   "---\ntype: concept\n---\nA claim. [^s1]\n\n[^s1]: [[raw/notes/x.md]]\n")
+        result = check_footnotes(self.root, quiet=True)
+        self.assertEqual(result["footnote_issues"], [])
+        self.assertEqual(result["summary"]["wiki_pages_checked"], 1)
+        self.assertEqual(result["summary"]["footnote_errors"], 0)
+        self.assertEqual(result["summary"]["footnote_warnings"], 0)
+
+    def test_undefined_ref_is_error(self):
+        self.write("wiki/concepts/dangling.md",
+                   "---\ntype: concept\n---\nA claim. [^s2]\n\n[^s1]: [[raw/notes/x.md]]\n")
+        issues = self.issues_for("wiki/concepts/dangling.md")
+        errors = [i for i in issues if i["severity"] == "error"]
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0]["line"], 4)
+        self.assertIn("[^s2]", errors[0]["reason"])
+
+    def test_unreferenced_definition_is_warning(self):
+        self.write("wiki/concepts/unused.md",
+                   "---\ntype: concept\n---\nA claim. [^s1]\n\n"
+                   "[^s1]: [[raw/notes/x.md]]\n[^s2]: [[raw/notes/y.md]]\n")
+        issues = self.issues_for("wiki/concepts/unused.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "warning")
+        self.assertEqual(issues[0]["line"], 7)
+        self.assertIn("[^s2]", issues[0]["reason"])
+
+    def test_duplicate_definition_is_error(self):
+        self.write("wiki/concepts/dupe.md",
+                   "---\ntype: concept\n---\nA claim. [^s1]\n\n"
+                   "[^s1]: [[raw/notes/x.md]]\n[^s1]: [[raw/notes/y.md]]\n")
+        issues = self.issues_for("wiki/concepts/dupe.md")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["severity"], "error")
+        self.assertIn("defined 2 times", issues[0]["reason"])
+
+    def test_ref_in_fenced_block_ignored(self):
+        self.write("wiki/concepts/fenced.md",
+                   "---\ntype: concept\n---\nExample:\n\n```\nA claim. [^s9]\n```\n")
+        self.assertEqual(self.issues_for("wiki/concepts/fenced.md"), [])
+
+    def test_ref_in_inline_code_ignored(self):
+        self.write("wiki/concepts/inline.md",
+                   "---\ntype: concept\n---\nCite a source with `[^s9]` after the claim.\n")
+        self.assertEqual(self.issues_for("wiki/concepts/inline.md"), [])
+
+    def test_regex_character_class_not_a_footnote(self):
+        self.write("wiki/concepts/regex.md",
+                   "---\ntype: concept\n---\nThe filter is ^[^/]+\\.md$ for top-level notes.\n")
+        self.assertEqual(self.issues_for("wiki/concepts/regex.md"), [])
+
+    def test_word_label_footnote_supported(self):
+        self.write("wiki/concepts/word.md",
+                   "---\ntype: concept\n---\nA claim. [^export-schema]\n\n"
+                   "[^export-schema]: See the export schema.\n")
+        self.assertEqual(self.issues_for("wiki/concepts/word.md"), [])
+
+    def test_frontmatter_ref_ignored(self):
+        self.write("wiki/concepts/fm.md",
+                   "---\ntype: concept\ndescription: \"uses [^s9] notation\"\n---\nbody\n")
+        self.assertEqual(self.issues_for("wiki/concepts/fm.md"), [])
+
+    def test_index_md_exempt(self):
+        self.write("wiki/concepts/index.md", "A claim. [^s9]\n")
+        result = check_footnotes(self.root, quiet=True)
+        self.assertEqual(result["footnote_issues"], [])
         self.assertEqual(result["summary"]["wiki_pages_checked"], 0)
 
 

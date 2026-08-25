@@ -114,6 +114,20 @@ def format_text(result: dict) -> str:
         else:
             lines.append("No frontmatter issues found.")
 
+    if "footnote_issues" in result:
+        lines.append("")
+        fn = result["footnote_issues"]
+        fn_s = result.get("footnote_summary", {})
+        lines.append(f"FOOTNOTE CHECK: {fn_s.get('wiki_pages_checked', '?')} pages checked, "
+                     f"{fn_s.get('footnote_errors', 0)} error(s), "
+                     f"{fn_s.get('footnote_warnings', 0)} warning(s).")
+        if fn:
+            lines.append("FOOTNOTE ISSUES (refs and definitions must match within a page):")
+            for i in fn:
+                lines.append(f"  {i['file']}:{i['line']}: [{i['severity']}] {i['reason']}")
+        else:
+            lines.append("No footnote issues found.")
+
     if "loose_files" in result:
         lines.append("")
         lf = result["loose_files"]
@@ -167,7 +181,7 @@ def format_text(result: dict) -> str:
 
     # Issues summary — shown at the end
     has_issues = (result["broken_links"] or result.get("orphans") or result.get("stubs")
-                  or result.get("frontmatter_issues")
+                  or result.get("frontmatter_issues") or result.get("footnote_issues")
                   or result.get("legacy_converted") or result.get("loose_files")
                   or result.get("misplaced_attachments"))
     if has_issues:
@@ -214,6 +228,11 @@ def format_text(result: dict) -> str:
             n_err = fm_s.get("frontmatter_errors", 0)
             n_warn = fm_s.get("frontmatter_warnings", 0)
             lines.append(f"  frontmatter  : {n_err} error(s), {n_warn} warning(s)")
+        if "footnote_issues" in result:
+            fn_s = result.get("footnote_summary", {})
+            n_err = fn_s.get("footnote_errors", 0)
+            n_warn = fn_s.get("footnote_warnings", 0)
+            lines.append(f"  footnotes    : {n_err} error(s), {n_warn} warning(s)")
         if result.get("loose_files"):
             lf_s = result.get("loose_summary", {})
             n_loose = lf_s.get("loose_found", len(result["loose_files"]))
