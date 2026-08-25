@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .checks.attachments import check_misplaced_attachments
+from .checks.duplicates import check_accent_duplicates
 from .checks.footnotes import check_footnotes
 from .checks.frontmatter import check_frontmatter
 from .checks.legacy import check_legacy_converted, run_migration
@@ -277,6 +278,10 @@ def main():
             print(msg, file=sys.stderr)
         sys.exit(1)
 
+    duplicate_result = check_accent_duplicates(root, args.quiet)
+    result["accent_duplicates"] = duplicate_result["accent_duplicates"]
+    result["accent_duplicate_summary"] = duplicate_result["summary"]
+
     result["legacy_converted"] = legacy_result["legacy_converted"]
     result["legacy_summary"] = legacy_result["summary"]
     if migration_result is not None:
@@ -336,6 +341,7 @@ def main():
         or result.get("frontmatter_summary", {}).get("frontmatter_errors", 0) > 0
         or result.get("footnote_summary", {}).get("footnote_errors", 0) > 0
         or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
+        or result.get("accent_duplicate_summary", {}).get("accent_duplicates_found", 0) > 0
         or result.get("loose_summary", {}).get("loose_found", 0) > 0
         or result.get("attachment_summary", {}).get("misplaced_found", 0) > 0
     )

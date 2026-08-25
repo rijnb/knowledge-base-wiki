@@ -179,10 +179,28 @@ def format_text(result: dict) -> str:
         else:
             lines.append("No legacy converted/ directories found.")
 
+    if "accent_duplicates" in result:
+        lines.append("")
+        ad = result["accent_duplicates"]
+        ad_s = result.get("accent_duplicate_summary", {})
+        lines.append(f"ACCENT DUPLICATE CHECK: {ad_s.get('accent_duplicates_found', len(ad))} "
+                     f"filename group(s) differing only by accents/diacritics.")
+        if ad:
+            lines.append("ACCENT DUPLICATES (same page under accented and plain names; "
+                         "merge into the ASCII-named file):")
+            for g in ad:
+                keep = g.get("keep")
+                lines.append(f"  keep    : {keep if keep else '(no ASCII-named file — rename needed)'}")
+                for d in g["duplicates"]:
+                    lines.append(f"  merge in: {d}")
+        else:
+            lines.append("No accent-duplicate filenames found.")
+
     # Issues summary — shown at the end
     has_issues = (result["broken_links"] or result.get("orphans") or result.get("stubs")
                   or result.get("frontmatter_issues") or result.get("footnote_issues")
                   or result.get("legacy_converted") or result.get("loose_files")
+                  or result.get("accent_duplicates")
                   or result.get("misplaced_attachments"))
     if has_issues:
         lines.append("")
@@ -248,6 +266,11 @@ def format_text(result: dict) -> str:
             n_dirs = lc_s.get("converted_dirs_found", len(result["legacy_converted"]))
             lines.append(f"  legacy layout: {n_dirs} converted/ dir(s) to migrate "
                          f"(run scripts/system/migrate-converted-to-resources.py --apply)")
+        if result.get("accent_duplicates"):
+            ad_s = result.get("accent_duplicate_summary", {})
+            n_ad = ad_s.get("accent_duplicates_found", len(result["accent_duplicates"]))
+            lines.append(f"  accent duplicates: {n_ad} filename group(s) to merge "
+                         f"into their ASCII-named files")
 
     if result.get("recommendations"):
         lines.append("")

@@ -1,6 +1,14 @@
 """Link regex patterns, extraction, and a few shared text utilities."""
 
 import re
+import unicodedata
+
+
+def nfc(s: str) -> str:
+    """Normalize to NFC so link targets and filenames compare equal across
+    filesystems that store different Unicode forms (APFS preserves NFC,
+    HFS+ forces NFD)."""
+    return unicodedata.normalize("NFC", s)
 
 
 # Matches [[target]], [[target|alias]] — Obsidian wikilinks.

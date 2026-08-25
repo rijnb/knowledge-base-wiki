@@ -18,6 +18,7 @@ python3 scripts/wiki-doctor.py --format json --fix-orphans --batch-mode
 - `--fix-orphans` repairs orphaned pages by replacing matching plain text WikiLink names in files with an actual link.
 - The doctor also validates OKF v0.2 frontmatter: `type` vocabulary (exactly competition, concept, conversation, decision, person, problem, project, system), the reserved `status:` lifecycle enum (`draft | stable | deprecated` — subject state belongs in `state:`), and `description:` presence on every page. Report violations for manual fixing.
 - It also checks source footnotes per page: a `[^sN]` ref is a local footnote reference (never a vault link), so it must have a matching `[^sN]:` definition line — errors for a ref without a definition or an id defined twice, warnings for a definition nothing references. Whether the id matches `sources[].id` in the frontmatter is checked by the provenance lint in Step 5.
+- It also flags accent duplicates (`ACCENT DUPLICATE CHECK`): same-directory pages whose filenames are identical once diacritics are stripped (e.g. `Adam Kepinski.md` next to `Adam Kepiński.md` — a fork pattern created by syncing between filesystems that store different Unicode forms). Merge the accented file's content into the ASCII-named file, retarget links, then delete the accented file. Never auto-fix — content may have diverged.
 - Report how many links were fixed, and list any remaining broken links for the user to review manually.
 - If there are problems left, suggest the user to run:
 ```bash

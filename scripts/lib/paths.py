@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from .links import CURLY_TO_STRAIGHT
+from .links import CURLY_TO_STRAIGHT, nfc
 
 
 def truncate_path(path: str, max_len: int = 40, prefix_len: int = 20) -> str:
@@ -93,14 +93,16 @@ class VaultIndex:
             base = Path(dirpath)
             for fname in filenames:
                 p = base / fname
+                # Keys are NFC-normalized so lookups match regardless of the
+                # Unicode form the filesystem stores (APFS: NFC, HFS+: NFD).
                 rel_parts = p.relative_to(root).parts
                 for i in range(len(rel_parts)):
                     self.path_suffix_set.add(
-                        "/".join(rel_parts[i:]).translate(CURLY_TO_STRAIGHT)
+                        nfc("/".join(rel_parts[i:]).translate(CURLY_TO_STRAIGHT))
                     )
                 if fname.endswith(".md") and not should_skip_md(p, root):
                     self.md_files.append(p)
-                    stem = p.stem
+                    stem = nfc(p.stem)
                     self.stem_index.setdefault(stem, []).append(p)
                     self.norm_index.setdefault(normalize_name(stem), []).append(p)
         self.md_files.sort()

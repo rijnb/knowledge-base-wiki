@@ -2,6 +2,7 @@
 normalize_name, find_normalized_match, find_whitespace_before_ext_match."""
 
 import sys
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -43,6 +44,41 @@ class NormalizeNameTests(unittest.TestCase):
             normalize_name("Cost-Aware Model Routing"),
             normalize_name("Cost-Aware Model Routing"),
         )
+
+
+class UnicodeNormalizationTests(VaultFixtureMixin, unittest.TestCase):
+    """Filenames synced across machines may differ only in Unicode form
+    (NFC on APFS vs NFD on HFS+). Link resolution must not depend on it."""
+
+    NFC = unicodedata.normalize("NFC", "Adam Kepi\u0144ski")   # 'ń' precomposed
+    NFD = unicodedata.normalize("NFD", "Adam Kepi\u0144ski")   # 'n' + combining acute
+
+    def _index(self):
+        v = VaultIndex(self.root)
+        return v.stem_index, v.path_suffix_set
+
+    def test_nfc_link_resolves_nfd_filename(self):
+        self.write(f"wiki/people/{self.NFD}.md", "x")
+        stems, suffixes = self._index()
+        self.assertTrue(resolve_wikilink(self.NFC, self.root, stems, suffixes))
+
+    def test_nfd_link_resolves_nfc_filename(self):
+        self.write(f"wiki/people/{self.NFC}.md", "x")
+        stems, suffixes = self._index()
+        self.assertTrue(resolve_wikilink(self.NFD, self.root, stems, suffixes))
+
+    def test_path_suffix_lookup_normalizes(self):
+        self.write(f"raw/notes/_resources/{self.NFD}.pdf", "x")
+        stems, suffixes = self._index()
+        self.assertTrue(
+            resolve_wikilink(f"_resources/{self.NFC}.pdf", self.root, stems, suffixes)
+        )
+
+    def test_find_normalized_match_across_forms(self):
+        self.write(f"wiki/people/{self.NFD}.md", "x")
+        v = VaultIndex(self.root)
+        fix = find_normalized_match(self.NFC, self.root, v.norm_index)
+        self.assertIsNotNone(fix)
 
 
 class ResolveWikilinkTests(VaultFixtureMixin, unittest.TestCase):

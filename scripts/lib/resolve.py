@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .links import CURLY_TO_STRAIGHT, is_external
+from .links import CURLY_TO_STRAIGHT, is_external, nfc
 
 
 KNOWN_EXTENSIONS = {".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".webp"}
@@ -28,8 +28,11 @@ def normalize_name(name: str) -> str:
     '[[foo-bar]]', '[[foo's bar?]]', '[[café]]', and files 'foo_ bar.md' /
     'foo_s bar_.md' / 'caf_.md' all map to the same key. Hyphens normalize to
     spaces too, so slugified links resolve back to their spaced filenames.
+    NFC-normalizes first so NFC and NFD spellings of the same name produce
+    the same key (NFD leaves a base letter behind where NFC drops the whole
+    accented character).
     """
-    return re.sub(r'\s+', ' ', _PROBLEMATIC_CHARS.sub(' ', name)).strip().lower()
+    return re.sub(r'\s+', ' ', _PROBLEMATIC_CHARS.sub(' ', nfc(name))).strip().lower()
 
 
 def find_normalized_match(target: str, root: Path, norm_index: dict[str, list[Path]]) -> "str | None":
@@ -73,6 +76,7 @@ def find_whitespace_before_ext_match(
     targets without a directory component, the bare stem is returned (matching
     Obsidian's wikilink convention).
     """
+    target = nfc(target)
     candidate = Path(target)
     suffix = candidate.suffix
     if not suffix:
@@ -133,6 +137,10 @@ def resolve_wikilink(
 
     Returns True if the target resolves to an existing file.
     """
+    # Index keys are NFC; normalize the target so a link and a filename that
+    # differ only in Unicode form (NFC vs NFD) still match. Filesystem checks
+    # below are unaffected — macOS lookups are normalization-insensitive.
+    target = nfc(target)
     candidate = Path(target)
     has_known_ext = candidate.suffix.lower() in KNOWN_EXTENSIONS
 
@@ -205,6 +213,7 @@ def resolve_wikilink(
 
 def resolve_wikilink_to_path(target: str, root: Path, stem_index: dict[str, list[Path]]) -> "Path | None":
     """Resolve a wikilink target to an actual Path, or None if unresolvable or ambiguous."""
+    target = nfc(target)
     candidate = Path(target)
     has_known_ext = candidate.suffix.lower() in KNOWN_EXTENSIONS
 
