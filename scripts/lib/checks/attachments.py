@@ -8,10 +8,11 @@ attachments.
 Pure detection — never writes.
 """
 
+import sys
 from pathlib import Path
 from urllib.parse import unquote
 
-from ..links import CURLY_TO_STRAIGHT, extract_links, is_external
+from ..links import CURLY_TO_STRAIGHT, extract_links, is_external, nfc
 
 # Content trees whose notes must co-locate their attachments.
 ENFORCED_DIRS = ("raw", "INBOX")
@@ -184,5 +185,64 @@ def check_misplaced_attachments(root: Path, quiet: bool) -> dict:
             "notes_scanned": notes_scanned,
             "attachments_checked": len(enforced_links),
             "misplaced_found": len(misplaced),
+        },
+    }
+
+
+def check_orphan_attachments(root: Path, quiet: bool) -> dict:
+    """Find files in the vault-root _resources/ that nothing references.
+
+    Root _resources/ is Obsidian's default attachment folder, where pasted
+    images accumulate; when the note that embedded one is deleted or ingested
+    away, the file stays behind unreferenced. A file counts as referenced when
+    any raw/, wiki/ or INBOX/ note links or embeds its filename (any path
+    form), or when a companion `<name>.md` note sits next to it. raw/ and
+    INBOX/ resources trees are NOT scanned — they legitimately hold
+    unreferenced conversion byproducts (extraction sidecars, media/ images).
+
+    Pure detection — never writes: with no referencing note there is no
+    destination to relocate to, so remediation is a manual decision.
+    """
+    if not quiet:
+        print("Checking for orphan attachments in _resources/...", file=sys.stderr)
+
+    res_dir = root / "_resources"
+    candidates = [
+        f for f in sorted(res_dir.rglob("*"))
+        if f.is_file() and not f.is_symlink()
+        and f.suffix.lower() != ".md" and not f.name.startswith(".")
+    ] if res_dir.is_dir() else []
+
+    orphans = []
+    if candidates:
+        referenced: set[str] = set()
+        for top in ("raw", "wiki", "INBOX"):
+            base = root / top
+            if not base.is_dir():
+                continue
+            for md in base.rglob("*.md"):
+                if not md.is_file():
+                    continue
+                try:
+                    content = md.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                for _lineno, _link_type, _raw, target in extract_links(
+                    content, include_images=True
+                ):
+                    target = unquote(target).split("#", 1)[0].strip()
+                    if target:
+                        referenced.add(nfc(Path(target).name))
+        orphans = [
+            str(f.relative_to(root)) for f in candidates
+            if nfc(f.name) not in referenced
+            and not (f.parent / (f.name + ".md")).is_file()
+        ]
+
+    return {
+        "orphan_attachments": orphans,
+        "summary": {
+            "attachments_scanned": len(candidates),
+            "orphan_attachments_found": len(orphans),
         },
     }

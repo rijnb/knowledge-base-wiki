@@ -342,3 +342,53 @@ class ReportRenderingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CheckOrphanAttachmentsTests(AttachmentFixtureMixin, unittest.TestCase):
+    def _run(self):
+        from lib.checks.attachments import check_orphan_attachments
+        return check_orphan_attachments(self.root, quiet=True)
+
+    def test_unreferenced_root_resources_file_is_flagged(self):
+        self.touch("_resources/Untitled-123.jpeg")
+        result = self._run()
+        self.assertEqual(result["orphan_attachments"], ["_resources/Untitled-123.jpeg"])
+        self.assertEqual(result["summary"]["orphan_attachments_found"], 1)
+
+    def test_wikilink_embed_reference_exempts(self):
+        self.touch("_resources/shot.png")
+        self.note("wiki/concepts/page.md", "![[shot.png]]\n")
+        result = self._run()
+        self.assertEqual(result["orphan_attachments"], [])
+
+    def test_mdlink_with_path_reference_exempts(self):
+        self.touch("_resources/diagram.png")
+        self.note("raw/notes/note.md", "![d](_resources/diagram.png)\n")
+        result = self._run()
+        self.assertEqual(result["orphan_attachments"], [])
+
+    def test_companion_note_exempts(self):
+        self.touch("_resources/report.pdf")
+        self.note("_resources/report.pdf.md", "companion\n")
+        result = self._run()
+        self.assertEqual(result["orphan_attachments"], [])
+
+    def test_infrastructure_files_ignored(self):
+        self.touch("_resources/.DS_Store")
+        result = self._run()
+        self.assertEqual(result["orphan_attachments"], [])
+
+    def test_missing_root_resources_dir_is_clean(self):
+        self.note("wiki/concepts/page.md", "text\n")
+        result = self._run()
+        self.assertEqual(result["orphan_attachments"], [])
+        self.assertEqual(result["summary"]["orphan_attachments_found"], 0)
+
+    def test_nfc_nfd_reference_forms_match(self):
+        import unicodedata
+        nfd = unicodedata.normalize("NFD", "Kepiński.png")
+        nfc = unicodedata.normalize("NFC", "Kepiński.png")
+        self.touch(f"_resources/{nfd}")
+        self.note("wiki/concepts/page.md", f"![[{nfc}]]\n")
+        result = self._run()
+        self.assertEqual(result["orphan_attachments"], [])

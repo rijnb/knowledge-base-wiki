@@ -6,7 +6,7 @@ import shlex
 import sys
 from pathlib import Path
 
-from .checks.attachments import check_misplaced_attachments
+from .checks.attachments import check_misplaced_attachments, check_orphan_attachments
 from .checks.duplicates import check_accent_duplicates
 from .checks.footnotes import check_footnotes
 from .checks.frontmatter import check_frontmatter
@@ -282,6 +282,10 @@ def main():
     result["accent_duplicates"] = duplicate_result["accent_duplicates"]
     result["accent_duplicate_summary"] = duplicate_result["summary"]
 
+    orphan_att_result = check_orphan_attachments(root, args.quiet)
+    result["orphan_attachments"] = orphan_att_result["orphan_attachments"]
+    result["orphan_attachment_summary"] = orphan_att_result["summary"]
+
     result["legacy_converted"] = legacy_result["legacy_converted"]
     result["legacy_summary"] = legacy_result["summary"]
     if migration_result is not None:
@@ -342,6 +346,7 @@ def main():
         or result.get("footnote_summary", {}).get("footnote_errors", 0) > 0
         or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
         or result.get("accent_duplicate_summary", {}).get("accent_duplicates_found", 0) > 0
+        or result.get("orphan_attachment_summary", {}).get("orphan_attachments_found", 0) > 0
         or result.get("loose_summary", {}).get("loose_found", 0) > 0
         or result.get("attachment_summary", {}).get("misplaced_found", 0) > 0
     )

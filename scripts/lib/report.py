@@ -179,6 +179,21 @@ def format_text(result: dict) -> str:
         else:
             lines.append("No legacy converted/ directories found.")
 
+    if "orphan_attachments" in result:
+        lines.append("")
+        oa = result["orphan_attachments"]
+        oa_s = result.get("orphan_attachment_summary", {})
+        lines.append(f"ORPHAN ATTACHMENT CHECK: {oa_s.get('attachments_scanned', '?')} "
+                     f"file(s) in vault-root _resources/ scanned, "
+                     f"{oa_s.get('orphan_attachments_found', len(oa))} orphan(s) found.")
+        if oa:
+            lines.append("ORPHAN ATTACHMENTS (in vault-root _resources/, referenced by no note; "
+                         "review and delete or relocate manually):")
+            for f in oa:
+                lines.append(f"  {f}")
+        else:
+            lines.append("No orphan attachments found.")
+
     if "accent_duplicates" in result:
         lines.append("")
         ad = result["accent_duplicates"]
@@ -201,6 +216,7 @@ def format_text(result: dict) -> str:
                   or result.get("frontmatter_issues") or result.get("footnote_issues")
                   or result.get("legacy_converted") or result.get("loose_files")
                   or result.get("accent_duplicates")
+                  or result.get("orphan_attachments")
                   or result.get("misplaced_attachments"))
     if has_issues:
         lines.append("")
@@ -271,6 +287,11 @@ def format_text(result: dict) -> str:
             n_ad = ad_s.get("accent_duplicates_found", len(result["accent_duplicates"]))
             lines.append(f"  accent duplicates: {n_ad} filename group(s) to merge "
                          f"into their ASCII-named files")
+        if result.get("orphan_attachments"):
+            oa_s = result.get("orphan_attachment_summary", {})
+            n_oa = oa_s.get("orphan_attachments_found", len(result["orphan_attachments"]))
+            lines.append(f"  orphan attachments: {n_oa} unreferenced file(s) in "
+                         f"vault-root _resources/ (review manually)")
 
     if result.get("recommendations"):
         lines.append("")
