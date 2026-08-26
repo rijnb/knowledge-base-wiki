@@ -1,0 +1,139 @@
+---
+name: wiki-add-missing
+description: Use when the user notices a system, concept, person, project, decision, competitor, or problem is missing from the Wiki and wants to create a page for it.
+---
+
+# Wiki — Add Missing Page
+
+Follow this workflow step by step. Do not skip steps or batch them together.
+
+If `AskUserQuestion` is unavailable in the current client, ask the same question as a concise plain-text question and wait for the user's answer before continuing.
+
+---
+
+## Step 1 — Choose topic type
+
+Use `AskUserQuestion` with `type: single_choice` to ask:
+
+> "Which topic type does this page belong to?"
+
+Present these options:
+- `competition` — competing companies, products, and approaches
+- `concepts` — technologies, standards, mental models, domain vocabulary
+- `decisions` — why decisions were taken, on what basis, by whom, and when
+- `people` — colleagues, contacts, external stakeholders, teams
+- `problems` — active and past problems
+- `projects` — active and past initiatives
+- `systems` — our products, platforms, and services
+
+---
+
+## Step 2 — Name and description
+
+Use `AskUserQuestion` (free text) to ask:
+
+> "What is the name and a one-sentence description of the missing page?
+>
+> Example: Name: NDS.Live / Description: The tile and layer-based streaming format of NDS used for real-time map data delivery."
+
+Parse the response to extract:
+- **name** — the page title (used verbatim as the filename and H1)
+- **description** — one-sentence summary (used in the index entry and to guide search)
+
+---
+
+## Step 3 — Related search terms
+
+Use `AskUserQuestion` (free text) to ask:
+
+> "List any related terms, acronyms, aliases, or people that should be searched to find relevant notes (comma-separated).
+>
+> Example: NDS, tile streaming, LiveMap, HERE HD Live, map tiles"
+
+Combine these terms with the name and description from Step 2. You will use all of them in the searches below.
+
+---
+
+## Step 4 — Search and collect
+
+Run **parallel** QMD searches to gather all potentially relevant content. Cast a wide net.
+
+### Searches to run (all in parallel):
+
+**Lexical (lex) searches** — exact keyword matches:
+- Query: the page name
+- Query: each related term from Step 3 (one query per term or combined)
+
+**Semantic (vec) searches** — meaning-based:
+- Query: the description from Step 2
+- Query: "what is [name] and how does it work"
+- Query: each related term phrased as a concept
+
+**Hypothetical document (hyde) search**:
+- Query: write a short paragraph describing what an answer about [name] would look like
+
+**Collection to search**:
+- `tomtom` — the vault root collection; includes `raw/`, `wiki/`, and supporting Markdown.
+
+Use path and topic terms in queries to bias results when needed, such as `raw/notes`, `raw/emails`, `raw/confluence`, `wiki/concepts`, `wiki/systems`, `wiki/decisions`, `wiki/people`, `wiki/competition`, `wiki/projects`, and `wiki/problems`.
+
+Use `minScore: 0.5` to filter noise. Use `intent` on every call to improve snippet relevance (set intent to the description from Step 2).
+
+### After searching:
+- Retrieve full content of the top-scoring hits using QMD MCP `get`/`multi_get` tools when available; otherwise use `qmd get` or `qmd multi-get`.
+- Apply your own insight: think about what adjacent concepts, systems, or people might relate to this topic and run additional targeted searches for those too.
+- Collect all source file paths (for citation).
+
+---
+
+## Step 5 — Synthesize and write the page
+
+**REQUIRED BACKGROUND:** Invoke `wiki-templates` for all page templates and formatting rules before writing the page.
+
+Apply the correct template for the chosen topic type. Fill every section with synthesized content from Step 4. Omit any section for which no relevant information was found.
+
+Additional rules:
+- Cite sources inline: `Source: raw/notes/2024-03-15 Meeting.md`
+- Set the required `description:` frontmatter field from the Step 2 description (plain text, wikilinks allowed, ~160 chars max, YAML double-quoted) — index entries are drawn from it.
+- Set the OKF v0.2 provenance frontmatter per `wiki-templates`: `sources:` listing the raw notes used, and `generated: {by: "agent:wiki-add-missing", at: <today, YYYY-MM-DD>}`.
+
+Write the completed page to: `wiki/<topic>/<Name>.md`
+
+Do not set the auto-managed `date` / `date_span` / `date_confidence` fields by hand; finalization assigns them from sources.
+
+---
+
+## Step 6 — Add backlinks
+
+For each page listed in the new page's Related sections:
+
+1. Read the existing page.
+2. Find the relevant Related section (e.g. `## Related concepts`, `## Related systems`, `## Related people`).
+3. If the new page is not already linked there, add a WikiLink entry: `- [[<new-page-slug>]]`
+4. If the section doesn't exist yet, add it before `## Related notes` (or at the end if that section is absent).
+
+Do not modify any other content of those pages.
+
+---
+
+## Step 7 — Update the index
+
+Run the index-page script from the project root to rebuild all topic indexes:
+
+```bash
+python3 scripts/system/wiki-create-index-pages.py
+```
+
+---
+
+## Step 8 — Report
+
+After completing all steps, report to the user:
+- The path of the new page created
+- The number of source documents used
+- The pages that received backlinks
+- Any sections left empty due to insufficient information
+
+## Wikilink format
+
+When linking a note, the wikilink target is the note's **exact filename, with spaces** — never slugified. Write `[[Real-Time Map]]`, not `[[Real-Time-Map]]`; `[[1-N Device Association]]`, not `[[1-N-Device-Association]]`. Keep hyphens only where the real filename has them. Slugified links do not resolve in Obsidian.

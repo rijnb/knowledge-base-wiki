@@ -1,219 +1,107 @@
 # Release Notes
 
+## 2026-08-26 — New `write-article` skill
+
+- **New `.claude/skills/write-article`** — produces publication-quality articles grounded in vault + web research. Five-phase workflow: grill-me-style interview (topic, audience, thesis, length), research (wiki-query + WebSearch/defuddle) into a fact sheet, outline + user-approved visualization choices, writing, and a closing `## Potential Weaknesses` section for easy review. Style contract distilled from the 25 most recent well-produced `raw/clips/` articles (claim-headings, vignette lede, concrete numbers, controlling metaphor, "Do this today" close). Grounding via `[^n]` footnotes at point of claim (compatible with the `wiki-doctor` footnote check); visuals are Mermaid only, ≤12 nodes, user-selected. Output lands in `INBOX/YYYY-MM-DD Title.md` with authored-note frontmatter.
+
+## 2026-08-26 — Orphan attachments in the review TUI
+
+- **Orphan attachments are a fourth item kind in the interactive `wiki-doctor` TUI**: `[ATCH]` rows (magenta) with a header count, `d` = delete, `e` = open in default app, Enter = preview with file metadata (name, type, size, mtime; binaries not rendered as text — `attachment_info_lines` in `scripts/lib/tui/previews.py`). No `k`/keep action: there is no frontmatter to stamp on a binary, so leaving a row unhandled keeps it. Summary table gains "Attachments deleted". Verified end-to-end in a pty (list, preview, delete, summary).
+- **Superseded the same-day interim fix**: interactive runs computed the orphan-attachment check and counted it in the exit code but never displayed it (`format_text` is batch-only). First fix printed the section after the review (`format_orphan_attachments`, extracted into `scripts/lib/report.py`); the TUI handling replaced it and `print_post_review_findings` was removed. Batch-mode reporting is unchanged.
+
+## 2026-08-25 — Orphan attachments, Unicode-normalized links, footnote check
+
+- **New `ORPHAN ATTACHMENT CHECK` in `wiki-doctor`** (`check_orphan_attachments` in `scripts/lib/checks/attachments.py`, reported as `orphan_attachments` / `orphan_attachment_summary`). Flags files in the vault-root `_resources/` — Obsidian's default paste folder — that no raw/wiki/INBOX note references (any link form, NFC-normalized) and that have no companion `.md`: strays left when the embedding note was deleted or ingested away. The misplaced-attachment check is link-driven so it never saw them, and the loose-file check does not scan the vault root. Report-only (no referencing note ⇒ no destination), and deliberately scoped to the root `_resources/` — extending it to raw/ and INBOX/ would flag ~300 legitimate conversion byproducts (`.pdf.txt` sidecars, docx `media/` images). Currently flags 7 files, kept as a validation set. Tests: `CheckOrphanAttachmentsTests` in `test_attachments.py` (7 cases incl. NFC/NFD matching).
+- **NFC normalization in link resolution.** The same vault synced to two machines gave different `wiki-doctor` results — clean on APFS (NFC) but dozens of broken links on HFS+ (NFD) — because link text was compared to directory names byte-for-byte, so `[[Adam Kepiński]]` (NFC) missed the NFD-stored file. New `nfc()` helper in `scripts/lib/links.py`; `VaultIndex` (`scripts/lib/paths.py`) stores NFC keys in `stem_index`/`path_suffix_set`; `scripts/lib/resolve.py` normalizes targets in `resolve_wikilink`, `resolve_wikilink_to_path`, `find_whitespace_before_ext_match` and `normalize_name`. Results are now identical on either filesystem.
+- **New accent-duplicate check** (`scripts/lib/checks/duplicates.py`, `accent_duplicates` / `accent_duplicate_summary`, `ACCENT DUPLICATE CHECK` section). Flags same-directory `.md` files whose names match once diacritics are stripped (substitute map covers non-decomposable `ł`, `ø`, `ß`) — the fork pattern the sync mismatch creates — and names the ASCII file to keep, per the vault's naming rule.
+- **Vault cleanup:** merged the 3 duplicate pairs found (`Adam Kepiński` → `Adam Kepinski`, `Frédéric Depuydt` → `Frederic Depuydt`, `Živorad Baralić` → `Zivorad Baralic`), retargeted wikilinks in 13 pages (accented display text kept via aliases), deduplicated `wiki/people/index.md`, deleted the accented files. 26 other accent-named pages have no ASCII twin (naming violations, not duplicates) — left untouched. Tests: `UnicodeNormalizationTests` in `test_resolve.py`, new `test_duplicates.py`; suite green except the pre-existing unrelated `test_sync_all_repos` failure.
+- **New footnote check in `wiki-doctor`** (`scripts/lib/checks/footnotes.py`, `footnote_issues` / `footnote_summary`, `FOOTNOTE CHECK` section). `[^s2]` is a local reference, not a vault link, so the link checker never resolved it — confirmed across the vault's 3,329 refs. The doctor now validates the reference itself per page: no `[^id]:` definition or a doubly-defined id are errors, an unreferenced definition is a warning. Ids match narrowly (`[A-Za-z0-9][A-Za-z0-9_-]*`) and code/frontmatter is skipped, so prose like `[^/]+` is not mistaken for a ref. The OKF cross-check (`[^sN]` vs `sources[].id`) stays in `wiki-provenance-lint.py`. Vault clean: 6,838 pages, 0 errors, 0 warnings; 390 tests pass, incl. `CheckFootnotesTests` and two regression tests in `test_links.py`.
+- **23 stale source paths repaired** (content fix; backup at `~/.vault-backups/tomtom-stale-source-paths-20260825.tar.gz`). Six raw notes had been renamed or moved after the citing pages were written — five gained the `YYYY-MM-DD ` ingest prefix, one moved `raw/notes/` → `raw/clips/`, one changed path in the `converted/` → `_resources/` migration. Each old path was fixed everywhere it appeared (frontmatter `sources[].resource`, `[^sN]:` definitions, IndiGO's inline `*Sources: …*` comments): 48 occurrences in 22 pages, verified against `wiki/log.jsonl` and disk. Frontmatter and footnote agreed on the same wrong path, so only the broken-link check could see these. `wiki/projects/GeoIntelligence Division.md` had the mirror defect (frontmatter naming a non-existent file, footnote missing `.md`) — both now name the real file. Vault: 0 broken links (was 23), provenance lint 0 errors (was 1).
+
 ## 2026-08-24 — Six log/link integrity fixes (four reported externally)
 
-**`prune_log` no longer deletes fetch records.** Entries with no `file` field — the `email-fetch` and `slack-fetch` records written by the `wiki-fetch-*` skills — were counted as "file no longer exists" and dropped. `wiki-fetch-slack` reads the newest `slack-fetch` entry back as its incremental fetch watermark, so `wiki-doctor --fix-simple-errors` silently reset it and the next Slack fetch re-fetched from scratch. These entries are now preserved verbatim, in place, and never deduplicated (repeated fetches of one source are history, not duplicates).
+- **`prune_log` no longer deletes fetch records.** Entries with no `file` field — the `email-fetch`/`slack-fetch` records from the `wiki-fetch-*` skills — counted as "file no longer exists" and were dropped, so `wiki-doctor --fix-simple-errors` silently reset the watermark `wiki-fetch-slack` reads back and the next fetch started from scratch. They are now preserved verbatim, in place, and never deduplicated.
+- **Non-HTTP URI schemes are no longer reported as broken links.** `is_external()` accepted only `http`/`https`/`ftp`/`mailto`, so `cid:`, `tel:`, `sms:`, `obsidian://`, `slack://` fell through to the internal resolver. Now an explicit `EXTERNAL_SCHEMES` allowlist in `scripts/lib/links.py` — deliberately not a generic `<scheme>:` regex, which would treat `[[Meeting: 2026 plan]]` as external and hide real breakage.
+- **Batch-log merging is validated** — new `scripts/system/wiki-merge-batch-logs.py`, used by `wiki-finalize-ingest` Step 1 instead of `cat .import/batch-log-*.jsonl >> wiki/log.jsonl`. The old append fused two entries into one corrupt line whenever a batch log lacked a trailing newline and deleted the batch logs even on failure. Lines are now parsed as JSON objects first, malformed ones quarantined in `.import/batch-log-rejected.jsonl`, and batch files removed only after the merged log is safely in place.
+- **`wiki-clear-ingest-batches` shows what it will delete.** New `scripts/system/wiki-clear-ingest-batches.py` (`--list` / `--apply`) replaces an inline `rm -f` over two overlapping globs that double-counted claimed batches (3 files, "Cleared 4 file(s)"), counted before deleting, and resolved `.import/` against the current directory. The skill now lists files before asking and warns when batch logs still hold records that never reached `wiki/log.jsonl`.
+- **`wiki-doctor --format json` works without `--batch-mode`.** It started the curses TUI regardless of format, aborting the run with `_curses.error: cbreak() returned ERR` after a full scan. Interactivity is now decided once, up front, and needs a real terminal on both ends plus a non-JSON format; otherwise the run prints its report.
+- **Agent skill mirrors resynced and guarded.** `.agents/`, `.junie/`, `.codex/` are copies of `.claude/skills` made by `copy-claude-skills-to-other-agents.sh`, but nothing failed when the sync was skipped: 8 of 19 skills had drifted and 12 mirror files still described `wiki/<topic>/_index.md` and `kb-prov-v1` provenance. Mirrors are back in sync and `scripts/tests/test_skill_mirrors.py` fails on future drift.
+- Tests: 378 pass, including new coverage in `test_links.py`, `test_fixers.py`, `test_cli_integration.py` and the new `test_batch_logs.py`.
 
-**Non-HTTP URI schemes are no longer reported as broken links.** `is_external()` accepted only `http`/`https`/`ftp`/`mailto`, so `cid:` (converted email attachments), `tel:`, `sms:`, `obsidian://`, `slack://` and friends fell through to the internal resolver and were reported broken. Now an explicit `EXTERNAL_SCHEMES` allowlist in `scripts/lib/links.py` — deliberately not a generic `<scheme>:` regex, which would classify note titles containing a colon (`[[Meeting: 2026 plan]]`) as external and hide genuinely broken links.
+## 2026-08-20 — OKF v0.2 migration, index rename, frontmatter check
 
-**Batch-log merging is validated** — new `scripts/system/wiki-merge-batch-logs.py`, used by `wiki-finalize-ingest` Step 1 in place of `cat .import/batch-log-*.jsonl >> wiki/log.jsonl`. The old append could not tell a valid entry from a half-written one, fused two entries into one corrupt line whenever a batch log lacked a trailing newline, and deleted the batch logs even when the append had failed. Every line is now parsed as a JSON object first; malformed lines are quarantined in `.import/batch-log-rejected.jsonl`; the batch files are removed only after the merged log is safely in place.
-
-**`wiki-clear-ingest-batches` shows what it will delete.** New `scripts/system/wiki-clear-ingest-batches.py` (`--list` / `--apply`) replaces an inline `rm -f` over two overlapping globs that double-counted every claimed batch (3 files on disk, "Cleared 4 file(s)"), reported its count before deleting anything, and resolved `.import/` against whatever the current directory happened to be. The skill now lists the files before asking, and warns when the batch logs still hold ingest records that never reached `wiki/log.jsonl`.
-
-**`wiki-doctor --format json` works without `--batch-mode`.** It started the curses review TUI regardless of output format, which aborted the whole run with `_curses.error: cbreak() returned ERR` after a full scan — the documented JSON output never appeared. Interactivity is now decided once, up front, and requires a real terminal on both ends plus a non-JSON format; without one the run falls back to printing its report.
-
-**Agent skill mirrors resynced and guarded.** `.agents/`, `.junie/` and `.codex/` are copies of `.claude/skills` made by `copy-claude-skills-to-other-agents.sh`, but nothing failed when that sync was skipped: 8 of 19 skills had drifted, and 12 mirror files still told those harnesses to write `wiki/<topic>/_index.md` and `kb-prov-v1` provenance blocks — a layout and a format that no longer exist. Mirrors are back in sync, and `scripts/tests/test_skill_mirrors.py` now fails when they drift again.
-
-Tests: 378 pass (`python3 -m unittest discover -s scripts/tests`), including new coverage in `test_links.py`, `test_fixers.py`, `test_cli_integration.py` and the new `test_batch_logs.py`.
-
-## 2026-08-20 — Vault-wide OKF v0.2 frontmatter migration + wiki skills updated
-
-One-time content migration across `wiki/` (backup: `~/.vault-backups/tomtom-pre-okf-20260820-130749.tar.gz`):
-
-- **`status:` → `state:`** on 839 pages (values kept verbatim, e.g. `open`, `active (as of Dec 2019)`). `status:` is now reserved for OKF's page-lifecycle enum `draft|stable|deprecated`.
-- **Type vocabulary fixed**: `type: competitor` → `competition` (83 pages), `type: systems` → `system` (1 page). Vocabulary is now exactly the 8 topic types.
-- **kb-prov-v1 abolished**: 294 pages had their provenance callouts (and one inline HTML-comment variant) mapped to OKF v0.2 frontmatter — `sources: [{id, resource}]`, `generated: {by: "agent:wiki-ingest", at: <latest observed>}`, `verified: [{by: "agent:wiki-freshness", at: <latest checked>}]`. Per-block status/confidence detail was dropped by decision; `^block-id` anchors remain as plain anchors. Zero `kb-prov-v1` strings remain in `wiki/`.
-
-**Skills updated** (`.claude/skills/`, synced to `.agents/` and `.junie/`): `wiki-templates` (all type templates: `state:` rename, required `description:`, OKF reserved-field section), `wiki-ingest-per-note` (requires `description:`; writes frontmatter provenance instead of callouts), `wiki-curate-page` (frontmatter provenance spec; human curation appends `verified: {by: "human:rijn.buve"}`), `wiki-query` (trust tiers from `verified.by` prefix), `wiki-freshness`, `wiki-doctor`, `wiki-add-missing`.
-
-Verification: full suite 329 tests OK; wiki-doctor frontmatter check 6838 pages, 0 errors, 0 warnings; provenance lint 0 errors, 1 genuine warning (`wiki/systems/MySports Cloud.md` has `generated` but no sources).
-
-`validate_provenance` (`scripts/lib/provenance.py`) now cross-checks `[^sN]` source footnotes against `sources[].id` — flows into `wiki-provenance-lint` and the freshness index automatically. New issue codes: `unknown-footnote-id`, `undefined-footnote-ref`, `footnote-resource-mismatch` (errors), `unreferenced-footnote-def` (warning). Code examples in fences/inline code and non-`sN` prose footnotes are ignored.
-
-First run caught a real defect: `Knowledge Freshness Frontmatter Schema.md` carried two sources mangled into one escaped string (`…base.md\", \"README.md`) — a comma-heuristic bug in the legacy callout parser that merged a quoted bare filename (no `/`) into its predecessor. Fixed the parser in `scripts/lib/legacy_callout.py` (fully quoted values now always split) and repaired the page (dropped mangled `s6`/`s7`, re-pointed the ref to `[^s1][^s5][^s2]`). Vault lints clean: 0 errors.
-
-The OKF migration dropped the claim↔source link (the `kb-prov-v1` callouts mapped `^block-id` anchors to sources; the new frontmatter only listed sources page-level). Restored it in OKF-native form:
-
-- **New `scripts/system/wiki-restore-source-footnotes.py`** (+ `scripts/lib/source_footnotes.py`, `scripts/lib/legacy_callout.py` — vendored pre-OKF callout parser, extended for flow-style `{…}` block entries): joins the backup's callout (`anchor → resources`) with current frontmatter (`resource → sN`) and inserts `[^sN]` refs before each anchor plus a `[^sN]: [[resource]]` definitions block at page end. Dry-run by default, `--apply` to write, idempotent, JSON report. Tests in `scripts/tests/test_source_footnotes.py`.
-- **Applied to all 292 pages**: 2,137 footnote refs inserted; 44 anchors on 28 pages had no callout entry (post-callout-era blocks, reported only). Reports in `.wiki-scratch/footnotes-{dryrun,apply}.json`.
-- **Repaired 3 pages that silently lost provenance in the OKF migration** (their callouts used flow-style block entries the migration couldn't parse): `Level of Detail (LOD)`, `Connected Car - Aftermarket Platform (CoCa)`, `Fisker Ocean Program` — re-stamped `sources:` from the backup callouts.
-- **Skills updated** (`wiki-ingest-per-note`, `wiki-curate-page`, `wiki-templates`): new pages and curated pages must cite each claim with `[^s<N>]` refs (before the `^block-id` anchor) and maintain the end-of-page footnote-definitions block.
-
-## 2026-08-20 — Provenance tooling migrated from kb-prov-v1 callouts to OKF v0.2 frontmatter
-
-All provenance/freshness scripts now read page-level provenance from YAML frontmatter (`sources`, `generated`, `verified`, `stale_after`) instead of the removed `> [!provenance]` callouts:
-
-- `scripts/lib/provenance.py` — new `parse_provenance()` (constrained YAML-subset frontmatter parser) and frontmatter-based `validate_provenance()` (source id/resource + uniqueness, generated/verified by+at, YYYY-MM-DD dates; `generated` without `sources` is a warning). Callout parser deleted; duplicate `^block-id` detection kept.
-- `scripts/system/wiki-provenance-lint.py` — same CLI/exit codes; pages without provenance are fine (coverage is separate); any leftover `kb-prov-v1` string in a non-index wiki page is now an error.
-- `scripts/lib/provenance_stamp.py` + `wiki-provenance-stamp-status.py` — stamping inserts frontmatter `sources` (ids s1, s2, …) + `generated {by: "agent:wiki-ingest", at}` (optional `verified` via API); refuses pages that already have `generated:`/`sources:`. Manifest format unchanged. The "## Freshness Status" body section and mode text blocks were dropped (no body edits anymore).
-- `scripts/lib/provenance_coverage.py` — coverage = page has `generated:` or `sources:`; statuses reduced to covered / no-provenance / invalid-provenance.
-- `scripts/lib/freshness_index.py` — page-level inventory: `generated_at`, latest `verified_at`, derived `status` (current/stale via `stale_after`/unknown) and `confidence` (`human:` actor → high); reads renamed frontmatter key `state` (was `status`).
-- `scripts/lib/freshness_query.py`, `drift.py`, `curation.py` — rank/score whole pages by frontmatter provenance dates; drift reasons renamed (`no-page-provenance`, `stale-page`).
-- Tests rewritten/adapted in `scripts/tests/` (provenance, stamp, coverage, freshness index/query, drift, curation); full suite green (329 tests).
-
-Every `wiki/**/*.md` page (except indexes) now carries a one-line `description:` frontmatter field (6838 pages backfilled). New shared extractor `scripts/lib/descriptions.py` (`extract_description()`: first sentence after frontmatter, HTML comments stripped, wikilinks kept intact, leading emphasis unwrapped, 160-char cap). New idempotent backfill script `scripts/system/wiki-backfill-descriptions.py` (`--dry-run` supported) inserts the field after `type:`/`tags:`, YAML double-quoted. `scripts/system/wiki-create-index-pages.py` now prefers the `description:` field for entry summaries and falls back to the extractor. Tests in `scripts/tests/test_descriptions.py`.
-
-## 2026-08-20 — wiki-doctor: new frontmatter validation check
-
-`scripts/wiki-doctor.py` (batch mode) now validates wiki page frontmatter via `scripts/lib/checks/frontmatter.py`, covering every `wiki/**/*.md` except `index.md`. Errors: missing/unparseable frontmatter block, missing or unknown `type:` (allowed: competition, concept, conversation, decision, person, problem, project, system), `status:` outside the OKF enum `draft|stable|deprecated` (old subject-state values belong in `state:`), and any `kb-prov-v1` legacy provenance remnant. Warning (does not affect exit code): missing `description:`. Reported in both text (`FRONTMATTER CHECK` section) and JSON (`frontmatter_issues` + `frontmatter_summary`); no `--fix` behavior. Tests added in `scripts/tests/test_checks.py` and `scripts/tests/test_cli_integration.py`.
-
-## 2026-08-20 — Index rename `_index.md` → `index.md` + OKF v0.2 progressive disclosure format
-
-Topic indexes are renamed from `wiki/<topic>/_index.md` to `wiki/<topic>/index.md` (8 files, moved via the Obsidian CLI so all inbound wikilinks were rewritten automatically), aligning the vault with OKF v0.2's reserved-filename convention (§8) — an OKF consumer looking for `index.md` below the bundle root previously found nothing, losing all progressive disclosure. This fixes defect #1 and part of defect #2 of the 2026-08-20 OKF compliance assessment.
-
-**Generator** (`scripts/system/wiki-create-index-pages.py`) rewritten for a progressive disclosure format, all deterministic (no LLM involved):
-- `wiki/index.md` (bundle root) is now the **only** index with frontmatter, carrying only `okf_version: "0.2"`; its section table gains a per-topic page count.
-- Topic indexes carry **no frontmatter** (§8-strict; verified nothing reads `type: index` — all index detection in scripts is filename-based). The rebuild date moved to the byline.
-- Topics with >100 pages are grouped under letter headings (`## A` …, diacritics NFKD-folded, e.g. Ž→Z) with a `Sections:` jump line carrying per-letter counts, so a consumer reads one letter section instead of a 1,600-line file. Smaller topics stay flat.
-- New `## Recently updated` block (top 10 by frontmatter `date`, when ≥10 dated pages).
-- Entry summaries are first-sentence, capped at 160 chars; both sentence-split and cap are wikilink-balance-safe (never emit an unclosed `[[…`).
-
-**Guard scripts**: dropped `_index.md` from the index-filename checks in `scripts/lib/paths.py`, `scripts/lib/checks/orphans.py`, `scripts/lib/checks/stubs.py`, `scripts/system/wiki-assign-dates.py`, `scripts/system/wiki-supersession-lint.py`, `scripts/system/migrate-converted-to-resources.py`.
-
-**Skills updated** to the new name/format: `wiki-templates` (both index template sections rewritten; indexes now documented as generated artifacts — do not hand-edit), `wiki-query`, `wiki-finalize-ingest`, `wiki-ingest-per-note`.
-
-**Important**: the generator regenerates all 9 index files wholesale on every finalize-ingest — updating it in the same change as the rename was mandatory, or the next ingest would have silently recreated the `_index.md` files. Manual edits to any index file are still overwritten at rebuild, as before. Historical prose mentions of `_index.md` in `raw/` and the INBOX assessment were deliberately left untouched (evidence, not live docs).
-
-Verification: provenance lint clean (6,838 files), full test suite passes (296), all 10,209 wikilinks across the 9 regenerated indexes resolve. Known pre-existing issue (not a regression, also present in the old indexes): three `wiki/problems/` pages had `#` in their filenames (`…(smart-data-access#240).md` etc.), which Obsidian parses as a heading anchor in any wikilink to them. **Resolved same day**: renamed `#` → `_` (`…(smart-data-access_240).md`) via the Obsidian CLI, with the 7 inbound wikilinks rewritten manually (Obsidian's auto-rewrite cannot follow links it mis-parses as heading anchors) and indexes regenerated. Display texts and prose mentions of the real GitHub issue refs (`smart-data-access#240`) were deliberately kept — only link targets and filenames changed. All 10,209 index wikilinks verified resolving afterwards.
+- **Vault-wide OKF v0.2 frontmatter migration** across `wiki/` (backup: `~/.vault-backups/tomtom-pre-okf-20260820-130749.tar.gz`): `status:` → `state:` on 839 pages (values verbatim), so `status:` is free for OKF's lifecycle enum `draft|stable|deprecated`; type vocabulary fixed (`competitor` → `competition` on 83 pages, `systems` → `system` on 1) to exactly the 8 topic types; `kb-prov-v1` abolished — 294 pages' provenance callouts mapped to `sources: [{id, resource}]`, `generated: {by, at}`, `verified: [{by, at}]`. Per-block status/confidence detail was dropped by decision; `^block-id` anchors remain as plain anchors. Verification: 329 tests OK, frontmatter check clean on 6,838 pages, provenance lint 0 errors and 1 genuine warning.
+- **Provenance tooling moved to frontmatter.** `scripts/lib/provenance.py` gained `parse_provenance()` (constrained YAML-subset parser) and a frontmatter-based `validate_provenance()`; the callout parser was deleted and duplicate `^block-id` detection kept. `wiki-provenance-lint.py` keeps its CLI/exit codes but now errors on any leftover `kb-prov-v1` string in a non-index page. Stamping (`provenance_stamp.py`, `wiki-provenance-stamp-status.py`) inserts frontmatter `sources` + `generated` and refuses pages that already have them; the "## Freshness Status" body section is gone. `provenance_coverage.py` reduces to covered / no-provenance / invalid-provenance; `freshness_index.py`, `freshness_query.py`, `drift.py`, `curation.py` rank whole pages by frontmatter dates (drift reasons renamed `no-page-provenance`, `stale-page`).
+- **`[^sN]` footnotes cross-checked against `sources[].id`** in `validate_provenance`, flowing into the lint and freshness index. New codes: `unknown-footnote-id`, `undefined-footnote-ref`, `footnote-resource-mismatch` (errors), `unreferenced-footnote-def` (warning); code fences and non-`sN` prose footnotes ignored. First run caught a real defect — `Knowledge Freshness Frontmatter Schema.md` had two sources mangled into one escaped string by a comma-heuristic bug in the legacy callout parser (fixed in `scripts/lib/legacy_callout.py`: fully quoted values always split; page repaired).
+- **Claim↔source links restored in OKF-native form** after the migration dropped them. New `scripts/system/wiki-restore-source-footnotes.py` (+ `scripts/lib/source_footnotes.py` and a vendored, flow-style-capable callout parser) joins the backup's `anchor → resources` with the current `resource → sN` mapping, inserting `[^sN]` refs before each anchor plus an end-of-page definitions block (dry-run by default, idempotent, JSON report). Applied to all 292 pages: 2,137 refs inserted, 44 anchors on 28 pages had no callout entry (reported only). Three pages whose flow-style callouts the migration could not parse were re-stamped from the backup: `Level of Detail (LOD)`, `Connected Car - Aftermarket Platform (CoCa)`, `Fisker Ocean Program`.
+- **Every non-index `wiki/**/*.md` page now has a one-line `description:`** (6,838 backfilled). New shared extractor `scripts/lib/descriptions.py` (`extract_description()`: first sentence after frontmatter, HTML comments stripped, wikilinks intact, leading emphasis unwrapped, 160-char cap) and idempotent `scripts/system/wiki-backfill-descriptions.py` (`--dry-run`) which inserts the field after `type:`/`tags:`, YAML double-quoted. `wiki-create-index-pages.py` prefers the field and falls back to the extractor. Tests in `test_descriptions.py`.
+- **New frontmatter validation check in `wiki-doctor`** (batch mode, `scripts/lib/checks/frontmatter.py`), covering every `wiki/**/*.md` except `index.md`. Errors: missing/unparseable frontmatter, missing or unknown `type:` (competition, concept, conversation, decision, person, problem, project, system), `status:` outside `draft|stable|deprecated`, any `kb-prov-v1` remnant. Warning (exit-code-neutral): missing `description:`. Reported as `FRONTMATTER CHECK` / `frontmatter_issues` + `frontmatter_summary`; no `--fix`. Tests in `test_checks.py` and `test_cli_integration.py`.
+- **Index rename `_index.md` → `index.md`** (8 files, moved via the Obsidian CLI so inbound wikilinks were rewritten), aligning with OKF v0.2's reserved-filename convention (§8) — consumers looking for `index.md` previously found nothing and lost all progressive disclosure. Skills updated to the new name and format (`wiki-templates` — indexes documented as generated artifacts, do not hand-edit — plus `wiki-query`, `wiki-finalize-ingest`, `wiki-ingest-per-note`).
+- **Index generator rewritten for progressive disclosure** (`scripts/system/wiki-create-index-pages.py`, fully deterministic): `wiki/index.md` is the only index with frontmatter (`okf_version: "0.2"`) and its section table gains per-topic counts; topic indexes carry none (§8-strict — index detection everywhere is filename-based) and the rebuild date moved to the byline; topics over 100 pages are grouped under letter headings (diacritics NFKD-folded, Ž→Z) with a counted `Sections:` jump line; new `## Recently updated` block (top 10 by `date`, when ≥10 dated pages); entry summaries are first-sentence, 160 chars, wikilink-balance-safe. `_index.md` was dropped from the index-filename checks in `paths.py`, `checks/orphans.py`, `checks/stubs.py`, `wiki-assign-dates.py`, `wiki-supersession-lint.py`, `migrate-converted-to-resources.py`. Updating the generator in the same change as the rename was mandatory — it regenerates all 9 indexes wholesale on every finalize-ingest and would have recreated the `_index.md` files. Historical `_index.md` mentions in `raw/` and the INBOX assessment were left as evidence.
+- **Verification and a resolved pre-existing issue:** provenance lint clean (6,838 files), 296 tests pass, all 10,209 wikilinks in the 9 regenerated indexes resolve. Three `wiki/problems/` pages had `#` in their filenames, which Obsidian parses as a heading anchor in any wikilink; renamed `#` → `_` via the Obsidian CLI with the 7 inbound links rewritten by hand (Obsidian cannot auto-rewrite links it mis-parses) and indexes regenerated. Display texts and prose mentions of the real GitHub refs (`smart-data-access#240`) were kept — only targets and filenames changed.
 
 ## 2026-08-18 — wiki-doctor: new misplaced-attachment check
 
-`wiki-doctor` (batch mode) now verifies that every attachment linked from a note under `raw/` or `INBOX/` actually lives in that note's own `_resources/` directory (legacy `*.resources/` siblings accepted). Previously only two weaker checks existed: broken links (target must exist *somewhere*) and loose files (non-markdown must be in *some* `_resources/`), so a raw note embedding an attachment from another directory's `_resources/` — or from the legacy vault-root `_resources/` — passed silently. `wiki/` notes are exempt by design: they may reference `raw/` attachments, and companion notes living *inside* a resources tree may reference anything in that same tree (no nested `_resources` demanded). An attachment co-located with *one* of its referencing notes satisfies the rule for all of them. Reported as `misplaced_attachments`/`attachment_summary` in JSON and a "MISPLACED ATTACHMENTS" section in text output, and counts toward the non-zero exit code. `--fix-simple-errors` relocates each misplaced attachment (once per unique file) into the referencing note's own `_resources/` via the Obsidian CLI — links update automatically; clash-safe renaming; skipped with a warning when Obsidian is unavailable. Attachment resolution searches `raw/`, `wiki/`, `INBOX/` and the legacy vault-root `_resources/`; skips symlinks (matching the loose-file check) and files outside the vault; and normalizes curly quotes like `resolve_wikilink` does. New module `scripts/lib/checks/attachments.py` + `fix_misplaced_attachments` in `scripts/lib/fixers.py`, tests in `scripts/tests/test_attachments.py`. First run on the real vault found 69 misplaced attachment links (32 unique files), mostly bare-name embeds pointing at the legacy vault-root `_resources/` and a few at `INBOX/_resources/`.
+- **`wiki-doctor` (batch mode) now verifies that every attachment linked from a note under `raw/` or `INBOX/` lives in that note's own `_resources/`** (legacy `*.resources/` siblings accepted). The two existing checks were weaker — broken links only require the target to exist *somewhere*, loose files only require *some* `_resources/` — so a raw note embedding an attachment from another directory's or the legacy vault-root `_resources/` passed silently. `wiki/` notes are exempt by design (they may reference `raw/` attachments), companion notes inside a resources tree may reference anything in that tree, and an attachment co-located with one referencing note satisfies the rule for all of them.
+- **Reporting and fixing:** `misplaced_attachments`/`attachment_summary` in JSON, a "MISPLACED ATTACHMENTS" text section, and a non-zero exit code. `--fix-simple-errors` relocates each misplaced file once into the referencing note's `_resources/` via the Obsidian CLI (links update automatically, clash-safe renaming, skipped with a warning when Obsidian is unavailable). Resolution searches `raw/`, `wiki/`, `INBOX/` and the legacy vault-root `_resources/`, skips symlinks and files outside the vault, and normalizes curly quotes like `resolve_wikilink`. New `scripts/lib/checks/attachments.py` + `fix_misplaced_attachments` in `fixers.py`, tests in `test_attachments.py`. First real run found 69 misplaced links (32 unique files), mostly bare-name embeds pointing at the legacy vault-root `_resources/`.
 
 ## 2026-07-29 — Fix `finalize_lock: unbound variable` crash at end of `wiki-ingest.sh`
 
-`run_phase_finalize` installed `trap 'rmdir "$finalize_lock" ...' RETURN` to release the parallel-session finalize lock. A RETURN trap is *not* per-function: it stays installed after the function returns and fires again on every later function return, where the `local` no longer exists — so with `set -u` the script died with `line 1019: finalize_lock: unbound variable` (line 1019 is `main()`'s definition line) once `main` returned, after all ingest work had already completed. Fix: expand the lock path into the trap body at install time and have the trap clear itself (`trap - RETURN`), so it fires exactly once. Applied the same fix to the identical latent pattern for `hdr_file` in the usage-API call (harmless there only because that function always runs in a command-substitution subshell).
+- `run_phase_finalize` installed `trap 'rmdir "$finalize_lock" ...' RETURN` to release the parallel-session finalize lock, but a RETURN trap is not per-function: it stayed installed and fired on every later function return, where the `local` no longer existed, so with `set -u` the script died with `line 1019: finalize_lock: unbound variable` once `main` returned — after all ingest work had completed. Fix: expand the lock path into the trap body at install time and have the trap clear itself (`trap - RETURN`), so it fires exactly once. The same latent pattern for `hdr_file` in the usage-API call (harmless only because that function always runs in a command substitution) got the same fix.
 
 ## 2026-07-22 — Fix finalize step order so freshly-ingested notes aren't re-flagged
 
-`wiki-finalize-ingest` stamped log hashes (old Step 1) *before* running `wiki-assign-dates` (old Step 3). The date pass writes `date`/`date_span`/`date_confidence` frontmatter onto raw notes, changing their bytes — so every just-ingested note ended up with a stale hash and was re-flagged as "new" by `wiki-create-import-batches` on the next import (observed: two already-ingested clips reappeared in a later batch). Reordered the skill so hashing runs last: **Merge → Assign dates → Stamp/relink → Rebuild indexes → Summarize → Post-processing → End**, with an explicit "do not reorder" note explaining why. No code changes — `wiki-stamp-log-hashes.py` still never overwrites existing hashes; it now simply sees the final dated content when it first stamps each entry.
+- `wiki-finalize-ingest` stamped log hashes (old Step 1) *before* running `wiki-assign-dates` (old Step 3). The date pass writes `date`/`date_span`/`date_confidence` frontmatter onto raw notes, changing their bytes, so every just-ingested note ended up with a stale hash and was re-flagged as "new" by `wiki-create-import-batches` (observed: two already-ingested clips reappeared in a later batch). Reordered to **Merge → Assign dates → Stamp/relink → Rebuild indexes → Summarize → Post-processing → End**, with an explicit "do not reorder" note. No code changes — `wiki-stamp-log-hashes.py` still never overwrites existing hashes, it just sees final content when it first stamps.
 
 ## 2026-07-08 — Stop slugified wikilinks in answers and generated pages
 
-Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Links-Like-This]]`) instead of the real spaced filename (`Note Links Like This`), so the links did not resolve in Obsidian. Root cause was weak/missing guidance plus a link resolver that could not repair the slugs. Changes:
-- **`wiki-query` skill**: the citation instruction now states explicitly that a wikilink target is the note's exact filename with spaces — never slugified/hyphenated — with correct/incorrect examples.
-- **`CLAUDE.md`**: added a "Linking to notes" section (always loaded) with the same rule, covering both answers and pages.
-- **`wiki-add-missing`, `wiki-curate-page`, `wiki-ground` skills**: added a one-line "Wikilink format" reminder.
-- **`scripts/lib/resolve.py`**: added the hyphen to `_PROBLEMATIC_CHARS` so `wiki-doctor`'s fuzzy resolver maps slug links back to their spaced filenames. Safe because file stems normalize through the same function (genuinely hyphenated titles still match themselves) and only unique matches are auto-fixed. Added three tests in `scripts/tests/test_resolve.py`; full suite passes (265 tests).
+Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Links-Like-This]]`) instead of the real spaced filename, so they did not resolve in Obsidian. Root cause: weak guidance plus a resolver that could not repair the slugs.
+
+- **`wiki-query` skill**: the citation instruction now states that a wikilink target is the note's exact filename with spaces — never slugified — with correct/incorrect examples.
+- **`CLAUDE.md`**: new always-loaded "Linking to notes" section with the same rule, covering answers and pages.
+- **`wiki-add-missing`, `wiki-curate-page`, `wiki-ground` skills**: one-line "Wikilink format" reminder.
+- **`scripts/lib/resolve.py`**: hyphen added to `_PROBLEMATIC_CHARS` so `wiki-doctor`'s fuzzy resolver maps slug links back to spaced filenames — safe because file stems normalize through the same function (genuinely hyphenated titles still match themselves) and only unique matches auto-fix. Three tests added in `test_resolve.py`; suite passes (265 tests).
 
 ## 2026-07-03 — wiki-doctor: vault-wide link resolution
 
-`wiki-doctor` reported false "file not found" for wikilinks whose targets live outside `raw/` and `wiki/` (e.g. `_resources/` at the vault root), because the link-resolution index only walked those two trees. Obsidian resolves a link against any file anywhere in the vault, so `VaultIndex` now builds its path-suffix index from a whole-vault walk (dot-directories like `.git`/`.obsidian` excluded, matching Obsidian). The set of `.md` files that get scanned/linted is unchanged — still `raw/` and `wiki/` only.
+- `wiki-doctor` reported false "file not found" for wikilinks whose targets live outside `raw/` and `wiki/` (e.g. the vault-root `_resources/`), because the resolution index only walked those two trees. Obsidian resolves a link against any file in the vault, so `VaultIndex` now builds its path-suffix index from a whole-vault walk (dot-directories like `.git`/`.obsidian` excluded, matching Obsidian). The set of `.md` files scanned/linted is unchanged — still `raw/` and `wiki/` only.
 
 ## 2026-06-25 — Freshness review follow-up fixes
 
-Fixed the actionable review findings in the freshness/provenance tooling:
 - Freshness inventory, drift, and QMD raw-hit mapping now respect `ingest: false` protected raw notes and their explicitly linked local raw files.
-- `wiki-freshness.sh` now runs all freshness/provenance steps before returning a non-zero status, so lint errors no longer prevent drift and coverage queues from being written.
+- `wiki-freshness.sh` runs all freshness/provenance steps before returning a non-zero status, so lint errors no longer prevent drift and coverage queues from being written.
 - Minimal provenance stamping rejects manifest page paths outside `wiki/` under the selected vault root.
 - Added missing-value and negative-limit guards for freshness/migration helper entrypoints.
 
-## 2026-06-24 — Code-review fixes across provenance/freshness/drift tooling
+## 2026-06-24 — Provenance/freshness tooling, ingest fixes, and review follow-ups
 
-Fixed issues found in a code review of the new provenance/freshness/drift/migration tooling:
-- **Freshness ranking**: check date was dead weight (a capped, folded-in term that saturated for every real date). Recency is now a genuine secondary sort key (newer-checked first) after status+confidence; `score_block` no longer folds in the date.
-- **Provenance source lists**: unquoted, unprefixed identifiers (e.g. `[alpha, beta]` or `[slack:…, confluence:…]`) were silently merged into one element. The comma-splitter now only keeps a comma inside a value when it sits in a recognized, unterminated source reference.
-- **Freshness index**: two block IDs in one paragraph each cross-contaminated the other's `text`; each block now owns only its own line(s).
-- **Provenance lint severity**: added a `missing-sources` *warning* for claim blocks with no sources (minimal stamps exempt); lint now exits non-zero only on errors and reports error/warning counts. Coverage and query "invalid-provenance" classification now keys on error-severity only.
-- **wiki-migrate-existing.sh**: the legacy-layout step now runs inside `--root` so `migrate-converted-to-resources.py` resolves paths/log against the target vault instead of the caller's cwd; added `--strict` to propagate step failures to the exit code.
-- **wiki-baseline-raw-log.py**: log entries now match the canonical writer's insertion order (dropped `sort_keys`); the existing log is backed up to `.wiki-scratch/` before append, and append failures (e.g. OneDrive locks) surface as a clean error.
-- Minor: shared `wiki_pages`/`wikilink_target`/`split_frontmatter` helpers (de-duplication), non-negative `--limit`/`--qmd-limit` guards in `wiki-freshness-query.py`, `--root` arg guard in `qmd-sync-collections.sh`, and ambiguous-title handling in drift detection.
+- **Block provenance foundation**: read-only `kb-prov-v1` provenance parser/validator plus a `wiki-provenance-lint.py` entrypoint — the first migration slice for query-time freshness, letting canonical pages carry stable block IDs and a compact provenance callout without rewriting existing pages.
+- **Freshness inventory, drift detection, and curation**: read-only inventory, drift detection and page-curation packet scripts with deterministic block-ranking tests, plus `wiki-curate-page` guidance. Query, ingest and finalize skills now treat freshness as block/query-time evidence first and canonical rewrites as targeted review work.
+- **Query-time freshness packet**: `wiki-freshness-query.py` + `scripts/lib/freshness_query.py` turn retrieved pages into ranked canonical blocks for a query. `--qmd` runs local discovery, resolves QMD's normalized Wiki IDs back to real vault paths, demotes historical/stale/disputed evidence with explanations, and flags unmigrated legacy pages instead of silently trusting them. A follow-up fixed an empty QMD-to-Wiki resolution falling back to scanning every page, and made inline provenance lists parse quoted comma-containing paths.
+- **Raw-hit bridge**: `--qmd` raw-note hits are resolved to real vault paths, mapped to canonical pages via wikilinks and title variants, exposed as `raw_mappings`, and kept as `raw_evidence` when no canonical page is found.
+- **Provenance coverage backlog**: `wiki-provenance-coverage.py` + `scripts/lib/provenance_coverage.py` separate full coverage from freshness drift, writing `.wiki-scratch/provenance-coverage-backlog.md` for all canonical pages still lacking block provenance; `wiki-drift-detect.py` stays the smaller risk-driven queue.
+- **Minimal provenance status stamps**: `wiki-provenance-stamp-status.py` + `scripts/lib/provenance_stamp.py` add a `Freshness Status` block with `migration_status: legacy-inferred-minimal` for classifier-approved low-risk legacy pages; query packets report them as `use-as-page-caution` and coverage keeps them as `minimal-stamp`. Extended with `review_mode` values (`source-mismatch`, `needs-currentness-answer`, `sensitive-review`) so the high-risk drift queue can be made safer at query time with caution-only stamps.
+- **One-command freshness workflow**: `scripts/wiki-freshness.sh` runs lint, inventory, drift detection and coverage backlog; the ingest loop runs it automatically after finalization/QMD sync. Added a `wiki-freshness` skill and updated ingest/finalize/query skills so the lower-level script names need not be remembered. Generated `.wiki-scratch/` queue files are now ignored, `wiki-doctor.py` emits a structured freshness follow-up recommendation, and the ingest dry-run text mentions the automatic freshness step.
+- **Existing-KB migration**: `scripts/wiki-migrate-existing.sh` is a dry-run-first wrapper for existing `raw/` + `wiki/` corpora; with `--apply` it baselines existing raw files in `wiki/log.jsonl` so future ingest skips the historical corpus (`--allow-reingest-existing` reverses it). Added `wiki-baseline-raw-log.py`, root-aware date/QMD helpers, tests, README guidance, and a `wiki-migrate-existing` skill.
+- **Supersession lint noise cut**: `wiki-supersession-lint.py` skips matches inside code fences, table rows, headings and inline-code-hugged phrases, plus self-references (a page describing its own rename) — queue down from 96 to 75 on the current vault. Confirmed false positives go in `.wiki-scratch/supersession-ignore.txt` and never reappear.
+- **Ingest robustness**: colliding sanitized raw filenames are preserved instead of overwritten, zero-sized batches rejected, unconverted HTML email exports kept visible to batching, and agent skill mirrors refreshed from `.claude/skills`. Fixed stale batch files (e.g. `batch-log-1.jsonl`) surviving finalize/clear and blocking the next ingest with "previous ingest not completed". `sync-all-repos.sh` now runs `copy-claude-skills-to-other-agents.sh` first so `.agents/`, `.codex/`, `.junie/` mirrors are current in every synced target.
+- **`ingest: false` frontmatter opt-out**: notes under `raw/` can opt out of ingestion; local files linked from a protected note are skipped too. Remove the field to make the note eligible again. Documented in `README.md`.
+- **Code-review fixes across the new tooling**: freshness ranking now uses recency as a genuine secondary sort key after status+confidence (`score_block` no longer folds in a saturated date term); the provenance comma-splitter only keeps a comma inside a value when it sits in a recognized unterminated source reference; two block IDs in one paragraph no longer cross-contaminate each other's `text`; a `missing-sources` warning was added for claim blocks with no sources (minimal stamps exempt) and lint exits non-zero only on errors; `wiki-migrate-existing.sh` runs the legacy-layout step inside `--root` and gained `--strict`; `wiki-baseline-raw-log.py` matches the canonical writer's key order, backs up the log before append, and surfaces append failures cleanly. Minor: shared `wiki_pages`/`wikilink_target`/`split_frontmatter` helpers, non-negative `--limit`/`--qmd-limit` guards, a `--root` arg guard in `qmd-sync-collections.sh`, and ambiguous-title handling in drift detection.
 
-## 2026-06-24 — Existing knowledge base migration script
+## 2026-06-15 — Finalize QMD re-index, converter scripts, date-assignment scope, rename-safe dedup
 
-Added `scripts/wiki-migrate-existing.sh` as a safe dry-run-first migration wrapper for existing `raw/` + `wiki/` corpora. With `--apply`, it baselines existing raw files in `wiki/log.jsonl` by default so future ingest does not re-ingest the historical corpus; `--allow-reingest-existing` is the explicit reverse option. Added `wiki-baseline-raw-log.py`, root-aware date/QMD helpers, tests, README guidance, and a `wiki-migrate-existing` skill.
+- **Finalize re-indexes QMD via the sync script**, keeping collections consistent (single `tomtom` collection, stale collections removed, embeddings retried) instead of running raw `qmd update`.
+- **Per-note ingest uses the converter scripts for `.eml`/`.html`/`.vtt`**, so emails get the correct `YYYY-MM-DD ` filename prefix and frontmatter. Manual conversion applies only to types with no script (pdf, images, docx).
+- **Date assignment never touches top-level vault files**: `date`/`date_span`/`date_confidence` are written only under `wiki/` or `raw/`, never to `CLAUDE.md`, `README.md` or `index.md`.
+- **Rename-safe ingest dedup**: "already ingested" is decided by content hash + mtime, not filename. Renaming a raw note in Obsidian no longer re-ingests it; editing it still does.
 
-## 2026-06-24 — Freshness reminders and scratch ignore
+## 2026-06-11 — Test suite, wiki-doctor loose-file check, new converted-file layout
 
-Ignored generated `.wiki-scratch/` queue files, updated `wiki-doctor.py` to emit a structured freshness follow-up recommendation, and made the ingest loop dry-run/output text explicitly mention the automatic freshness step.
+- **New test suite** in `scripts/tests/` — run with `python3 -m unittest discover -s scripts/tests -v`.
+- **`wiki-doctor` detects non-Markdown files outside `_resources/`** (in `raw/`, `wiki/`, `INBOX`) and can auto-move them.
+- **New layout for converted non-Markdown files**: converted sources (`.eml`, `.html`, `.vtt`, `.pdf`, `.docx`, images) no longer go in a `converted/` subdirectory — the original moves to `_resources/` and a companion `.md` (preview embed + extracted text) is created in its place. Migrating an existing corpus: run `python3 scripts/wiki-doctor.py` once; interactive mode detects legacy `converted/` directories and offers to migrate. The migration is warning-neutral and re-running is a no-op.
 
-## 2026-06-24 — One-command freshness workflow
+## 2026-06-10 — AI backend configuration and new `wiki-ground` skill
 
-Added `scripts/wiki-freshness.sh` as the easy freshness front door. It runs provenance lint, freshness inventory, drift detection, and coverage backlog generation, and the ingest loop now runs it automatically after finalization/QMD sync. Added a `wiki-freshness` skill and updated ingest/finalize/query skills so users should not need to remember the lower-level script names.
-
-## 2026-06-24 — Minimal provenance status stamps
-
-Added `wiki-provenance-stamp-status.py` and `scripts/lib/provenance_stamp.py` for classifier-approved low-risk legacy pages. The tool adds a `Freshness Status` block with `migration_status: legacy-inferred-minimal`; query packets now report these as `use-as-page-caution`, and coverage keeps them in the backlog as `minimal-stamp` instead of treating them as fully block-migrated.
-
-## 2026-06-24 — Review caution stamps for high-risk drift pages
-
-Extended minimal provenance stamps with `review_mode` values such as `source-mismatch`, `needs-currentness-answer`, and `sensitive-review`. The remaining high-risk drift queue can now be made safer at query time with caution-only stamps while still requiring page-by-page factual curation.
-
-## 2026-06-24 — Provenance coverage backlog
-
-Added `wiki-provenance-coverage.py` and `scripts/lib/provenance_coverage.py` to separate full Wiki provenance coverage from freshness drift. The coverage backlog writes `.wiki-scratch/provenance-coverage-backlog.md` for all canonical pages still lacking block provenance, while `wiki-drift-detect.py` remains the smaller risk-driven curation queue.
-
-## 2026-06-24 — Raw-hit bridge for freshness queries
-
-`wiki-freshness-query.py --qmd` now preserves raw-note QMD hits. Raw hits are resolved back to real vault paths, mapped to canonical Wiki pages via wikilinks and title variants, exposed as `raw_mappings`, and kept as `raw_evidence` when no canonical page can be found.
-
-## 2026-06-24 — Freshness query fallback and comma-safe provenance sources
-
-Fixed `wiki-freshness-query.py --qmd` so an empty QMD-to-Wiki resolution no longer falls back to scanning every Wiki page. Provenance inline lists now parse quoted comma-containing source paths correctly, while missing optional provenance fields remain allowed for gradual migration.
-
-## 2026-06-24 — Query-time freshness packet
-
-Added `wiki-freshness-query.py` and `scripts/lib/freshness_query.py` so retrieved Wiki pages can be converted into ranked canonical blocks for a specific query. The helper can also run local QMD discovery with `--qmd`, resolve QMD's normalized Wiki result IDs back to real vault paths, demote historical/stale/disputed evidence with explanations, and flag unmigrated legacy pages instead of silently trusting them.
-
-## 2026-06-24 — Block provenance foundation for freshness-aware queries
-
-Added a read-only `kb-prov-v1` provenance parser/validator and `wiki-provenance-lint.py` entrypoint. This is the first migration slice for query-time freshness: canonical pages can now carry stable block IDs plus a compact provenance callout without rewriting existing `wiki/` pages.
-
-## 2026-06-24 — Freshness inventory, drift detection, and curation workflow
-
-Added read-only freshness inventory, drift detection, page-curation packet scripts, and deterministic block-ranking tests, plus `wiki-curate-page` guidance for one-page canonical cleanup. Query, ingest, and finalize skills now treat freshness as block/query-time evidence first and canonical rewrites as targeted review work.
-
-## 2026-06-24 — Supersession lint produces far fewer false positives
-
-`wiki-supersession-lint.py` now skips review-queue matches inside code fences, table rows, headings, and inline-code-hugged phrases, plus self-references (a page describing its own rename). On the current vault this cut the queue from 96 to 75 noise-mostly entries before reviewer triage. Confirmed false positives still go in `.wiki-scratch/supersession-ignore.txt` (one path per line) and never reappear.
-
-## 2026-06-24 — Sync refreshes agent skills first
-
-`sync-all-repos.sh` now runs `scripts/system/copy-claude-skills-to-other-agents.sh` before syncing so `.agents/`, `.codex/`, and `.junie/` skill mirrors are up to date in every synced target.
-
-## 2026-06-24 — Safer ingest batching and synced skills
-
-Ingest now preserves colliding sanitized raw filenames instead of overwriting, rejects zero-sized batches, keeps unconverted HTML email exports visible to batching, and refreshes agent skill mirrors from `.claude/skills`.
-
-## 2026-06-24 — Ingest cleanup no longer leaves stale batch files
-
-Fixed a bug where stale batch files (e.g. `batch-log-1.jsonl`) could be left behind after finalize/clear, blocking the next ingest with a "previous ingest not completed" error.
-
-## 2026-06-24 — `ingest: false` frontmatter opt-out
-
-Notes under `raw/` can opt out of ingestion with frontmatter `ingest: false`. Local files linked from a protected note are also skipped. Remove the field to make the note eligible again. Documented in `README.md`.
-
-## 2026-06-15 — Finalize re-indexes QMD via the sync script
-
-Finalize now keeps QMD collections consistent (single `tomtom` collection, stale collections removed, embeddings retried) instead of running raw `qmd update`.
-
-## 2026-06-15 — Per-note ingest uses converter scripts for .eml/.html/.vtt
-
-These types are now always converted via the converter scripts, so emails get the correct `YYYY-MM-DD ` filename prefix and frontmatter. Manual conversion only applies to types with no script (pdf, images, docx).
-
-## 2026-06-15 — Date assignment never touches top-level vault files
-
-Date frontmatter (`date`/`date_span`/`date_confidence`) is now only written to files under `wiki/` or `raw/` — never to top-level files like `CLAUDE.md`, `README.md`, or `index.md`.
-
-## 2026-06-15 — Rename-safe ingest dedup
-
-Ingestion now decides "already ingested" by content hash + mtime, not filename. Renaming a raw note in Obsidian no longer re-ingests it; editing it still does.
-
-## 2026-06-11 — Test suite and wiki-doctor improvements
-
-- New test suite in `scripts/tests/` — run with `python3 -m unittest discover -s scripts/tests -v`.
-- `wiki-doctor` now detects non-Markdown files outside `_resources/` (in `raw/`, `wiki/`, `INBOX`) and can auto-move them.
-
-## 2026-06-11 — New layout for converted non-Markdown files
-
-Converted sources (`.eml`, `.html`, `.vtt`, `.pdf`, `.docx`, images) no longer go in a `converted/` subdirectory. The original moves to `_resources/` and a companion `.md` (with preview embed + extracted text) is created in its place.
-
-**Migrating an existing corpus:** run `python3 scripts/wiki-doctor.py` once — in interactive mode it detects legacy `converted/` directories and offers to migrate them. The migration is warning-neutral and re-running is a no-op.
-
-## 2026-06-10 — AI backend configuration (`config/settings.md`)
-
-LLM-backed scripts now read their backend from `config/settings.md` (`ai_backend`: `claude`, `vibe`, or `codex`). Change the value and save — no code edits. Falls back to deterministic behavior if the CLI is missing or fails.
-
-## 2026-06-10 — New `wiki-ground` skill
-
-`/wiki-ground [optional topic]` grounds the whole conversation in the knowledge base, querying the KB before answering domain questions. Optional topic front-loads relevant pages on activation.
+- **AI backend configuration (`config/settings.md`)**: LLM-backed scripts read their backend from `ai_backend` (`claude`, `vibe`, or `codex`). Change the value and save — no code edits. Falls back to deterministic behavior if the CLI is missing or fails.
+- **New `wiki-ground` skill**: `/wiki-ground [optional topic]` grounds the whole conversation in the knowledge base, querying the KB before answering domain questions. The optional topic front-loads relevant pages on activation.

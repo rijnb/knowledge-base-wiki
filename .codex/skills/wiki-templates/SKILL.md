@@ -1,0 +1,316 @@
+---
+name: wiki-templates
+description: Use when creating or structuring a new Wiki page — decisions, systems, people, concepts, competition, conversations, projects, problems, or index files.
+---
+
+# Knowledge Base - Page Templates
+
+## Formatting rules
+
+- **Wikilink in body text:** bare WikiLinks — `[[Elastic Map]]`
+- **Wikilink in `index.md` entries:** vault-relative — `[[wiki/systems/Elastic Map]]`
+- Never mix formats
+- Link sections use bullet lists, not comma-separated inline
+- Empty link sections are omitted entirely (e.g. no `## Related decisions` if there are none)
+- Always WikiLink any reference to a page, raw note, or person
+- YAML frontmatter lists:
+  ```
+  some-list:
+    - item-1
+    - item-2
+  ```
+
+## Required and reserved frontmatter (OKF v0.2)
+
+Every content page carries:
+
+- `type:` — exactly one of: `competition`, `concept`, `conversation`, `decision`, `person`, `problem`, `project`, `system`. (`competitor` and `systems` were drift — never emit them.)
+- `description:` — **REQUIRED** one-line summary: plain text, wikilinks allowed, ~160 chars max, YAML double-quoted. Index pages draw their bullet descriptions from it (`scripts/system/wiki-create-index-pages.py`).
+- `state:` — the subject's state, with a per-type enum (see the templates below). This is the renamed former `status` field.
+- `status:` — RESERVED for the optional OKF page lifecycle enum: `draft | stable | deprecated`. Never use `status` for subject state.
+
+### Provenance frontmatter (set by ingest/curation, optional on manual create)
+
+Provenance lives in YAML frontmatter (the legacy provenance callouts are abolished):
+
+```yaml
+sources:
+  - id: s1
+    resource: "raw/notes/2024-04-04 Foo.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2024-04-04
+verified:
+  - by: "agent:wiki-freshness"
+    at: 2026-06-25
+stale_after: 2027-01-01   # optional
+```
+
+Actor convention: `human:rijn.buve` = human-reviewed tier; `agent:*` ids = machine tier. All dates `YYYY-MM-DD`. `^block-id` anchors in the body remain allowed as plain anchors (no metadata attached).
+
+Per-claim attribution uses markdown footnotes keyed to `sources[].id`: a claim ends with `[^s<N>]` refs (placed before any `^block-id` anchor — the anchor stays last in the block), and the page ends with a footnote-definitions block, one `[^s<N>]: [[<resource path>]]` line per id referenced in the body.
+
+## Freshness metadata (auto-managed — do NOT hand-edit)
+
+Every content page may carry three machine-managed frontmatter fields:
+
+```
+date: YYYY-MM-DD            # page's content date (newest source for a wiki page)
+date_span: YYYY | YYYY–YYYY # min–max year of contributing sources (flags era-mixing)
+date_confidence: high | medium | low   # low = capture/ingestion date, may overstate freshness
+```
+
+These are written and refreshed automatically by `scripts/system/wiki-assign-dates.py`, which `wiki-finalize-ingest` runs after every index rebuild. **Do not set or edit them by hand** — let finalization populate them. When creating a page you may omit them entirely; they will be filled in from the source-note dates at finalize time. (Note: this replaces the older per-type `date: YYYY-MM-DD HH:mm:ss` creation-timestamp convention shown in some templates below — the managed `date` reflects content recency, not creation time.)
+
+## Supersession (when a page is replaced by a newer one)
+
+When a page's content is explicitly superseded by another page (an old architecture replaced by a new one, a decision reversed by a later one, a decommissioned system replaced by its successor), mark the relationship in frontmatter rather than deleting the old page (it stays as history):
+
+```yaml
+# on the OLD (superseded) page — the canonical "this is historical" signal:
+superseded_by: [[wiki/systems/New Map Pipeline]]   # one link, or a YAML list if split into several
+superseded_date: 2022-06-01                          # optional — when it was replaced
+tags: [..., superseded]                              # for filtering / graph
+
+# on the NEW (successor) page — reciprocal back-link:
+supersedes: [[wiki/systems/Old Map Pipeline]]
+```
+
+Rules:
+- The **presence of `superseded_by`** is what marks a page as historical — it works on every topic type (people/concepts/competition have no `state` field). Do not encode supersession in the free-text `state` field.
+- Always add the reciprocal `supersedes:` on the successor so navigation works both ways.
+- The `superseded_by` target **must be an existing page** (no dangling links). Chains are allowed (A→B→C); queries follow them to the newest live page.
+- Only assert supersession when a source **explicitly** states the replacement — never guess. Uncertain candidates belong in the lint review queue (see `wiki-doctor`), not applied directly.
+
+## wiki/index.md (bundle root)
+
+Links to section indexes only. Never add individual page entries here. This is the **only** index file that carries frontmatter, and only `okf_version` (OKF v0.2 §8). Fully regenerated by `scripts/system/wiki-create-index-pages.py` at finalize time — do not hand-edit.
+
+```markdown
+---
+okf_version: "0.2"
+---
+# Wiki Index
+
+Rebuilt YYYY-MM-DD
+
+| Section | Pages | Description |
+|---------|------:|-------------|
+| [[wiki/competition/index\|Competitors]] | 318 | Competing companies, products, and approaches. |
+| [[wiki/concepts/index\|Concepts]] | 1426 | Technologies, standards, mental models, and domain vocabulary. |
+| ... one row per topic ... |
+```
+
+## wiki/<type>/index.md
+
+One per section, **no frontmatter** (OKF v0.2 §8 — reserved filename). Fully regenerated by `scripts/system/wiki-create-index-pages.py` at finalize time — do not hand-edit; new pages are picked up automatically at the next rebuild. Progressive disclosure format:
+
+- Byline: back-link, page count, rebuild date.
+- `## Recently updated` — top 10 pages by frontmatter `date` (only when ≥10 dated pages).
+- Topics with >100 pages: entries grouped under letter headings (`## A` … plus `## 0-9`), preceded by a `Sections:` jump line with per-letter counts, so a consumer reads one letter section instead of the whole file. Smaller topics: one flat list.
+- Entries sorted by title; bullet summaries come from the page's `description:` frontmatter (capped at 160 chars).
+
+```markdown
+# <Type>
+
+[[wiki/index|← Index]] · <N> pages · rebuilt YYYY-MM-DD
+
+<One-sentence description of what this topic type covers.>
+
+## Recently updated
+
+- YYYY-MM-DD · [[wiki/concepts/Some Page|Some Page]]
+
+Sections: [[#0-9|0-9]] (12) · [[#A|A]] (98) · …
+
+## A
+
+- [[wiki/concepts/ISA Regulation|ISA Regulation]] — EU ISA mandatory regulation; requires current speed limit data even post-subscription-expiry.
+```
+
+## wiki/decisions/<Page Name>.md
+
+```markdown
+---
+type: decision
+description: "<one-line summary, ~160 chars, double-quoted>"
+state: accepted | superseded | proposed
+date: YYYY-MM-DD HH:mm:ss
+systems:
+  - system-name
+people:
+  - person-name
+---
+# Decision: <title>
+## Context
+## Concern
+## Criteria
+## Options
+## Decision
+## Rationale
+## Consequences
+## Related decisions
+- [[...link (short description of relationship)...]]
+## Related systems
+- [[...link (short description of relationship)...]]
+## Related people
+- [[...link (short description of relationship)...]]
+## Related notes
+- [[...link (short description of relationship)...]]
+```
+
+**Rule:** `## Concern` describes the problem only — no solution references. Solutions belong in `## Options`, `## Decision`, `## Rationale`.
+
+## wiki/systems/<Page Name>.md
+
+```markdown
+---
+type: system
+description: "<one-line summary, ~160 chars, double-quoted>"
+owner:
+  - team-name
+state: active | deprecated | planned
+---
+# <System Name>
+## What it does
+## Interfaces and dependencies
+## Known issues and risks
+## Related decisions
+- [[...link (key-design decisions first)...]]
+## Related systems
+- [[...link...]]
+## Related people
+- [[...link...]]
+## Related notes
+- [[...link...]]
+```
+
+## wiki/people/<Page Name>.md
+
+```markdown
+---
+type: person
+description: "<one-line summary, ~160 chars, double-quoted>"
+---
+# <Name>
+## Role and scope
+## Working style and context
+## Active on
+- [[project-link]]
+## Related decisions
+- [[...link...]]
+## Related systems
+- [[...link...]]
+## Related notes
+- [[...link...]]
+```
+
+## wiki/concepts/<Page Name>.md
+
+```markdown
+---
+type: concept
+description: "<one-line summary, ~160 chars, double-quoted>"
+date: YYYY-MM-DD HH:mm:ss
+tags: []
+---
+# <Concept>
+## Short definition
+## When it applies
+## Explanation of the concept
+## Examples in our context
+- [[system-link]]
+## Related decisions
+- [[...link...]]
+## Related systems
+- [[...link...]]
+## Related people
+- [[...link...]]
+## Related notes
+- [[...link...]]
+```
+
+## wiki/competition/<Page Name>.md
+
+```markdown
+---
+type: competition
+description: "<one-line summary, ~160 chars, double-quoted>"
+---
+# <Competitor Name>
+## What they do
+## Key products and technologies
+## How they compare to us
+## Related decisions
+- [[...link...]]
+## Related systems
+- [[...link...]]
+## Related notes
+- [[...link...]]
+```
+
+## wiki/conversations/<Page Name>.md
+
+```markdown
+---
+type: conversation
+description: "<one-line summary, ~160 chars, double-quoted>"
+---
+# <Title>
+## Summary
+## Conversation
+## Related
+- [[...link...]]
+```
+
+## wiki/projects/<Page Name>.md
+
+```markdown
+---
+type: project
+description: "<one-line summary, ~160 chars, double-quoted>"
+state: active | closed | paused
+started: YYYY-MM-DD HH:mm:ss
+---
+# <Title>
+## Project description and goals
+## Current state
+## Open questions
+## Log
+<!-- append updates here, newest first -->
+## Related decisions
+- [[...link...]]
+## Related systems
+- [[...link...]]
+## Related people
+- [[...link...]]
+## Related notes
+- [[...link...]]
+```
+
+## wiki/problems/<Page Name>.md
+
+```markdown
+---
+type: problem
+description: "<one-line summary, ~160 chars, double-quoted>"
+state: open | closed | deferred
+started: YYYY-MM-DD HH:mm:ss
+---
+# <Title>
+## Problem statement and goal
+## Current state
+## Open questions
+## Log
+<!-- append updates here, newest first -->
+## Related decisions
+- [[...link...]]
+## Related systems
+- [[...link...]]
+## Related people
+- [[...link...]]
+## Related notes
+- [[...link...]]
+```
+
+**Rule:** `## Log` sections are append-only. Add updates here; never modify the rest of the structure.
