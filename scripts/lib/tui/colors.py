@@ -12,6 +12,7 @@ PAIR_DELINKED = 8        # delinked (plain text)
 PAIR_KEPT = 9            # kept orphan
 PAIR_ORPHAN = 10         # unhandled orphan
 PAIR_STUB = 11           # unhandled stub
+PAIR_ATTACHMENT = 12     # unhandled orphan attachment
 
 
 def init_pairs(curses_mod) -> None:
@@ -28,3 +29,4 @@ def init_pairs(curses_mod) -> None:
     curses_mod.init_pair(PAIR_KEPT, curses_mod.COLOR_GREEN, -1)
     curses_mod.init_pair(PAIR_ORPHAN, curses_mod.COLOR_RED, -1)
     curses_mod.init_pair(PAIR_STUB, curses_mod.COLOR_CYAN, -1)
+    curses_mod.init_pair(PAIR_ATTACHMENT, curses_mod.COLOR_MAGENTA, -1)

@@ -13,6 +13,7 @@ from .colors import (
     PAIR_DELINKED,
     PAIR_FILENAME,
     PAIR_KEPT,
+    PAIR_ATTACHMENT,
     PAIR_ORPHAN,
     PAIR_REPLACED,
     PAIR_SELECTED,
@@ -32,23 +33,26 @@ def _display_width(s: str) -> int:
     return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in s)
 
 
-def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) -> None:
-    """Curses-based TUI for reviewing broken links, orphan pages, and stub pages."""
+def run_interactive(broken_links: list, orphans: list, stubs: list,
+                    orphan_attachments: list, root: Path) -> None:
+    """Curses-based TUI for reviewing broken links, orphan pages, stub pages,
+    and orphan attachments."""
     try:
         import curses
     except ImportError:
         print("Error: curses module not available on this platform.", file=sys.stderr)
         sys.exit(1)
 
-    if not broken_links and not orphans and not stubs:
-        print("No broken links, orphan pages, or stub pages found.")
+    if not broken_links and not orphans and not stubs and not orphan_attachments:
+        print("No broken links, orphan pages, stub pages, or orphan attachments found.")
         return
 
     for b in broken_links:
         b["_kind"] = "link"
     all_items = broken_links + \
                 [{"_kind": "orphan", "file": o} for o in orphans] + \
-                [{"_kind": "stub", "file": s} for s in stubs]
+                [{"_kind": "stub", "file": s} for s in stubs] + \
+                [{"_kind": "orphan_att", "file": a} for a in orphan_attachments]
     n = len(all_items)
     states: list = [None] * n
     messages: list = [""] * n
@@ -70,6 +74,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         n_links = sum(1 for it in all_items if it["_kind"] == "link")
         n_orps = sum(1 for it in all_items if it["_kind"] == "orphan")
         n_stubs = sum(1 for it in all_items if it["_kind"] == "stub")
+        n_atts = sum(1 for it in all_items if it["_kind"] == "orphan_att")
 
         def redraw():
             nonlocal offset
@@ -77,12 +82,15 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             height, width = stdscr.getmaxyx()
             list_height = height - 4
 
-            header = f"Broken links: {n_links}   Orphans: {n_orps}   Stubs: {n_stubs}"
+            header = (f"Broken links: {n_links}   Orphans: {n_orps}   "
+                      f"Stubs: {n_stubs}   Orphan attachments: {n_atts}")
             stdscr.addstr(0, 0, header[:width - 1])
 
             sel_kind = all_items[selected]["_kind"] if n > 0 else "link"
             if sel_kind == "orphan":
                 hint = "ENTER=preview   d=delete   k=keep as orphan   e=edit   h=help   q=quit"
+            elif sel_kind == "orphan_att":
+                hint = "ENTER=preview   d=delete   e=open   h=help   q=quit"
             elif sel_kind == "stub":
                 hint = "ENTER=preview   d=delete   k=acknowledge stub   e=edit   h=help   q=quit"
             else:
@@ -110,6 +118,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                 state = states[idx]
                 is_orphan = item["_kind"] == "orphan"
                 is_stub = item["_kind"] == "stub"
+                is_att = item["_kind"] == "orphan_att"
                 if state == "deleted":
                     prefix = "[DELD] "; state_attr = curses.color_pair(PAIR_DELETED)
                 elif state == "broken":
@@ -124,12 +133,14 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                     prefix = "[ORPH] "; state_attr = curses.color_pair(PAIR_ORPHAN)
                 elif is_stub:
                     prefix = "[STUB] "; state_attr = curses.color_pair(PAIR_STUB)
+                elif is_att:
+                    prefix = "[ATCH] "; state_attr = curses.color_pair(PAIR_ATTACHMENT)
                 else:
                     prefix = "[LINK] "; state_attr = curses.color_pair(PAIR_BROKEN_LINK)
                 y = 3 + row
                 if idx == selected:
                     try:
-                        if is_orphan or is_stub:
+                        if is_orphan or is_stub or is_att:
                             line = (prefix + f"{idx + 1:3d}  {item['file']}")[:avail]
                         else:
                             fp = truncate_path(item['file'], max_len=_col_file_w, prefix_len=_col_file_w // 2).ljust(_col_file_w)
@@ -141,7 +152,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                 x = 0
                 resolved = state is not None
                 dim = curses.A_DIM
-                if is_orphan or is_stub:
+                if is_orphan or is_stub or is_att:
                     file_w = max(1, avail - _fixed)
                     segments = [
                         (prefix,                        state_attr),
@@ -240,6 +251,22 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
                             if idx > 0:
                                 idx -= 1; selected = idx
                             continue
+                    elif item["_kind"] == "orphan_att":
+                        action = show_preview(stdscr, item, idx, n, "orphan_att", root)
+                        if action == "d":
+                            res = actions.do_delete_file(item, root)
+                            states[idx] = "deleted" if res == "deleted" else None
+                            messages[idx] = "File deleted." if res == "deleted" else res
+                        elif action == "e":
+                            messages[idx] = actions.do_edit(item, root)
+                        elif action == "next":
+                            if idx < n - 1:
+                                idx += 1; selected = idx
+                            continue
+                        elif action == "prev":
+                            if idx > 0:
+                                idx -= 1; selected = idx
+                            continue
                     elif item["_kind"] == "stub":
                         action = show_preview(stdscr, item, idx, n, "stub", root)
                         if action == "d":
@@ -306,7 +333,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
             elif key in (ord("d"), ord("D")):
                 if states[selected] is None:
                     item = all_items[selected]
-                    if item["_kind"] in ("orphan", "stub"):
+                    if item["_kind"] in ("orphan", "stub", "orphan_att"):
                         res = actions.do_delete_file(item, root)
                         states[selected] = "deleted" if res == "deleted" else None
                         messages[selected] = "File deleted." if res == "deleted" else res
@@ -373,6 +400,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
     deleted_links   = sum(1 for i, s in enumerate(states) if s == "deleted" and all_items[i]["_kind"] == "link")
     deleted_orphans = sum(1 for i, s in enumerate(states) if s == "deleted" and all_items[i]["_kind"] == "orphan")
     deleted_stubs   = sum(1 for i, s in enumerate(states) if s == "deleted" and all_items[i]["_kind"] == "stub")
+    deleted_atts    = sum(1 for i, s in enumerate(states) if s == "deleted" and all_items[i]["_kind"] == "orphan_att")
     broken_count    = sum(1 for s in states if s == "broken")
     replaced_count  = sum(1 for s in states if s == "replaced")
     delinked_count  = sum(1 for s in states if s == "delinked")
@@ -388,6 +416,7 @@ def run_interactive(broken_links: list, orphans: list, stubs: list, root: Path) 
         ("Orphans kept",         kept_orphans),
         ("Stub pages deleted",   deleted_stubs),
         ("Stubs resolved",       kept_stubs),
+        ("Attachments deleted",  deleted_atts),
         ("Skipped",              skipped),
     ]
     label_w = max(len(label) for label, _ in rows)

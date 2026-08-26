@@ -20,7 +20,38 @@ _PREVIEW_PROFILE = {
         "title": "Stub preview",
         "hint": "[ d=delete   k=acknowledge as stub (add stub: true)   e=edit   ↑↓=prev/next   PgUp/PgDn=scroll   h=help   Enter/q=close ]",
     },
+    "orphan_att": {
+        "title": "Orphan attachment",
+        "hint": "[ d=delete   e=open   ↑↓=prev/next   h=help   Enter/q=close ]",
+    },
 }
+
+
+def _human_size(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
+        n /= 1024
+    return f"{n:.1f} GB"
+
+
+def attachment_info_lines(path: Path) -> list:
+    """Metadata lines shown instead of file content for binary attachments."""
+    try:
+        st = path.stat()
+    except OSError as e:
+        return [f"(error reading file: {e})"]
+    from datetime import datetime
+    mtime = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    return [
+        f"Name     : {path.name}",
+        f"Type     : {path.suffix.lstrip('.').upper() or '(none)'}",
+        f"Size     : {_human_size(st.st_size)}",
+        f"Modified : {mtime}",
+        "",
+        "Referenced by no note. Press d to delete, e to open in the",
+        "default application, or leave it unhandled to keep it.",
+    ]
 
 
 def show_preview(stdscr, entry: dict, idx: int, total: int, kind: str, root: Path) -> "str | None":
@@ -28,10 +59,13 @@ def show_preview(stdscr, entry: dict, idx: int, total: int, kind: str, root: Pat
     'd', 'k', 'e', 'prev', 'next', or None."""
     profile = _PREVIEW_PROFILE[kind]
 
-    try:
-        file_lines = (root / entry["file"]).read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError as e:
-        file_lines = [f"(error reading file: {e})"]
+    if kind == "orphan_att":
+        file_lines = attachment_info_lines(root / entry["file"])
+    else:
+        try:
+            file_lines = (root / entry["file"]).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as e:
+            file_lines = [f"(error reading file: {e})"]
 
     height, width = stdscr.getmaxyx()
     pop_w = min(max(40, width - 4), width - 2)
@@ -91,7 +125,7 @@ def show_preview(stdscr, entry: dict, idx: int, total: int, kind: str, root: Pat
         elif key in (ord("d"), ord("D")):
             del win; stdscr.touchwin(); stdscr.refresh()
             return "d"
-        elif key in (ord("k"), ord("K")):
+        elif key in (ord("k"), ord("K")) and kind != "orphan_att":
             del win; stdscr.touchwin(); stdscr.refresh()
             return "k"
         elif key in (ord("e"), ord("E")):

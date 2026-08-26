@@ -356,7 +356,8 @@ def main():
         broken_for_review = result["broken_links"]
         if auto_fix_applied:
             broken_for_review = [b for b in broken_for_review if not b.get("fixed") and not b.get("fm_deleted")]
-        run_interactive(broken_for_review, result.get("orphans", []), result.get("stubs", []), root)
+        run_interactive(broken_for_review, result.get("orphans", []), result.get("stubs", []),
+                        result.get("orphan_attachments", []), root)
         if not args.quiet:
             rec = result["recommendations"][0]
             print(f"\nTip: {rec['message']} Run: {rec['command']}", file=sys.stderr)

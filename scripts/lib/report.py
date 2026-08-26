@@ -1,6 +1,24 @@
 """Human-readable formatting for scan results."""
 
 
+def format_orphan_attachments(result: dict) -> list[str]:
+    """Lines for the orphan-attachment section, shared by the text report and
+    the interactive mode's post-review output."""
+    oa = result["orphan_attachments"]
+    oa_s = result.get("orphan_attachment_summary", {})
+    lines = [f"ORPHAN ATTACHMENT CHECK: {oa_s.get('attachments_scanned', '?')} "
+             f"file(s) in vault-root _resources/ scanned, "
+             f"{oa_s.get('orphan_attachments_found', len(oa))} orphan(s) found."]
+    if oa:
+        lines.append("ORPHAN ATTACHMENTS (in vault-root _resources/, referenced by no note; "
+                     "review and delete or relocate manually):")
+        for f in oa:
+            lines.append(f"  {f}")
+    else:
+        lines.append("No orphan attachments found.")
+    return lines
+
+
 def format_text(result: dict) -> str:
     lines = []
     s = result["summary"]
@@ -181,18 +199,7 @@ def format_text(result: dict) -> str:
 
     if "orphan_attachments" in result:
         lines.append("")
-        oa = result["orphan_attachments"]
-        oa_s = result.get("orphan_attachment_summary", {})
-        lines.append(f"ORPHAN ATTACHMENT CHECK: {oa_s.get('attachments_scanned', '?')} "
-                     f"file(s) in vault-root _resources/ scanned, "
-                     f"{oa_s.get('orphan_attachments_found', len(oa))} orphan(s) found.")
-        if oa:
-            lines.append("ORPHAN ATTACHMENTS (in vault-root _resources/, referenced by no note; "
-                         "review and delete or relocate manually):")
-            for f in oa:
-                lines.append(f"  {f}")
-        else:
-            lines.append("No orphan attachments found.")
+        lines.extend(format_orphan_attachments(result))
 
     if "accent_duplicates" in result:
         lines.append("")

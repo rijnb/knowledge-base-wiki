@@ -339,6 +339,45 @@ class ReportRenderingTests(unittest.TestCase):
         text = format_text(result)
         self.assertIn("No misplaced attachments found.", text)
 
+    def _orphan_attachment_result(self) -> dict:
+        result = self._base_result()
+        result["orphan_attachments"] = ["_resources/Untitled-123.jpeg"]
+        result["orphan_attachment_summary"] = {
+            "attachments_scanned": 1, "orphan_attachments_found": 1,
+        }
+        return result
+
+    def test_orphan_attachments_section_helper(self):
+        from lib.report import format_orphan_attachments
+        lines = format_orphan_attachments(self._orphan_attachment_result())
+        text = "\n".join(lines)
+        self.assertIn("ORPHAN ATTACHMENT CHECK: 1 file(s)", text)
+        self.assertIn("_resources/Untitled-123.jpeg", text)
+
+    def test_orphan_attachments_section_rendered_in_format_text(self):
+        text = format_text(self._orphan_attachment_result())
+        self.assertIn("ORPHAN ATTACHMENT CHECK", text)
+        self.assertIn("_resources/Untitled-123.jpeg", text)
+        self.assertIn("orphan attachments: 1 unreferenced file(s)", text)
+
+class AttachmentPreviewInfoTests(AttachmentFixtureMixin, unittest.TestCase):
+    """Orphan attachments are binary — the TUI preview shows file metadata
+    instead of reading the content as text."""
+
+    def test_info_lines_for_existing_file(self):
+        from lib.tui.previews import attachment_info_lines
+        p = self.touch("_resources/Untitled-123.jpeg", b"x" * 2048)
+        text = "\n".join(attachment_info_lines(p))
+        self.assertIn("Untitled-123.jpeg", text)
+        self.assertIn("JPEG", text)
+        self.assertIn("2.0 KB", text)
+        self.assertIn("Modified", text)
+
+    def test_info_lines_for_missing_file(self):
+        from lib.tui.previews import attachment_info_lines
+        lines = attachment_info_lines(self.root / "_resources/gone.png")
+        self.assertTrue(any("error" in ln.lower() for ln in lines))
+
 
 if __name__ == "__main__":
     unittest.main()
