@@ -67,17 +67,59 @@ source: "<[[wikilink]] or URL of the primary source, if one dominates>"
 ---
 ```
 
+### Phase 4a — End-of-article marker
+
+Directly after the closing synthesis paragraph, insert a clear marker separating the readable article from the review/reference apparatus:
+
+```markdown
+---
+
+*— End of article. The sections below are review aids and references. —*
+```
+
+Everything after the marker, in this order: `## Potential Weaknesses`, `## Heading Alternatives`, footnote definitions. The marker stays in internal notes; when publishing externally or to Confluence, ask the user whether the apparatus (marker + weaknesses) ships or gets cut.
+
+### Phase 4b — Heading alternatives table
+
+After Potential Weaknesses (and before the footnote definitions), append a section `## Heading Alternatives` — a working aid for the user, removed once headings are settled:
+
+```markdown
+## Heading Alternatives
+
+> [!note] Working aid — reply e.g. "headings: 1b, 2a, 4c" (unmentioned numbers keep the current heading) and I'll apply them and delete this section. "Keep headings" deletes it as is.
+
+| # | Current | a — Short claim | b — Imperative | c — Plain |
+|---|---|---|---|---|
+| 1 | <current H2> | ... | ... | ... |
+```
+
+- One row per `##` body section (skip Potential Weaknesses and this section itself).
+- At least 3 alternatives per heading, one per column flavor: **a** short claim, **b** imperative, **c** plain/descriptive noun-ish (still specific, never "Background").
+- Alternatives must be shorter or easier to scan than the current heading, not synonyms of equal weight.
+- When the user replies with picks (in any wording — "1c, 2a", "use column b", "keep 3, rest plain"), apply the chosen headings and **delete the whole section**. It must not survive into a published or final article.
+
 ### Phase 5 — Weaknesses section and delivery
 
-Append a final section `## Potential Weaknesses` (omit only if there truly are none — rare). For easy reviewing, each bullet names the section it concerns and the kind of weakness:
+Append `## Potential Weaknesses` directly after the end-of-article marker (omit only if there truly are none — rare). Present it as a **table with unique IDs** so the user can refer to entries in later prompts ("address W3", "W2 is acceptable, drop it"):
 
-- **Single-source claim** — a load-bearing fact with only one source (cite the footnote number).
-- **Stale or low-confidence source** — vault page older than ~2–3 years, `date_confidence: low`, or superseded.
-- **Extrapolation** — where the article generalizes beyond what the source measured.
-- **Unaddressed counterargument** — the strongest objection the article does not rebut.
-- **Gap** — what the research could not confirm.
+```markdown
+## Potential Weaknesses
 
-Deliver: tell the user the file path, the word count, which concepts were visualized, and repeat the weaknesses list in chat. The article always lands in `INBOX/` first; if the Phase 1 publication target is Confluence, offer to publish it there (Atlassian MCP tools) after the user has reviewed the INBOX draft — never publish externally without explicit go-ahead.
+| ID | Section | Kind | Weakness |
+|---|---|---|---|
+| W1 | <heading it concerns> | Single-source | <one sentence, cite the footnote number> |
+```
+
+- IDs are `W1`, `W2`, … in article order; never renumber existing IDs when editing the article later (a resolved weakness's row is deleted or marked, not recycled).
+- **Kind** is one of:
+  - **Single-source** — a load-bearing fact with only one source (cite the footnote number).
+  - **Stale source** — vault page older than ~2–3 years, `date_confidence: low`, or superseded.
+  - **Extrapolation** — the article generalizes beyond what the source measured.
+  - **Counterargument** — the strongest objection the article does not rebut.
+  - **Gap** — what the research could not confirm.
+- When the user later addresses a weakness by ID (e.g. "fix W3", "add a rebuttal for W4"), update the relevant article section and then update the table: delete the row if fully resolved, or reword it if only narrowed. Keep the remaining IDs unchanged.
+
+Deliver: tell the user the file path, the word count, which concepts were visualized, repeat the weaknesses table in chat (with IDs), and remind them they can pick heading alternatives by replying like "headings: 1b, 2a" and address weaknesses by ID ("fix W3"). The article always lands in `INBOX/` first; if the Phase 1 publication target is Confluence, offer to publish it there (Atlassian MCP tools) after the user has reviewed the INBOX draft — never publish externally without explicit go-ahead.
 
 ## Style contract
 
@@ -101,7 +143,7 @@ The contract below is self-contained — follow it without reading the exemplars
 ## Grounding rules
 
 - Cite with **Markdown footnotes `[^1]` at the point of claim** — the marker sits on the sentence that makes the claim, like the exemplars' inline links.
-- Footnote text (all collected at the very end of the file, after Potential Weaknesses — Obsidian renders footnotes at the bottom regardless of where the definitions sit):
+- Footnote text (all collected at the very end of the file, after Potential Weaknesses and Heading Alternatives — Obsidian renders footnotes at the bottom regardless of where the definitions sit):
   - Web: `[^1]: [Article title](https://url) — Publisher, YYYY-MM-DD.`
   - Vault: `[^2]: [[Exact Note Filename]] — vault note, dated YYYY-MM-DD.` A wikilink target is the note's exact filename as it exists on disk — copy it verbatim from the QMD result or `ls`. Vault filenames use **spaces**; do not convert them to hyphens, ever. If you find yourself writing `[[Some-Hyphenated-Name]]`, you have slugified: stop and copy the real filename.
 - **Mandatory before delivery: verify every `[[wikilink]]` in the article resolves.** For each target run `find raw wiki INBOX -name "<target>.md"` (or check the QMD `get` path). A miss means you invented or slugified the name — fix it from the filename on disk. Do not rationalize a miss ("the vault must be hyphen-named"); the filesystem is the authority.
@@ -130,3 +172,4 @@ The contract below is self-contained — follow it without reading the exemplars
 | Diagramming a simple comparison | Use a table. Diagrams are for mechanisms, flows, structures. |
 | Skipping the weaknesses section because the article "feels solid" | The fact sheet flags from Phase 2 always yield at least single-source or extrapolation entries; if genuinely none, say so explicitly to the user. |
 | Writing before the user approves outline + visuals | Phase 3 approval is a hard gate. |
+| Leaving the Heading Alternatives table in a final/published article | It is a working aid — delete it when the user picks headings (or says to keep them). |

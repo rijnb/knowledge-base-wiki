@@ -105,3 +105,19 @@ Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Link
 
 - **AI backend configuration (`config/settings.md`)**: LLM-backed scripts read their backend from `ai_backend` (`claude`, `vibe`, or `codex`). Change the value and save — no code edits. Falls back to deterministic behavior if the CLI is missing or fails.
 - **New `wiki-ground` skill**: `/wiki-ground [optional topic]` grounds the whole conversation in the knowledge base, querying the KB before answering domain questions. The optional topic front-loads relevant pages on activation.
+
+## 2026-08-27 — write-article skill: heading alternatives table
+
+- Added Phase 4b: every article now ends with a `## Heading Alternatives` section (after Potential Weaknesses, before footnotes) — one row per body heading, ≥3 alternatives in three flavors (short claim / imperative / plain).
+- User picks with a short reply like "headings: 1b, 2a"; the picks are applied and the table deleted. Added a common-mistakes row so the table never survives into a published article.
+- Why: heading selection after delivery proved useful in practice (2026-08-26 code-reviews article) and full-claim headings were sometimes hard to read.
+
+## 2026-08-27 — write-article skill: weaknesses table with IDs
+
+- Potential Weaknesses is now a table (ID / Section / Kind / Weakness) with stable IDs W1, W2, … so weaknesses can be addressed by ID in later prompts ("fix W3").
+- IDs are never renumbered; resolved rows are deleted or reworded, remaining IDs stay stable. Delivery message repeats the table and mentions the ID syntax.
+
+## 2026-08-27 — write-article skill: end-of-article marker
+
+- Articles now end with an explicit marker (`---` + "— End of article. The sections below are review aids and references. —") after the closing synthesis; Potential Weaknesses, Heading Alternatives, and footnote definitions all sit below it.
+- On external/Confluence publication the skill asks whether the apparatus ships or gets cut.
