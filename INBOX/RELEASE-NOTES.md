@@ -121,3 +121,7 @@ Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Link
 
 - Articles now end with an explicit marker (`---` + "— End of article. The sections below are review aids and references. —") after the closing synthesis; Potential Weaknesses, Heading Alternatives, and footnote definitions all sit below it.
 - On external/Confluence publication the skill asks whether the apparatus ships or gets cut.
+
+## 2026-08-27 — write-article skill: minimum diagram font size
+
+- Visuals rules now require every Mermaid diagram to start with an init directive setting fontSize to at least 24px, for readability.

@@ -153,6 +153,7 @@ The contract below is self-contained — follow it without reading the exemplars
 ## Visuals rules
 
 - **Mermaid only** (renders natively in Obsidian, no plugins, editable).
+- **Font size at least 20px**: start every diagram with `%%{init: {"themeVariables": {"fontSize": "20px"}}}%%` on the first line inside the fence.
 - Only user-approved concepts from Phase 3.
 - Place each diagram inside the section that explains it, with an italic caption line beneath: `*Figure N: what the reader should see in it.*`
 - Keep diagrams legible: at most 12 nodes, short labels, one idea per diagram. If it needs more, split it or cut it.
