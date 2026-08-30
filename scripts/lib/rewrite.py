@@ -46,7 +46,9 @@ def fix_wikilinks_in_file(file_path: Path, fixes: list, embed: bool = False,
     fixed_targets: set = set()
     lookbehind = '(?<=!)' if embed else '(?<!!)'
     for old_target, new_target in fixes:
-        pattern = re.compile(lookbehind + r'\[\[' + re.escape(old_target) + r'(?=[\]|#\n]| #)')
+        # extract_links strips the target, so tolerate (and normalize away)
+        # padding inside the brackets: [[ target ]] still matches "target".
+        pattern = re.compile(lookbehind + r'\[\[[ \t]*' + re.escape(old_target) + r'[ \t]*(?=[\]|#\n]| #)')
         content, n = pattern.subn(f'[[{new_target}', content)
         count += n
         if n:
@@ -88,7 +90,7 @@ def mark_broken_wikilinks_in_file(file_path: Path, targets: list) -> int:
     count = 0
     for target in targets:
         pattern = re.compile(
-            r'(?<!!)\[\[(' + re.escape(target) + r')( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
+            r'(?<!!)\[\[[ \t]*(' + re.escape(target) + r')[ \t]*( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
         )
         def _replacer(m, _t=target):
             heading = m.group(2) or ""
@@ -114,7 +116,7 @@ def delete_wikilink_in_file(file_path: Path, target: str, embed: bool = False):
     bracket_prefix = '!' if embed else ''
     lookbehind = '' if embed else '(?<!!)'
     link_pat = re.compile(
-        r'( ?)' + lookbehind + re.escape(bracket_prefix) + r'\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|[^\]]*)?\]\]( ?)'
+        r'( ?)' + lookbehind + re.escape(bracket_prefix) + r'\[\[[ \t]*' + re.escape(target) + r'[ \t]*(?: ?#[^|\\\]]*)?(?:\\?\|[^\]]*)?\]\]( ?)'
     )
 
     lines = content.splitlines(keepends=True)
@@ -151,12 +153,12 @@ def delink_wikilink_in_file(file_path: Path, target: str, embed: bool = False) -
     content = file_path.read_text(encoding='utf-8', errors='replace')
     if embed:
         pattern = re.compile(
-            r'!\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
+            r'!\[\[[ \t]*' + re.escape(target) + r'[ \t]*(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
         )
         fallback = Path(target).name  # keep extension for embedded files
     else:
         pattern = re.compile(
-            r'(?<!!)\[\[' + re.escape(target) + r'(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
+            r'(?<!!)\[\[[ \t]*' + re.escape(target) + r'[ \t]*(?: ?#[^|\\\]]*)?(?:\\?\|([^\]]*))?\]\]'
         )
         fallback = Path(target).stem  # x/y/z.md → z
     def _repl(m, _fb=fallback):
@@ -234,7 +236,7 @@ def mark_as_broken_link_in_file(file_path: Path, target: str, embed: bool = Fals
     bracket_prefix = '!' if embed else ''
     lookbehind = '' if embed else '(?<!!)'
     pattern = re.compile(
-        lookbehind + re.escape(bracket_prefix) + r'\[\[(' + re.escape(target) + r')( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
+        lookbehind + re.escape(bracket_prefix) + r'\[\[[ \t]*(' + re.escape(target) + r')[ \t]*( ?#[^|\\\]]*)?(?:\\?(\|[^\]\n]*))?\]\]'
     )
     def _replacer(m, _t=target):
         alias_part = m.group(3)

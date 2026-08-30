@@ -1,6 +1,8 @@
 # Release Notes
 
-## 2026-08-26 — New `write-article` skill
+## 2026-08-30 — Wikilink rewriters tolerate padding inside brackets
+
+- **`wiki-doctor` TUI replace (`s`/`n`) no longer silently no-ops on padded wikilinks** like `[[ Great Wall Motors]]`. `extract_links` strips the target (`links.py:98`) but every rewriter in `scripts/lib/rewrite.py` matched `\[\[` + the stripped target verbatim, so a link with whitespace inside the brackets never matched: 0 substitutions, "no match — may already be changed", warning persisted on rescan. All five wikilink rewriters (`fix_wikilinks_in_file`, `mark_broken_wikilinks_in_file`, `delete_wikilink_in_file`, `delink_wikilink_in_file`, `mark_as_broken_link_in_file`) now accept `[ \t]*` around the target and normalize the padding away on rewrite — `d`, delink, and broken-marking were affected the same way. 7 regression tests in `test_rewrite.py` (padded fix/mark/delete/delink cases, incl. the exact table-row repro); suite at 419 tests, only pre-existing unrelated failures (skill mirrors, sync-all-repos fixture).
 
 - **New `.claude/skills/write-article`** — produces publication-quality articles grounded in vault + web research. Five-phase workflow: grill-me-style interview (topic, audience, thesis, length), research (wiki-query + WebSearch/defuddle) into a fact sheet, outline + user-approved visualization choices, writing, and a closing `## Potential Weaknesses` section for easy review. Style contract distilled from the 25 most recent well-produced `raw/clips/` articles (claim-headings, vignette lede, concrete numbers, controlling metaphor, "Do this today" close). Grounding via `[^n]` footnotes at point of claim (compatible with the `wiki-doctor` footnote check); visuals are Mermaid only, ≤12 nodes, user-selected. Output lands in `INBOX/YYYY-MM-DD Title.md` with authored-note frontmatter.
 

@@ -10,7 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _vault_fixture import VaultFixtureMixin  # noqa: E402
 from lib.rewrite import (  # noqa: E402
     delete_wikilink_in_file,
+    delink_wikilink_in_file,
     fix_wikilinks_in_file,
+    mark_as_broken_link_in_file,
     mark_broken_wikilinks_in_file,
 )
 
@@ -63,6 +65,33 @@ class FixWikilinksTests(VaultFixtureMixin, unittest.TestCase):
         self.assertEqual(n, 0)
         self.assertEqual(f.read_bytes(), raw)  # bytes untouched
 
+    def test_leading_space_inside_brackets(self):
+        # extract_links strips the target, so the fix arrives without the
+        # padding that is present in the file. The rewrite must still match
+        # and must normalize the padding away.
+        f = self.write(
+            "note.md",
+            "| [[ Great Wall Motors]]  | China  | Car   |   4 | Ora, Tank, WEY, Haval\n",
+        )
+        n = fix_wikilinks_in_file(f, [("Great Wall Motors", "GWM")])
+        self.assertEqual(n, 1)
+        self.assertEqual(
+            self.read("note.md"),
+            "| [[GWM]]  | China  | Car   |   4 | Ora, Tank, WEY, Haval\n",
+        )
+
+    def test_trailing_space_inside_brackets(self):
+        f = self.write("note.md", "see [[old ]] here\n")
+        n = fix_wikilinks_in_file(f, [("old", "new")])
+        self.assertEqual(n, 1)
+        self.assertEqual(self.read("note.md"), "see [[new]] here\n")
+
+    def test_padded_target_with_alias(self):
+        f = self.write("note.md", "[[ old |Display]]\n")
+        n = fix_wikilinks_in_file(f, [("old", "new")])
+        self.assertEqual(n, 1)
+        self.assertEqual(self.read("note.md"), "[[new|Display]]\n")
+
     def test_unicode_decode_error_with_return_targets(self):
         raw = b"[[old]]\n\xff\xfe\n"
         f = self.write_bytes("note.md", raw)
@@ -88,6 +117,12 @@ class MarkBrokenWikilinksTests(VaultFixtureMixin, unittest.TestCase):
         f = self.write("note.md", "[[broken#sec]]\n")
         mark_broken_wikilinks_in_file(f, ["broken"])
         self.assertEqual(self.read("note.md"), "[[broken#sec|(broken link) broken]]\n")
+
+    def test_padded_link_marked(self):
+        f = self.write("note.md", "[[ broken ]]\n")
+        n = mark_broken_wikilinks_in_file(f, ["broken"])
+        self.assertEqual(n, 1)
+        self.assertEqual(self.read("note.md"), "[[broken|(broken link) broken]]\n")
 
     def test_unicode_decode_error_skips(self):
         raw = b"[[broken]]\n\xff\n"
@@ -124,6 +159,13 @@ class DeleteWikilinkTests(VaultFixtureMixin, unittest.TestCase):
         self.assertFalse(changed)
         self.assertEqual(removed, [])
 
+    def test_padded_link_deleted(self):
+        f = self.write("note.md", "before [[ gone ]] after\n")
+        changed, removed = delete_wikilink_in_file(f, "gone")
+        self.assertTrue(changed)
+        self.assertEqual(removed, [])
+        self.assertEqual(self.read("note.md"), "before after\n")
+
     def test_unicode_decode_error_skips(self):
         raw = b"[[gone]]\n\xff\n"
         f = self.write_bytes("note.md", raw)
@@ -131,6 +173,32 @@ class DeleteWikilinkTests(VaultFixtureMixin, unittest.TestCase):
         self.assertFalse(changed)
         self.assertEqual(removed, [])
         self.assertEqual(f.read_bytes(), raw)
+
+
+class DelinkWikilinkTests(VaultFixtureMixin, unittest.TestCase):
+    def test_plain_link_delinked(self):
+        f = self.write("note.md", "see [[wiki/systems/Thing]] here\n")
+        n = delink_wikilink_in_file(f, "wiki/systems/Thing")
+        self.assertEqual(n, 1)
+        self.assertEqual(self.read("note.md"), "see Thing here\n")
+
+    def test_padded_link_delinked(self):
+        f = self.write("note.md", "see [[ Thing ]] here\n")
+        n = delink_wikilink_in_file(f, "Thing")
+        self.assertEqual(n, 1)
+        self.assertEqual(self.read("note.md"), "see Thing here\n")
+
+
+class MarkAsBrokenLinkTests(VaultFixtureMixin, unittest.TestCase):
+    def test_plain_link_rewritten(self):
+        f = self.write("note.md", "[[target]]\n")
+        self.assertTrue(mark_as_broken_link_in_file(f, "target"))
+        self.assertEqual(self.read("note.md"), "[[broken-link|target]]\n")
+
+    def test_padded_link_rewritten(self):
+        f = self.write("note.md", "[[ target ]]\n")
+        self.assertTrue(mark_as_broken_link_in_file(f, "target"))
+        self.assertEqual(self.read("note.md"), "[[broken-link|target]]\n")
 
 
 if __name__ == "__main__":
