@@ -6,7 +6,7 @@ This is where you store all your "raw" information. Notes you create. Web clips 
 
 After adding new notes, run the script
 ```
-scripts/wiki-ingest-loop.sh
+scripts/wiki-ingest.sh
 ```
 This 'ingests' the notes into the knowledge base, meaning it will augment the knowledge Wiki with information from these notes.
 

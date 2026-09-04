@@ -4,13 +4,13 @@ _Copyright (C) 2026, Rijn Buve_
 
 This repository started as an implementation of [Andrej Karpathy's idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) for an LLM-maintained knowledge base: keep source notes in a folder, let an LLM maintain a Wiki on top of them, and use the Wiki as the practical interface for remembering and reasoning. This implementation keeps that core idea, but goes considerably further. It is designed for long-lived work knowledge, where old notes do not merely accumulate; they need to be curated, checked, superseded, and sometimes deliberately ranked lower when answering current questions.
 
-The knowledge base is structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd). Raw evidence lives in `raw/`; canonical pages live in `wiki/`. Ingestion adds and updates canonical pages, while curation improves selected pages over time using source evidence, block-level provenance, and freshness metadata. Provenance-aware query tooling can explain when a claim is current, historical, superseded, disputed, or only minimally migrated, so outdated information is not silently treated as equally reliable.
+The knowledge base is structured as an [Obsidian](https://obsidian.md) vault, assisted by the semantic database [QMD](https://github.com/tobi/qmd). Raw evidence lives in `raw/`; canonical pages live in `wiki/`. Ingestion adds and updates canonical pages, while curation improves selected pages over time using source evidence, page-level provenance, and freshness metadata. Provenance-aware query tooling can explain when a page is current, stale, unverified, or superseded, so outdated information is not silently treated as equally reliable.
 
 ## Purpose
 
 The primary goal is **efficient decision intelligence**: understanding why decisions were taken, on what basis, by whom, and when. Secondary goals include mapping how technologies and systems relate, who is involved in what, and how competitors compare. And 'efficient', because the mechanism needs to be token (and environmentally) efficient.
 
-**Division of labor:** 
+**Division of labor:**
 - The user curates source files in `raw/`.
 - LLM does all writing, cross-referencing, and bookkeeping in `wiki/`.
 - Obsidian is the UI for entering/accessing notes and asking questions (e.g. through `Claudian`).
@@ -21,25 +21,29 @@ The primary goal is **efficient decision intelligence**: understanding why decis
 # 1. Clone this repo
 git clone <repo-url> ~/my-knowledge-base
 
-# 2. Create raw/ and wiki/ directories (these are not stored in git)
+# 2. Create the raw/ subdirectories (raw/ is not stored in git; wiki/ is created empty by the clone)
 cd ~/my-knowledge-base
-mkdir -p raw/{notes,clips,emails,transcripts,scans,slack} wiki
+mkdir -p raw/{notes,clips,confluence,diary,emails,transcripts,scans,slack}
 
-# 3. Install QMD (the semantic search engine)
+# 3. Install QMD (the semantic search engine; it runs on the Bun runtime)
 npm install -g bun
 npm install -g @tobilu/qmd
 
-# 4. Register all subdirectories as QMD collections and build the index
+# 4. Register the vault as a QMD collection and build the index
 ./scripts/qmd-full-reindex.sh
 
-# 5. Install the QMD skill for Claude/Junie
-qmd skill install --global --yes
-
-# 6. Register QMD as a Claude Code MCP server (add to ~/.claude/claude_desktop_config.json)
+# 5. Register QMD as an MCP server for Claude Code (user scope, so it works in every project)
+claude mcp add --scope user qmd -- qmd mcp
 #    Or just ask Claude: "read this README.md and install QMD as an MCP server"
+
+# 6. (Optional) Install the QMD skill globally, for use in other projects.
+#    This repo already ships the skill in .claude/skills/qmd, so this step is not needed here.
+qmd skill install --global --yes
 
 # 7. Open this directory as an Obsidian vault: File → Open Folder as Vault
 ```
+
+If you use the Obsidian Web Clipper, import `config/obsidian_webclipper_template.json` as a clipper template so clips land in `raw/clips/` with the expected frontmatter.
 
 After setup, put your notes in `raw/` and tell Claude: **"ingest new notes"**.
 Alternatively, run:
@@ -48,19 +52,19 @@ Alternatively, run:
 ./scripts/wiki-ingest.sh
 ```
 
-After ingesting notes, run the Linter regularly to keep your knowledge base clean by telling Claude to **"visit doctor"**:
+After ingesting notes, run the doctor regularly to keep your knowledge base clean by telling Claude **"health check"** (or "lint"):
 
 ```bash
 ./scripts/wiki-doctor.py
 ```
 
-Freshness checks are the third regular maintenance action, alongside ingest and doctor. This check adds "provenance" records to generated notes to improve search relevance later. You can ask for a **"freshness check"**, or run:
+Freshness checks are the third regular maintenance action, alongside ingest and doctor. This check validates the provenance frontmatter of generated notes and builds the curation queues that improve search relevance later. You can ask for a **"freshness check"**, or run:
 
 ```bash
 ./scripts/wiki-freshness.sh
 ```
 
-You can keep notes that you do not want to be ingested yet (like drafts), in `INBOX`. The inbox will not be part of the ingestion process.
+You can keep notes that you do not want to be ingested yet (like drafts) in `INBOX`. The inbox is not part of the ingestion process, and (apart from `INBOX/RELEASE-NOTES.md`) it is not stored in git.
 
 For sensitive Markdown notes that should remain in `raw/` but never be ingested, add frontmatter:
 
@@ -74,37 +78,45 @@ The batch importer skips that note and any local `raw/` files explicitly linked 
 
 ## Some background on provenance
 
-Provenance data is used to better establish the relevance of text qith respect to a query. It is more powerful than just looking at the "note creation date". It contains, per block/paragraph of text in a note a pointer to provenance data, which says something about when the block of text was created, check, what the confidence level for its value is, and whether it is a fact (directy from raw notes, or generated by AI) and more. Using this type of data, the `wiki-query` skill is much better able to establish relevance of chunks of text in notes for a specific query. 
+Provenance data is used to better establish the relevance of a page with respect to a query. It is more powerful than just looking at the "note creation date". It records, per canonical page, which raw notes the page was built from, who (or which agent) generated it and when, who verified it since, and optionally when it should be considered stale. Using this data, the `wiki-query` skill is much better able to establish the relevance of pages for a specific query.
 
-The provenance data is stored directly in generated canonical notes under `wiki/`, not in a hidden sidecar database. It's in a `Provenance` call-out section at the bottom of your notes. That keeps each page readable in Obsidian, reviewable in Git, and usable by LLMs even when only the Markdown file is available.
+The provenance data is stored directly in the YAML frontmatter of generated canonical notes under `wiki/`, not in a hidden sidecar database. That keeps each page readable in Obsidian, reviewable in Git, and usable by LLMs even when only the Markdown file is available. The format is called OKF v0.2.
 
-A fully migrated canonical page has:
+A canonical page with full provenance has:
 
-- stable Obsidian block IDs on meaningful claim paragraphs, such as `^claim-owner-01`;
-- one page-level `> [!provenance]- Provenance` callout with `schema: kb-prov-v1`;
-- a `blocks:` mapping from each block ID to evidence metadata: `sources`, `observed`, `checked`, `status`, `confidence`, and optional fields such as `superseded_by`, `provenance_quality`, `review_mode`, or `evidence_latest`.
+- a `sources:` list in the frontmatter, one entry per raw note the page draws on, each with an `id` (`s1`, `s2`, ...) and a `resource` path;
+- a `generated:` mapping (`by`, `at`) recording who created the content and when;
+- an append-only `verified:` list of `{by, at}` entries recording later checks;
+- an optional `stale_after:` date, after which the page is treated as stale;
+- per-claim attribution in the body via Markdown footnotes `[^s1]`, keyed to `sources[].id`, with the footnote definitions at the end of the page.
 
 Example:
 
 ```markdown
-Current ownership sits with the map enrichment flow. ^claim-owner-01
+---
+type: system
+description: "Ownership and status of the map enrichment flow."
+sources:
+  - id: s1
+    resource: "raw/notes/2026-06-02 Meeting map enrichment.md"
+generated:
+  by: "agent:wiki-ingest"
+  at: 2026-06-02
+verified:
+  - by: "human:rijn.buve"
+    at: 2026-06-20
+---
 
-> [!provenance]- Provenance
-> schema: kb-prov-v1
-> migration_status: legacy-inferred
-> blocks:
->   claim-owner-01:
->     sources: [raw:meeting-2026-06-02#b08]
->     observed: 2026-06-02
->     checked: 2026-06-20
->     status: current
->     confidence: medium
->     provenance_quality: inferred
+Current ownership sits with the map enrichment flow.[^s1] ^claim-owner-01
+
+[^s1]: [[raw/notes/2026-06-02 Meeting map enrichment.md]]
 ```
 
-Allowed block statuses are `current`, `historical`, `stale`, `disputed`, `superseded`, `open`, and `unknown`. Query tooling uses these values, together with `checked` and `confidence`, to rank current evidence higher and to explain when older, disputed, or superseded evidence is being demoted rather than silently ignored. A `status: superseded` block must name `superseded_by`.
+Trust tiers come from the `by:` prefix of `verified:` entries: `human:*` is the human-reviewed tier (strongest); `agent:*` is the machine tier; a page with only `generated:` is unverified (weakest). Freshness is derived from `generated.at` and the latest `verified.at`. Query tooling derives a page status (`current`, `stale`, or `unknown` when no provenance is present) and a confidence (`high` for human-verified, `medium` otherwise) and uses these to rank current, verified evidence higher and to explain when older or unverified evidence is being demoted rather than silently ignored.
 
-Not every legacy page needs full block-level curation immediately. A lightly reviewed page can receive a minimal `## Freshness Status` section with `migration_status: legacy-inferred-minimal`; this acts as a page-level caution, not as full provenance, and the coverage backlog will still list the page for eventual curation. Validate provenance with:
+Pages that are explicitly replaced carry `superseded_by:` (and the replacement carries `supersedes:`) in their frontmatter; a superseded page is never used as the main current answer unless you ask for history.
+
+Stable Obsidian block IDs such as `^claim-owner-01` remain allowed as plain anchors for citation, but they carry no metadata. The earlier `kb-prov-v1` provenance callout format is abolished; the linter flags any page that still contains it. Validate provenance with:
 
 ```bash
 python3 scripts/system/wiki-provenance-lint.py --root .
@@ -134,7 +146,7 @@ Use the full re-ingestion option only when you intentionally want old raw files 
 scripts/wiki-migrate-existing.sh --root . --apply --allow-reingest-existing
 ```
 
-The migration flow checks structural health, optionally migrates legacy `converted/` layouts, assigns freshness dates, rebuilds index pages, syncs QMD, runs freshness/provenance queues, and writes `.wiki-scratch/migration-report.md`.
+The migration flow checks structural health, optionally migrates legacy `converted/` layouts, assigns freshness dates, rebuilds index pages, syncs QMD (text index only; add `--qmd-embed` for vector embeddings), runs the freshness/provenance queues, and writes `.wiki-scratch/migration-report.md`. Use `--help` for the remaining options (`--skip-legacy-layout`, `--skip-qmd`, `--limit`, `--no-report`, `--strict`).
 
 ## Update the framework regularly
 
@@ -147,21 +159,28 @@ cd ~/my-knowledge-base && git pull
 ## Prerequisites
 
 **Required:**
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI) — or Codex, Vibe, Junie
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI) — or Codex, Vibe, Junie (experimental)
 - [Node.js / npm](https://nodejs.org/) — for installing bun and qmd
 - [QMD](https://github.com/tobi/qmd) — local semantic search engine (`npm install -g @tobilu/qmd`)
 - [Obsidian](https://obsidian.md) — vault UI (free, Mac/Windows/Linux)
 - `git`
+- Python 3 — for the scripts under `scripts/`
 
 **Optional:**
 - [pdftotext](https://poppler.freedesktop.org/) — faster/cheaper PDF extraction (`brew install poppler`); LLM vision is the fallback
-- [Obsidian Web Clipper](https://obsidian.md/clipper) — one-click web article saving to `raw/clips/`
+- [Obsidian Web Clipper](https://obsidian.md/clipper) — one-click web article saving to `raw/clips/` (template in `config/obsidian_webclipper_template.json`)
 - [Claudian](https://github.com/YishenTu/claudian) — run Claude from within Obsidian (ask Claude to install it safely)
 - [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) (Mac App Store) — prevents Mac sleep during long overnight ingests
 
 ## MCP Server Setup
 
-Register QMD as a MCP server in `~/.claude/claude_desktop_config.json` (or ask Claude to do it):
+Register QMD as an MCP server for Claude Code (or ask Claude to do it):
+
+```bash
+claude mcp add --scope user qmd -- qmd mcp
+```
+
+This writes the server into `~/.claude.json`. If you prefer a project-scoped server, create a `.mcp.json` in the vault root instead:
 
 ```json
 {
@@ -174,6 +193,8 @@ Register QMD as a MCP server in `~/.claude/claude_desktop_config.json` (or ask C
 }
 ```
 
+Claude Desktop uses a different file (`~/Library/Application Support/Claude/claude_desktop_config.json`) with the same JSON shape.
+
 The Slack integration is managed via your claude.ai organization. Authorize it yourself at **claude.ai → Settings → Connectors**. Once authorized, the Slack tools are available automatically in all Claude sessions — no local configuration needed.
 
 The email integration uses Microsoft Power Automate to save emails to a OneDrive folder, which syncs to your local disk. Ask "fetch mail" to copy files from that folder into `raw/emails/` and queue them for ingestion.
@@ -182,67 +203,75 @@ The email integration uses Microsoft Power Automate to save emails to a OneDrive
 
 ## Your note-keeping routine in a nutshell
 
-- **Create and collect notes:** 
+- **Create and collect notes:**
 	- User produces raw notes and stores them in the `raw/notes` directory.
 	- User uses the Obsidian Web Clipper to store notes in `raw/clips`.
 	- User stores `.vtt` meeting transcripts in `raw/transcripts`.
 	- User asks "fetch mail" to copy emails from the configured inbox to `raw/emails/`, or drags `.eml`/`.html` files there manually.
-	- User stored handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
-	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/`.
+	- User stores handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
+	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/<channel>/` and `raw/slack/DM-<Name>/`.
 
 - **Ingest notes:**
-	- User asks to "ingest new raw notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.sh`.
-	- LLM converts non-Markdown inputs (`.vtt` transcripts, `.eml`/`.html` emails, `.pdf`/`.jpg` scans): the original file is moved into a `_resources/` subdirectory of its directory, and a companion `.md` note is written next to it (in the same directory as the original was).
+	- User asks to "ingest new notes", "ingest Confluence page `<URL>`" or runs `wiki-ingest.sh`.
+	- Non-Markdown inputs are converted first: `.vtt` transcripts and `.eml`/`.html` emails deterministically by the ingest script, `.pdf`/`.jpg` scans by the LLM. The original file is moved into a `_resources/` subdirectory of its directory, and a companion `.md` note is written next to it (in the same directory as the original was).
 	- Markdown notes with `ingest: false` frontmatter, plus local `raw/` files explicitly linked from them, are excluded from batch ingestion and are not logged.
-	- LLM partitions files into batches and processes them (large ingests use parallel LLM sessions 2–5; single batches are handled in one session).
-	- After all batches are done, user says "finalize ingest" to merge session logs, rebuild `index.md` files, and run post-processing (QMD re-index + health check).
-   
+	- LLM partitions files into batches and processes them (large ingests use N parallel LLM sessions; a single batch is handled in one session).
+	- After all batches are done, the coordinator session finalizes (or you say "finalize ingest"): merge session logs, assign freshness dates, rebuild `index.md` files, and run post-processing (QMD re-index, health check, freshness check).
+
 - **Query wiki:**
 	- User asks a high-level question.
-	- LLM queries semantic database (with the `qmd` skill) for relevant page links (fast/token-efficient).
-	- LLM processes suggested pages and produces answer to user.
-	- LLM stores valuable conversations in `wiki/conversations/` to extend the knowledge base.
-- 
-- **Maintenance**
-	- Every now and then **"visit doctor** and **"freshness check** to fix broken links and add provenance to notes to increase search relevance over time.
+	- LLM queries the semantic database (QMD, via MCP or CLI) for relevant page links (fast/token-efficient).
+	- LLM builds a freshness packet over the retrieved pages, processes them, and produces an answer to the user.
+	- LLM proposes to store valuable conversations in `wiki/conversations/` to extend the knowledge base.
 
-The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them, makes this implementation of a knowledge significantly faster and more token efficient than when it's using Markdown files only.
+- **Maintenance:**
+	- Every now and then ask for a **"health check"** and a **"freshness check"** to fix broken links and validate provenance, which increases search relevance over time.
+
+The combination of using a semantic database to fetch relevant pages before analyzing documents and reasoning about them makes this implementation of a knowledge base significantly faster and more token efficient than one that uses Markdown files only.
 
 ## Commands and skills
 
-These skill commands and natural-language triggers are available.
+The skills live in `.claude/skills/` (one `SKILL.md` per skill) and are mirrored to `.agents/`, `.codex/` and `.junie/` for other agents (see [Development](#development)). These skill commands and natural-language triggers are available.
 
 **Commonly used:**
 
-| Command / phrase                     | Description                                                                                   |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| ask any question                     | Query the knowledge base (default behavior)                                                   |
-| "ingest new notes"                   | Start a new ingest of raw notes (Session 1 — coordinator flow)                                |
-| "fetch slack"                        | Fetch Slack threads and DMs into `raw/slack/`, then run `wiki-ingest.sh` to ingest            |
-| "fetch mail"                         | Copy emails from configured inbox to `raw/emails/`, then run `wiki-ingest.sh` to ingest       |
-| "health check" or "lint"             | Check for orphaned pages, broken links, contradictions                                        |
-| "freshness check"                    | Run the one-command freshness/provenance/drift/coverage check                                 |
-| "curate page" or "refresh this page" | Clean up one canonical page using block provenance, raw evidence, and freshness/drift signals |
-| "add missing [topic]"                | Create a new Wiki page for a missing concept, person, system, etc.                            |
+| Command / phrase                     | Skill                | Description                                                                                   |
+| ------------------------------------ | -------------------- | --------------------------------------------------------------------------------------------- |
+| ask any question                     | `wiki-query`         | Query the knowledge base (default behavior)                                                   |
+| "ingest new notes"                   | `wiki-ingest`        | Start a new ingest of raw notes or a Confluence page (Session 1 — coordinator flow)           |
+| "fetch slack"                        | `wiki-fetch-slack`   | Fetch Slack channels and DMs into `raw/slack/`; ingest afterwards                             |
+| "fetch mail"                         | `wiki-fetch-mail`    | Copy emails from the configured inbox to `raw/emails/`; ingest afterwards                     |
+| "health check" or "lint"             | `wiki-doctor`        | Check for broken links, orphaned pages, stubs, loose files, and frontmatter problems          |
+| "freshness check"                    | `wiki-freshness`     | Run the one-command provenance lint / drift queue / coverage backlog check                    |
+| "curate page" or "refresh this page" | `wiki-curate-page`   | Clean up one canonical page using raw evidence and freshness/drift signals                    |
+| "add missing [topic]"                | `wiki-add-missing`   | Create a new Wiki page for a missing concept, person, system, etc.                            |
+| "write an article about [topic]"     | `write-article`      | Draft a footnoted, publication-quality article from vault knowledge plus web research         |
 
 **Less common / maintenance:**
 
-| Command / phrase          | Description |
-| ----------------          | ----------- |
-| "ingest next batch"       | Continue ingesting the next batch (Sessions 2–N flow) |
-| "finalize ingest"         | Finalize the ingest: merge logs, rebuild indexes, run post-processing |
-| "migrate existing knowledge base" | Prepare an existing `raw/` + `wiki/` corpus without bulk re-ingesting historical raw notes |
-| freshness query packet    | Rank retrieved canonical blocks for one query using provenance freshness metadata |
-| provenance coverage backlog | List canonical Wiki pages that still lack block provenance |
-| minimal provenance stamp  | Add a query-time caution block to classifier-approved low-risk legacy pages |
-| "clear ingest batches"    | Remove incomplete batch files to restart a failed ingest |
-| "ground this conversation" or "wiki-ground [topic]" | Treat the KB as source of truth for this conversation; optionally front-load a topic. |
+| Command / phrase                                    | Skill                        | Description                                                                                 |
+| --------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------- |
+| "ingest next batch"                                 | `wiki-ingest-next-batch`     | Continue ingesting the next batch (Sessions 2–N flow)                                       |
+| "finalize ingest"                                   | `wiki-finalize-ingest`       | Finalize the ingest: merge logs, assign dates, rebuild indexes, run post-processing         |
+| "clear ingest batches"                              | `wiki-clear-ingest-batches`  | Remove incomplete batch files to restart a failed ingest                                    |
+| "migrate existing knowledge base"                   | `wiki-migrate-existing`      | Prepare an existing `raw/` + `wiki/` corpus without bulk re-ingesting historical raw notes  |
+| "ground this conversation" or "wiki-ground [topic]" | `wiki-ground`                | Treat the KB as source of truth for this conversation; optionally front-load a topic        |
 
-The `ingest next batch` and `finalize ingest` commands are only needed for importing large amounts of notes. LLM will notify you when you `ingest new notes` and it sees it requires batched importing.
+**Background skills** (loaded by other skills, not invoked directly):
+
+| Skill                  | Description                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `wiki-ingest-per-note` | Per-note processing rules: file conversion, topic assignment, wikilinks, provenance frontmatter |
+| `wiki-templates`       | Page structure and frontmatter for each topic type; used whenever a Wiki page is created         |
+| `qmd`                  | How to search the QMD semantic database (upstream skill, with a Codex sandbox note added)       |
+
+`.claude/agents/` holds two sub-agent definitions (`wiki-ingest-next-batch`, `wiki-finalize-ingest`) that the `wiki-ingest` skill dispatches during large imports.
+
+The `ingest next batch` and `finalize ingest` commands are only needed for importing large amounts of notes. The LLM will notify you when you `ingest new notes` and it sees that batched importing is required.
 
 ### Pro-tip 1: use `wiki-ingest.sh` to ingest multiple files
 
-You can use the script "scripts/wiki-ingest.sh" to start ingesting new notes. The advantage of this script is that it will try to ingest new notes in batches, and wait if your 5h limit has been reached. It will first execute "ingest new notes" followed by as many "ingest next batch" prompts as necessary (up to a specified maximum). Use "--help" for help for this script.
+You can use the script `scripts/wiki-ingest.sh` to start ingesting new notes. The advantage of this script is that it runs unattended: it converts raw files, partitions new notes into batches (without calling the LLM), runs one `ingest next batch` session per batch, runs `finalize ingest`, and finishes with the doctor, a QMD re-sync, and a freshness check. When the backend is Claude, it pauses for 30 minutes whenever your 5-hour usage window is at or above the threshold (default 85%) and then resumes.
 
 By default, the script reads `config/settings.md` and uses its `ai_backend`
 frontmatter value. You can override it for a single run like this:
@@ -250,23 +279,32 @@ frontmatter value. You can override it for a single run like this:
 scripts/wiki-ingest.sh [--agent claude|vibe|codex|junie]
 ```
 
-Use `wiki-ingest.sh --help` for more options.
+Other options include `--threshold`, `--max-batches`, `--max-files-per-batch`, `--wait-between-batches`, `--max-errors`, and `--dry-run`. Use `wiki-ingest.sh --help` for details.
 
 ### Pro-tip 2: use `wiki-doctor.py` to health-check your knowledge base
 
-After each ingestion, the system can automatically run a health check on the knowledge base. It performs an automated, basic health-check and will check for missing topics, inconsistencies etc. using the LLM (takes time and tokens).
+The ingest script runs the doctor automatically at the end of each run. The doctor itself never calls an LLM; it is a fast, deterministic check for:
 
-You can also run the basic health-check (which does not use the LLM) manually, by simply executing:
+- broken internal links and embeds (optionally external HTTP links with `--external`);
+- orphaned pages (no incoming links) and stub pages (identified by the LLM but never filled in);
+- frontmatter problems, such as a missing `description:` or leftover legacy provenance markup;
+- files whose names differ only in accents (duplicates created by syncing between file systems);
+- loose non-Markdown files and misplaced or orphaned attachments;
+- footnote references without a definition (and vice versa);
+- leftover legacy `converted/` directories.
+
+You can run it manually by simply executing:
 ```
 scripts/wiki-doctor.py
 ```
 
 This opens an interactive TUI to deal with:
-- Broken links: these can be removed, flagged or simply replaced with plain text.
+- Broken links: these can be removed, flagged, replaced with plain text, or retargeted.
 - Orphaned pages: these can be deleted, or kept (marked with `orphan: false`).
-- Stub pages (that were identified by the LLM but never filled in): these can be deleted, or kept (no longer marked as `stub: true`).
+- Stub pages: these can be deleted, or kept and acknowledged in their frontmatter.
+- Orphaned attachments: these can be previewed and deleted.
 
-Using this interactive mode, you should be able to keep your knowledge base 100% free of false positive alerts so it's easy to see if the knowledge base is still sound or not. Use `--batch-mode` to suppress the TUI and get text/JSON output only.
+Using this interactive mode, you should be able to keep your knowledge base 100% free of false positive alerts so it's easy to see if the knowledge base is still sound or not. Use `--batch-mode` to suppress the TUI and get text/JSON output only (`--format text|json`). `--fix-simple-errors` repairs broken links that have a unique normalized match, prunes `wiki/log.jsonl`, and relocates loose files into `_resources/` using the Obsidian CLI (Obsidian must be running). `--fix-orphans` turns plain-text mentions of orphaned pages into wikilinks. See `--help` for the full list.
 
 ### Pro-tip 3: run `qmd-full-reindex.sh` to re-index the semantic database
 
@@ -274,28 +312,26 @@ After running ingestion of notes (e.g. by `scripts/wiki-ingest.sh`), you are adv
 ```
 scripts/qmd-full-reindex.sh
 ```
-This makes sure the sematic database (QMD) is fully up-to-date again. The LLM skill `wiki-query` makes use of the semantic database, so make sure it's up-to-date.
+This registers the vault root as a single QMD collection (named `tomtom`; the name is hard-coded in `scripts/system/qmd-sync-collections.sh`), removes any stale per-subdirectory collections, runs `qmd update` (text index), and then `qmd embed` (vector embeddings). Pass `--skip-embed` to skip the slow embedding step, or `--reset` to drop all collections and the index database first. The LLM skill `wiki-query` makes use of the semantic database, so make sure it's up-to-date.
 
 Instead of running a full re-index, you can also execute `qmd embed`. This is useful if you only ingested a couple of new notes, for example.
 
-### Pro-tip 3b: use 'freshness tools' to migrate gradually to using more provenance
+### Pro-tip 4: use the freshness tools to keep provenance healthy
 
-Canonical pages can opt into block-level provenance using stable Obsidian block IDs plus a compact `kb-prov-v1` provenance callout. The easy command is:
+Canonical pages carry OKF v0.2 provenance frontmatter (see [Some background on provenance](#some-background-on-provenance)). The easy command is:
 
 ```
 scripts/wiki-freshness.sh --root .
 ```
 
-The ingest loop also runs this automatically after finalization. `wiki-doctor.py` reminds you about it in its recommendations. You can run it manually any time you want to refresh the queues, especially after fixing doctor findings or before freshness-sensitive query work. The `.wiki-scratch/` queue files are generated local working state and are ignored by Git.
+It runs the provenance lint, builds a freshness inventory, and writes two queues under `.wiki-scratch/` (generated local working state, ignored by Git):
 
-There are two different queues:
+- `freshness-curation-candidates.md`, produced by `wiki-drift-detect.py`: pages where related raw evidence, newer raw notes, or freshness statuses suggest a real query-time risk.
+- `provenance-coverage-backlog.md`, produced by `wiki-provenance-coverage.py`: every canonical Wiki page whose provenance is missing (`no-provenance`) or invalid (`invalid-provenance`), even when no freshness risk has been detected yet.
 
-- `wiki-drift-detect.py` finds pages where related raw evidence, newer raw notes, or freshness statuses suggest a real query-time risk.
-- `wiki-provenance-coverage.py` lists every canonical Wiki page that still lacks block provenance, even when no freshness risk has been detected yet.
+Use the drift queue first for answer-quality improvements. Use the coverage backlog for gradual migration planning. The ingest script runs this automatically after finalization, and `wiki-doctor.py` reminds you about it in its recommendations. You can run it manually any time, especially after fixing doctor findings or before freshness-sensitive query work.
 
-Use the drift queue first for answer-quality improvements. Use the coverage backlog for gradual migration planning.
-
-Classifier-reviewed legacy pages may receive a minimal status stamp instead of a full rewrite. This adds a `## Freshness Status` block plus `migration_status: legacy-inferred-minimal`, reducing query-time risk while keeping the page in the coverage backlog as `minimal-stamp`. The provenance metadata includes a `review_mode` such as `historical`, `source-mismatch`, `needs-currentness-answer`, or `sensitive-review`:
+Classifier-reviewed legacy pages can receive a minimal provenance stamp instead of a full rewrite. This writes `sources:`, `generated:`, and (optionally) `verified:` frontmatter from a reviewed JSON manifest, which moves the page from the backlog to `covered`:
 
 ```
 python3 scripts/system/wiki-provenance-stamp-status.py \
@@ -303,17 +339,17 @@ python3 scripts/system/wiki-provenance-stamp-status.py \
   .wiki-scratch/freshness-auto-ok.json
 ```
 
-Use this only with a reviewed manifest. It is not a substitute for detailed block-level curation.
+Use this only with a reviewed manifest. It is not a substitute for detailed per-claim curation.
 
-#### Use `/wiki-curate-page` to cleanup canonical pages
+#### Use `wiki-curate-page` to clean up canonical pages
 
-Use `wiki-curate-page` for one-page cleanup when drift detection shows that newer raw notes may affect a canonical page. To prepare a read-only packet for one target page, just ask **"curate this page** or execute":
+Use `wiki-curate-page` for one-page cleanup when drift detection shows that newer raw notes may affect a canonical page. Just ask **"curate this page"**. Under the hood, the skill prepares a read-only packet for the target page:
 
 ```
 python3 scripts/system/wiki-curate-page.py --page "wiki/concepts/Some Concept.md" --format json
 ```
 
-To let the helper run QMD candidate discovery and then rank block-level claims before answering:
+The `wiki-query` skill uses a related helper to rank retrieved pages by provenance freshness before answering. With `--qmd` it runs QMD candidate discovery itself:
 
 ```
 python3 scripts/system/wiki-freshness-query.py \
@@ -322,25 +358,23 @@ python3 scripts/system/wiki-freshness-query.py \
   --format text
 ```
 
-With `--qmd`, raw-note hits are preserved too: raw hits that link to or title-match a canonical page are mapped into `raw_mappings` and can pull that canonical page into the ranked block packet; raw hits without a canonical match remain visible as `raw_evidence`.
+With `--qmd`, raw-note hits are preserved too: raw hits that link to or title-match a canonical page are mapped into `raw_mappings` and can pull that canonical page into the ranked packet; raw hits without a canonical match remain visible as `raw_evidence`. If candidate pages were already retrieved by another search path, pass them explicitly with repeated `--page` arguments instead of `--qmd`.
 
-If candidate pages were already retrieved by another search path, pass them explicitly with repeated `--page` arguments instead of `--qmd`.
+None of these tools bulk-rewrite `wiki/`.
 
-Does not bulk rewrite `wiki/`.
+### Pro-tip 5: storing draft notes in `INBOX` (not for ingestion yet)
 
-### Pro-tip 4: Storing draft notes in `INBOX` (not for ingestion yet)
+You can store notes in `INBOX` while you're working on them and you don't want them ingested yet. Move them manually to `raw/notes` once you think they are ready for ingestion. Then run `scripts/wiki-ingest.sh`.
 
-You can store notes in `INBOX` while you're working on then and you don't want them ingested yet. Move them manually to `/raw/notes` once you think they are ready for ingestion. Then run `scripts/wiki-ingest.sh`.
+### Pro-tip 6: use the Obsidian CLI
 
-### Pro-tip 5: Use Obsidian CLI
-
-You can use the Obsidian CLI to interact with Obsidian on the command-line. Or, even better, have Claude interact with Obsidian using a CLI. For example, take a look at [https://github.com/kepano/obsidian-skills](Obsidian skills for Claude) to install skills for Claude on how to use Obsidian.
+You can use the Obsidian CLI to interact with Obsidian on the command-line. Or, even better, have Claude interact with Obsidian using the CLI: the skills use it to move, rename, and delete notes so that Obsidian updates all internal links. Take a look at [Obsidian skills for Claude](https://github.com/kepano/obsidian-skills) to install skills for Claude on how to use Obsidian.
 
 ## Configuration
 
 ### Personalizing your setup
 
-Provide personal info on who you are, what you do, and what your focus is, in `config/personal_info.md`:
+Provide personal info on who you are, what you do, and what your focus is, in `config/personal_info.md` (this file is gitignored):
 
 ```markdown
 # Personal Info
@@ -352,11 +386,11 @@ I am ...
 - ...
 ```
 
-If the file is missing, or it contains no info topics, default topics will be used.
+If the file is missing, or it contains no info topics, default topics will be used. The same file holds the `# Slack` and `# Email` sections described below.
 
 ### Configuring the local AI backend
 
-Set the local LLM CLI used by scripts in `config/settings.md`:
+Set the local LLM CLI used by `scripts/wiki-ingest.sh` in `config/settings.md`:
 
 ```yaml
 ---
@@ -364,9 +398,11 @@ ai_backend: claude
 ---
 ```
 
-Supported values are `claude` (`claude -p ...`), `vibe` (`vibe -p ...`), and
-`codex` (`codex exec ...`). If the selected CLI is missing or fails, scripts
-keep deterministic state intact and stop before consuming LLM-backed batches.
+Supported values are `claude` (`claude -p ...`), `vibe` (`vibe -p ...`),
+`codex` (`codex exec ...`), and `junie` (experimental; the script asks for
+confirmation and uses smaller batches). Usage throttling only works for
+`claude`. If the selected CLI is missing or fails, the script keeps
+deterministic state intact and stops before consuming LLM-backed batches.
 
 ### Configuring Slack sources
 
@@ -380,7 +416,7 @@ Add a `# Slack` section to `config/personal_info.md` to configure which channels
 
 - `#channel-name` — a public or private Slack channel
 - `@Person Name` — a direct message thread with that person
-- **Days** — how many calendar days back to fetch conversation updates (default: 7)
+- **Days** — how many calendar days back to fetch conversation updates (default: 7; say "fetch slack last N days" to override once)
 - **Mode** — `signal` filters out noise (absences, bot messages, bare acks); `all` includes everything; any other text is treated as a topic filter (only threads directly about that topic are included)
 
 ### Capturing emails automatically with Microsoft Power Automate
@@ -390,16 +426,15 @@ You can use [Microsoft Power Automate](https://make.powerautomate.com/) to autom
 Create a flow with these steps:
 
 1. **Trigger:** *When a new email arrives (V3)*
-2. **Action:** *Get emails (V3)* — to retrieve the full email details
-3. **Action:** *Get email (V3)* — to get the email body
-4. **Action:** *Create file* (OneDrive for Business) — save to a dedicated OneDrive inbox folder (e.g. `KnowledgeSystem/inbox`). This folder syncs to your local disk; configure its local path in `config/personal_info.md` and ask "fetch mail" to copy files to `raw/emails/`.
+2. **Action:** *Get email (V2)* — to get the full email details and body
+3. **Action:** *Create file* (OneDrive for Business) — save to a dedicated OneDrive inbox folder (e.g. `KnowledgeSystem/inbox`). This folder syncs to your local disk; configure its local path in `config/personal_info.md` and ask "fetch mail" to copy files to `raw/emails/`.
    - **File name:** `@{outputs('Get_email_(V2)')?['body/receivedDateTime']}.html`
    - **File content:**
      ```
      FROM:@{outputs('Get_email_(V2)')?['body/from']},TO:@{outputs('Get_email_(V2)')?['body/toRecipients']},CC:@{outputs('Get_email_(V2)')?['body/ccRecipients']},BCC:@{outputs('Get_email_(V2)')?['body/bccRecipients']},SUBJECT:@{outputs('Get_email_(V2)')?['body/subject']},BODY:@{outputs('Get_email_(V2)')?['body/body']}
      ```
 
-The resulting filename looks like `2026-05-13T08_32_05+00_00.html` — the date is extracted from it automatically. The `FROM`, `TO`, `CC`, `BCC`, and `SUBJECT` fields become YAML frontmatter; `BODY` is converted from HTML to Markdown. Once the OneDrive folder syncs to your local disk, ask "fetch mail" to pull the files into `raw/emails/` and drain the inbox.
+The `Get_email_(V2)` in the expressions must match the name of the action in your flow. The resulting filename looks like `2026-05-13T08_32_05+00_00.html` — the date is extracted from it automatically. The `FROM`, `TO`, `CC`, `BCC`, and `SUBJECT` fields become YAML frontmatter; `BODY` is converted from HTML to Markdown. Once the OneDrive folder syncs to your local disk, ask "fetch mail" to pull the files into `raw/emails/` and drain the inbox.
 
 ### Configuring email fetch
 
@@ -412,7 +447,7 @@ Add an `# Email` section to `config/personal_info.md` to configure where "fetch 
 | Inbox   | /path/to/your/onedrive/inbox |
 ```
 
-Set `Inbox` to the local path of the folder that contains your exported email files (`.html` and `.eml`) from for example, the Power Automate flow. Files are copied to `raw/emails/` and deleted from the inbox on each fetch.
+Set `Inbox` to the local path of the folder that contains your exported email files (`.html` and `.eml`) from, for example, the Power Automate flow. Files are copied to `raw/emails/` (duplicates already present are skipped) and deleted from the inbox on each fetch.
 
 ### Running Claude within Obsidian
 
@@ -425,18 +460,18 @@ This is the repo: https://github.com/YishenTu/claudian
 
 ## Re-creating the Wiki from Scratch
 
-To re-create the entire Wiki, remove the `wiki/` directory, `/clear` the LLM conversation and ask it to `ingest new raw notes`. Note that for large amounts of notes this may be expensive and take a long time.
+To re-create the entire Wiki, remove the `wiki/` directory, `/clear` the LLM conversation and ask it to `ingest new notes`. Note that for large amounts of notes this may be expensive and take a long time.
 
-**Note:** The `wiki/log.jsonl` file tracks which notes have already been ingested. If you share the `wiki/` directory across machines, any client can run incremental ingestions without re-processing everything.
+**Note:** The `wiki/log.jsonl` file tracks which notes have already been ingested, including a content hash so that renamed raw notes are recognized as already ingested. If you share the `wiki/` directory across machines, any client can run incremental ingestions without re-processing everything.
 
 ## Checking Your Database
 
-The database is automatically checked for errors after ingesting new notes. To check manually:
+The database is automatically checked for errors at the end of each `wiki-ingest.sh` run. To check manually:
 ```bash
-# Basic check (no LLM, fast):
+# Basic check (fast, no TUI):
 ./scripts/wiki-doctor.py --batch-mode --format text
 
-# Interactive TUI (deal with broken links, orphans, stubs):
+# Interactive TUI (deal with broken links, orphans, stubs, attachments):
 ./scripts/wiki-doctor.py
 ```
 
@@ -446,17 +481,22 @@ The database is automatically checked for errors after ingesting new notes. To c
 
 ```
 <root>/
+├── .claude/
+│   ├── skills/          ← the wiki skills (source of truth; one SKILL.md per skill)
+│   └── agents/          ← sub-agent definitions used by wiki-ingest for large imports
+├── .agents/, .codex/, .junie/  ← mirrors of the skills for other agents (generated; .agents and .junie gitignored)
 ├── .import/             ← in-progress batch import state (gitignored)
-├── _resources/          ← vault-level attachments (images, screenshots)
-├── config/              ← settings.md, personal_info.md, web clipper template
-├── docs/                ← design docs and migration notes
-├── templates/           ← Obsidian note templates
+├── .wiki-scratch/       ← freshness queues and migration report (gitignored)
+├── _resources/          ← Obsidian's default paste folder for attachments (gitignored)
+├── config/              ← settings.md, personal_info.md (gitignored), web clipper template
+├── templates/           ← Obsidian note templates (daily note, broken-link marker)
 ├── scripts/             ← helper scripts (see Scripts section)
-│   ├── lib/             ← wiki-doctor package (checks, fixers, tui)
-│   ├── system/          ← scripts invoked by skills (not run directly)
+│   ├── lib/             ← shared Python package: doctor checks/fixers/TUI, provenance, freshness, drift, curation
+│   ├── system/          ← scripts invoked by skills and wrapper scripts (not normally run directly)
 │   └── tests/           ← unit tests
-├── INBOX/               ← folder for draft notes (review/finish before ingestions)
-├── raw/
+├── INBOX/               ← draft notes (review/finish before ingestion); gitignored except RELEASE-NOTES.md
+│   └── RELEASE-NOTES.md ← changelog of script and skill changes
+├── raw/                 ← not stored in git
 │   ├── clips/           ← web articles and saved pages (web clipper)
 │   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)
 │   ├── diary/           ← dated personal/work diary notes
@@ -465,7 +505,7 @@ The database is automatically checked for errors after ingesting new notes. To c
 │   ├── scans/           ← handwritten pages, whiteboards (→ .md, originals in _resources/)
 │   ├── slack/           ← Slack channel and DM threads (fetched by "fetch slack")
 │   └── transcripts/     ← meeting transcripts (.vtt → .md, originals in _resources/)
-├── wiki/
+├── wiki/                ← not stored in git (only an empty placeholder)
 │   ├── index.md         ← top-level navigation to section indexes
 │   ├── log.jsonl        ← append-only ingest log (JSON Lines)
 │   ├── concepts/        ← mental models and domain concepts
@@ -477,9 +517,10 @@ The database is automatically checked for errors after ingesting new notes. To c
 │   ├── problems/        ← living problem tracking pages
 │   ├── projects/        ← living project tracking pages
 │   └── systems/         ← living system reference pages
-├── AGENTS.md            ← shared agent instructions
-├── CLAUDE.md            ← schema and workflow instructions for Claude Code
-├── index.md            ← vault entry point
+├── AGENTS.md            ← workflow and rules for all agents (skills, topic types, naming, linking)
+├── CLAUDE.md            ← one-liner pointing Claude Code at AGENTS.md
+├── index.md             ← vault entry point
+├── LICENSE
 └── README.md            ← this file
 ```
 
@@ -487,7 +528,7 @@ When a non-Markdown file is converted, the original is moved into a `_resources/
 subdirectory of its directory and a companion `.md` note is written alongside it
 (in the directory the original came from). For example, `raw/transcripts/foo.vtt`
 becomes `raw/transcripts/_resources/foo.vtt` plus `raw/transcripts/foo.md`.
-The directories `raw` and `wiki` are not stored in Git. Create them manually before first use.
+The `raw/` directory is not stored in Git; create it (and its subdirectories) before first use.
 
 ## Wiki topic types
 
@@ -500,14 +541,18 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 | **people**        | Colleagues, contacts, external stakeholders, teams         |
 | **problems**      | Active and past problems                                   |
 | **projects**      | Active and past initiatives                                |
-| **systems**       | System, products, platforms, and services                  |
+| **systems**       | Our products, platforms, and services                      |
 
 ## Key rules
 
-- `raw/` is immutable — LLM never writes there (except `raw/confluence/` as a fetch cache).
-- `wiki/` is LLM-owned — LLM writes, the user reads.
+- `raw/` is human territory — the LLM never edits the content of your notes. The only writes are the deterministic conversions described above (moving originals into `_resources/`, writing companion `.md` notes, adding a `date` prefix/frontmatter) and the `raw/confluence/` fetch cache.
+- `wiki/` is LLM-owned — LLM writes, the user reads. Hand-curated content in Wiki pages is never deleted or overwritten.
+- Pages live exactly one level deep: `wiki/<topic>/<page>.md`, each with `type:` and `description:` frontmatter.
 - The relevant `wiki/<type>/index.md` files are rebuilt and `wiki/log.jsonl` is updated on every finalized ingest.
-- Hand-curated content in Wiki pages is never deleted or overwritten.
+- File names are plain readable text: no slugs (spaces, not hyphens), no accents or diacritics, no characters with file-system meaning (`:`, `/`, `\`, `*`, `?`, `"`, `<`, `>`, `|`).
+- Wikilinks target the exact filename, with spaces: `[[Real-Time Map]]`, never `[[Real-Time-Map]]`.
+- Moving, renaming, or deleting notes goes through the Obsidian CLI so that Obsidian updates all internal links.
+- Every change to `scripts/` or the skills gets an entry in `INBOX/RELEASE-NOTES.md`.
 
 ## Scripts
 
@@ -515,35 +560,55 @@ The directories `raw` and `wiki` are not stored in Git. Create them manually bef
 
 | Script | Purpose |
 | ------ | ------- |
-| `wiki-ingest.sh` | Main ingestion pipeline: converts raw files (VTT, EML), creates batches if needed, and runs ingestion sessions in a loop until all notes are processed. The normal way to ingest new notes. |
+| `wiki-ingest.sh` | Main ingestion pipeline: converts raw files (VTT, EML, HTML), partitions new notes into batches, runs one LLM session per batch, finalizes, and then runs the doctor, QMD sync, and freshness check. The normal way to ingest new notes. |
 | `wiki-migrate-existing.sh` | Safe migration wrapper for existing raw/ + wiki/ corpora. Dry-run by default; with `--apply`, baselines existing raw files so they are not re-ingested wholesale. |
-| `wiki-doctor.py` | Health-check for the wiki: broken internal/external links, orphan pages, and unfilled stub pages. Runs as an interactive TUI by default, or in `--batch-mode` for text/JSON output. Run periodically to keep the wiki healthy. |
+| `wiki-doctor.py` | Deterministic health check for the vault: broken links, orphans, stubs, frontmatter, accent duplicates, loose files, attachments, footnotes. Runs as an interactive TUI by default, or in `--batch-mode` for text/JSON output. |
 | `wiki-freshness.sh` | One-command freshness check: provenance lint, freshness inventory, drift queue, and provenance coverage backlog. Run after ingest/finalize, or ask "freshness check". |
 
 ### Occasional use
 
 | Script | Purpose |
 | ------ | ------- |
-| `qmd-full-reindex.sh` | Reset and fully re-index the QMD database. |
+| `qmd-full-reindex.sh` | Register the vault as a QMD collection, run the text re-index and vector embeddings. `--skip-embed` for text only; `--reset` to wipe and rebuild from scratch. |
 
-### For use by skills (not normally run directly)
+### For use by skills and wrapper scripts (not normally run directly)
 
 | Script | Purpose |
 | ------ | ------- |
-| `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions. Called automatically by `wiki-ingest.sh` and the `wiki-ingest` skill. |
-| `system/wiki-create-index-pages.py` | Rebuilds `index.md` files for each wiki section. Called by the `wiki-finalize-ingest` skill after a completed ingest run. |
+| `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions, honouring `ingest: false`. Called by `wiki-ingest.sh` and the `wiki-ingest` skill. |
+| `system/wiki-merge-batch-logs.py` | Merges `.import/batch-log-*.jsonl` into `wiki/log.jsonl`, validating every line and quarantining malformed ones. Called by `wiki-finalize-ingest`. |
+| `system/wiki-stamp-log-hashes.py` | Stamps a content hash and mtime onto every `wiki/log.jsonl` entry so renamed raw notes are recognized as already ingested. Called by `wiki-finalize-ingest`. |
+| `system/wiki-relink-log-renames.py` | Repoints `wiki/log.jsonl` entries whose source note was renamed. Called by `wiki-finalize-ingest` and `wiki-doctor`. |
+| `system/wiki-clear-ingest-batches.py` | Lists (`--list`) or deletes (`--apply`) the batch files under `.import/`. Called by the `wiki-clear-ingest-batches` skill. |
+| `system/wiki-create-index-pages.py` | Rebuilds `index.md` files for each wiki section from the pages' `description:` frontmatter. Called by `wiki-finalize-ingest` and `wiki-migrate-existing.sh`. |
+| `system/wiki-backfill-descriptions.py` | Adds a derived `description:` to wiki pages that lack one. |
+| `system/wiki-assign-dates.py` | Deterministically infers `date`, `date_span`, and `date_confidence` frontmatter for raw and wiki pages from filenames, folders, and existing frontmatter. `--apply` to write, `--revert` to undo. Called by `wiki-finalize-ingest` and `wiki-migrate-existing.sh`. |
 | `system/wiki-baseline-raw-log.py` | Adds migration-baseline entries to `wiki/log.jsonl` for existing raw files, while respecting `ingest: false`. Called by `wiki-migrate-existing.sh`. |
-| `system/wiki-freshness-query.py` | Builds a query-time packet from retrieved pages, ranking canonical blocks by provenance freshness and explaining demoted legacy evidence. |
-| `system/wiki-provenance-stamp-status.py` | Applies a minimal `Freshness Status` provenance block to reviewed legacy pages from a JSON manifest. |
+| `system/wiki-provenance-lint.py` | Validates OKF v0.2 provenance frontmatter and `[^sN]` footnotes; flags legacy `kb-prov-v1` markup. Called by `wiki-freshness.sh` and `wiki-curate-page`. |
+| `system/wiki-freshness-inventory.py` | Builds a read-only freshness inventory over `raw/` and `wiki/`. Called by `wiki-freshness.sh`. |
+| `system/wiki-drift-detect.py` | Finds canonical pages that deserve one-page curation because newer raw evidence may affect them. Called by `wiki-freshness.sh`. |
+| `system/wiki-provenance-coverage.py` | Lists every canonical page with missing or invalid provenance (`no-provenance`, `invalid-provenance`). Called by `wiki-freshness.sh`. |
+| `system/wiki-freshness-query.py` | Builds a query-time packet from retrieved pages, ranking them by provenance freshness and explaining demoted legacy evidence. `--qmd` runs candidate discovery first. Called by `wiki-query`. |
+| `system/wiki-curate-page.py` | Prepares a read-only curation packet for one canonical page. Called by `wiki-curate-page`. |
+| `system/wiki-provenance-stamp-status.py` | Writes minimal provenance frontmatter to reviewed legacy pages from a JSON manifest. |
+| `system/wiki-restore-source-footnotes.py` | One-time helper: restores `[^sN]` footnotes from a pre-OKF vault backup. |
+| `system/wiki-supersession-lint.py` | Checks that `superseded_by` / `supersedes` frontmatter pairs are consistent. |
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
-| `system/wiki-assign-dates.py` | Infers and assigns dates to wiki pages that are missing them (uses the configured `ai_backend` for smart inference). |
-| `system/wiki-supersession-lint.py` | Checks decision/project pages for supersession consistency (e.g. superseded pages correctly linked). |
 | `system/migrate-converted-to-resources.py` | One-time migration from the legacy `converted/` layout to the current `_resources/` layout. Dry-run by default; pass `--apply` to modify files. |
-| `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` to other AI agent config directories and generates Codex TOML agent definitions so all agents share the same skill set. |
-| `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Use before a full re-sync. |
-| `system/qmd-sync-collections.sh` | Registers the vault root as the QMD collection `tomtom` (idempotent) and re-indexes it. Called by the `wiki-finalize-ingest` skill. |
+| `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` and `.claude/agents/` to `.agents/`, `.codex/`, and `.junie/`, and generates Codex TOML agent definitions, so all agents share the same skill set. |
+| `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Used by `qmd-full-reindex.sh --reset`. |
+| `system/qmd-sync-collections.sh` | Registers the vault root as the QMD collection `tomtom` (idempotent), removes stale per-subdirectory collections, and re-indexes. Called by `qmd-full-reindex.sh`, `wiki-ingest.sh`, and `wiki-finalize-ingest`. |
+
+## Development
+
+- **Tests** live in `scripts/tests/`. Run them with:
+  ```bash
+  python3 -m unittest discover -s scripts/tests -v
+  ```
+- **Skills** are edited in `.claude/skills/` only. After changing a skill or agent definition, run `bash scripts/system/copy-claude-skills-to-other-agents.sh` from the vault root to refresh the `.agents/`, `.codex/`, and `.junie/` mirrors; `test_skill_mirrors.py` fails while they are out of sync.
+- **Release notes**: append a short entry to `INBOX/RELEASE-NOTES.md` after any change to `scripts/` or the skills.
 
 ## Recognition
 

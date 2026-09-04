@@ -8,15 +8,18 @@ Configuration for the knowledge-base scripts under `scripts/`.
 
 ## ai_backend
 
-`ai_backend` selects which local LLM CLI the scripts shell out to for
-LLM-backed tasks (e.g. smart date inference in wiki-doctor). Set it to one of:
+`ai_backend` selects which local LLM CLI `scripts/wiki-ingest.sh` shells out
+to for the LLM-backed ingest sessions. Set it to one of:
 
-| Value    | Provider    | Command run        |
-|----------|-------------|--------------------|
-| `claude` | Anthropic   | `claude -p ...`    |
-| `vibe`   | Mistral AI  | `vibe -p ...`      |
-| `codex`  | OpenAI      | `codex exec ...`   |
+| Value    | Provider    | Command run                          |
+|----------|-------------|--------------------------------------|
+| `claude` | Anthropic   | `claude -p ...`                      |
+| `vibe`   | Mistral AI  | `vibe -p ...`                        |
+| `codex`  | OpenAI      | `codex exec ...`                     |
+| `junie`  | JetBrains   | `junie --brave ... --task` (experimental) |
 
 Change the value in the frontmatter above and save -- no code changes needed.
-If the chosen CLI is not installed (or fails), the scripts fall back to their
-deterministic behaviour instead of erroring.
+Usage throttling (the 5-hour window pause) only works for `claude`. If the
+chosen CLI is not installed (or fails), the script stops before consuming
+LLM-backed batches; the deterministic conversion and batching steps are
+unaffected.
