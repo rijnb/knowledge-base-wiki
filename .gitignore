@@ -28,9 +28,4 @@ INBOX/*
 !INBOX/RELEASE-NOTES.md
 _resources/
 sync-all-repos.sh
-
-
-
-
-# Ignore Smart Environment folder
 .smart-env
