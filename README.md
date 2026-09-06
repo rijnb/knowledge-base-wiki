@@ -21,26 +21,25 @@ The primary goal is **efficient decision intelligence**: understanding why decis
 # 1. Clone this repo
 git clone <repo-url> ~/my-knowledge-base
 
-# 2. Create the raw/ subdirectories (raw/ is not stored in git; wiki/ is created empty by the clone)
+# 2. Activate the fail-safe git hooks (blocks committing/pushing personal notes, even with `git add -f`)
+#    The raw/ and wiki/ folder scaffolding (index.md, .gitkeep) comes with the clone; your notes never do.
 cd ~/my-knowledge-base
-mkdir -p raw/{notes,clips,confluence,diary,emails,transcripts,scans,slack}
-
-# 2b. Activate the fail-safe git hooks (blocks committing/pushing personal notes, even with `git add -f`)
 ./scripts/install-hooks.sh
 
 # 3. Install QMD (the semantic search engine; it runs on the Bun runtime)
 npm install -g bun
 npm install -g @tobilu/qmd
 
-# 4. Register the vault as a QMD collection and build the index
+# 4. Register the vault as a QMD collection (named `tomtom`, see scripts/system/qmd-sync-collections.sh) and build the index
 ./scripts/qmd-full-reindex.sh
 
 # 5. Register QMD as an MCP server for Claude Code (user scope, so it works in every project)
+#    Skip this if you use the QMD Claude Code plugin, which provides the MCP server and skill together.
 claude mcp add --scope user qmd -- qmd mcp
 #    Or just ask Claude: "read this README.md and install QMD as an MCP server"
 
 # 6. (Optional) Install the QMD skill globally, for use in other projects.
-#    This repo already ships the skill in .claude/skills/qmd, so this step is not needed here.
+#    This repo already ships the skill in .claude/skills/qmd (and the QMD plugin ships one too), so this step is not needed here.
 qmd skill install --global --yes
 
 # 7. Open this directory as an Obsidian vault: File → Open Folder as Vault
@@ -67,7 +66,7 @@ Freshness checks are the third regular maintenance action, alongside ingest and 
 ./scripts/wiki-freshness.sh
 ```
 
-You can keep notes that you do not want to be ingested yet (like drafts) in `INBOX`. The inbox is not part of the ingestion process, and (apart from `INBOX/RELEASE-NOTES.md`) it is not stored in git.
+You can keep notes that you do not want to be ingested yet (like drafts) in `INBOX`. The inbox is not part of the ingestion process, and (apart from `INBOX/index.md` and `INBOX/RELEASE-NOTES.md`) it is not stored in git.
 
 For sensitive Markdown notes that should remain in `raw/` but never be ingested, add frontmatter:
 
@@ -115,7 +114,7 @@ Current ownership sits with the map enrichment flow.[^s1] ^claim-owner-01
 [^s1]: [[raw/notes/2026-06-02 Meeting map enrichment.md]]
 ```
 
-Trust tiers come from the `by:` prefix of `verified:` entries: `human:*` is the human-reviewed tier (strongest); `agent:*` is the machine tier; a page with only `generated:` is unverified (weakest). Freshness is derived from `generated.at` and the latest `verified.at`. Query tooling derives a page status (`current`, `stale`, or `unknown` when no provenance is present) and a confidence (`high` for human-verified, `medium` otherwise) and uses these to rank current, verified evidence higher and to explain when older or unverified evidence is being demoted rather than silently ignored.
+Trust tiers come from the `by:` prefix of `verified:` entries: `human:*` is the human-reviewed tier (strongest); `agent:*` is the machine tier; a page with only `generated:` is unverified (weakest). Freshness is derived from `generated.at` and the latest `verified.at`. Query tooling derives a page status (`current`, `stale`, or `unknown` when no provenance is present) and a confidence (`high` for human-verified, `medium` otherwise, `unknown` when a page has no provenance) and uses these to rank current, verified evidence higher and to explain when older or unverified evidence is being demoted rather than silently ignored.
 
 Pages that are explicitly replaced carry `superseded_by:` (and the replacement carries `supersedes:`) in their frontmatter; a superseded page is never used as the main current answer unless you ask for history.
 
@@ -132,13 +131,13 @@ If you already have a large `raw/` corpus and existing generated or curated `wik
 Start with a dry-run:
 
 ```bash
-scripts/wiki-migrate-existing.sh --root .
+./scripts/wiki-migrate-existing.sh --root .
 ```
 
 Then apply the migration:
 
 ```bash
-scripts/wiki-migrate-existing.sh --root . --apply
+./scripts/wiki-migrate-existing.sh --root . --apply
 ```
 
 The migration script defaults to the safe behavior: existing raw files are baselined in `wiki/log.jsonl`, so a later `scripts/wiki-ingest.sh` run will not re-ingest the whole historical corpus. It still respects `ingest: false` protected notes and their explicitly linked local raw files, so private opt-out material is not logged.
@@ -146,7 +145,7 @@ The migration script defaults to the safe behavior: existing raw files are basel
 Use the full re-ingestion option only when you intentionally want old raw files to be eligible for fresh ingestion - this may be expensive and take a long time:
 
 ```bash
-scripts/wiki-migrate-existing.sh --root . --apply --allow-reingest-existing
+./scripts/wiki-migrate-existing.sh --root . --apply --allow-reingest-existing
 ```
 
 The migration flow checks structural health, optionally migrates legacy `converted/` layouts, assigns freshness dates, rebuilds index pages, syncs QMD (text index only; add `--qmd-embed` for vector embeddings), runs the freshness/provenance queues, and writes `.wiki-scratch/migration-report.md`. Use `--help` for the remaining options (`--skip-legacy-layout`, `--skip-qmd`, `--limit`, `--no-report`, `--strict`).
@@ -157,18 +156,25 @@ The framework is updated regularly, so it's wise to `git pull` every now and the
 
 ```bash
 cd ~/my-knowledge-base && git pull
+./scripts/install-hooks.sh   # re-run after a pull: core.hooksPath is local config and is never pulled
 ```
+
+After a pull that changed skills, run `bash scripts/system/copy-claude-skills-to-other-agents.sh` to refresh the `.agents/` and `.codex/` mirrors (see [Development](#development)).
 
 ### Your notes never leave your machine
 
 `.gitignore` is a **fail-safe allowlist**: everything is ignored by default and only the framework
-infrastructure (`scripts/`, `config/`, `templates/`, the skills, the folder scaffolding) is un-ignored.
-`raw/`, `wiki/`, `INBOX/` contents, `docs/`, `.obsidian/`, cover images (`index.jpg`) and
-`config/personal_info.md` are invisible to git. The hooks in `.githooks/` (activated by
+infrastructure is un-ignored: `scripts/`, `config/`, `templates/`, `.githooks/`, the skills and
+sub-agents (`skills/` and `agents/` under `.claude/`, `.agents/` and `.codex/`), the root files
+(`AGENTS.md`, `CLAUDE.md`, `LICENSE`, `README.md`, `index.md`) and the folder scaffolding
+(`index.md`/`.gitkeep` in `raw/`, `wiki/`, `INBOX/`, `.import/`). Everything else is invisible to git —
+`raw/`, `wiki/` and `INBOX/` contents, `docs/`, `.obsidian/`, cover images (`index.jpg`),
+`.claude/settings*.json` and `config/personal_info.md`. The hooks in `.githooks/` (activated by
 `scripts/install-hooks.sh`) are the second and third net: `pre-commit` rejects any staged file outside
 the allowlist (even when force-staged), `pre-push` rejects any commit that touches one (even when
-committed with `--no-verify`). To add new infrastructure, whitelist it in **both** `.gitignore` and
-`.githooks/allowlist.sh`.
+committed with `--no-verify`); `index.jpg`, `.claude/settings*.json` and `config/personal_info.md` are
+blocked explicitly with their own message. To add new infrastructure, whitelist it in **both**
+`.gitignore` and `.githooks/allowlist.sh`.
 
 This means you can safely make your own vault a clone of this repo: `git pull` brings in framework
 updates, and you can contribute framework fixes with a normal `git push` — your notes stay local.
@@ -176,22 +182,22 @@ updates, and you can contribute framework fixes with a normal `git push` — you
 ## Prerequisites
 
 **Required:**
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI) — or Codex, Vibe
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI) — or Codex, Vibe (select the backend with `ai_backend:` in `config/settings.md`)
 - [Node.js / npm](https://nodejs.org/) — for installing bun and qmd
 - [QMD](https://github.com/tobi/qmd) — local semantic search engine (`npm install -g @tobilu/qmd`)
-- [Obsidian](https://obsidian.md) — vault UI (free, Mac/Windows/Linux)
-- `git`
-- Python 3 — for the scripts under `scripts/`
+- [Obsidian](https://obsidian.md) — vault UI (free, Mac/Windows/Linux), including its `obsidian` CLI (used by `wiki-doctor.py --fix-simple-errors` to move/rename files with link updates)
+- `git`, `bash`
+- Python 3.9+ — for the scripts under `scripts/` (standard library only, no packages to install)
 
 **Optional:**
 - [pdftotext](https://poppler.freedesktop.org/) — faster/cheaper PDF extraction (`brew install poppler`); LLM vision is the fallback
 - [Obsidian Web Clipper](https://obsidian.md/clipper) — one-click web article saving to `raw/clips/` (template in `config/obsidian_webclipper_template.json`)
-- [Claudian](https://github.com/YishenTu/claudian) — run Claude from within Obsidian (ask Claude to install it safely)
-- [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) (Mac App Store) — prevents Mac sleep during long overnight ingests
+- [Claudian](https://github.com/YishenTu/claudian) — run Claude from within Obsidian (ask Claude to install it safely; `.obsidian/` is not stored in git, so plugins are installed per vault)
+- [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) (Mac App Store) or the Obsidian `screen-wake-lock` plugin — prevents sleep during long overnight ingests
 
 ## MCP Server Setup
 
-Register QMD as an MCP server for Claude Code (or ask Claude to do it):
+If you use the QMD plugin for Claude Code, it already provides the MCP server (tools appear as `mcp__plugin_qmd_qmd__*`) and nothing below is needed. Otherwise register QMD as an MCP server yourself (or ask Claude to do it):
 
 ```bash
 claude mcp add --scope user qmd -- qmd mcp
@@ -226,6 +232,7 @@ The email integration uses Microsoft Power Automate to save emails to a OneDrive
 	- User stores `.vtt` meeting transcripts in `raw/transcripts`.
 	- User asks "fetch mail" to copy emails from the configured inbox to `raw/emails/`, or drags `.eml`/`.html` files there manually.
 	- User stores handwritten notes or scanned pages (PDF, JPG) in `raw/scans`.
+	- User keeps dated diary notes in `raw/diary` (e.g. from the `templates/daily-note.md` template).
 	- User fetches Slack channels and DMs by asking "fetch slack" — messages are written to `raw/slack/<channel>/` and `raw/slack/DM-<Name>/`.
 
 - **Ingest notes:**
@@ -258,7 +265,7 @@ The skills live in `.claude/skills/` (one `SKILL.md` per skill) and are mirrored
 | "ingest new notes"                   | `wiki-ingest`        | Start a new ingest of raw notes or a Confluence page (Session 1 — coordinator flow)           |
 | "fetch slack"                        | `wiki-fetch-slack`   | Fetch Slack channels and DMs into `raw/slack/`; ingest afterwards                             |
 | "fetch mail"                         | `wiki-fetch-mail`    | Copy emails from the configured inbox to `raw/emails/`; ingest afterwards                     |
-| "health check" or "lint"             | `wiki-doctor`        | Check for broken links, orphaned pages, stubs, loose files, and frontmatter problems          |
+| "health check" or "lint"             | `wiki-doctor`        | Check for broken links, orphaned pages, stubs, loose files, frontmatter problems, contradictions and data gaps |
 | "freshness check"                    | `wiki-freshness`     | Run the one-command provenance lint / drift queue / coverage backlog check                    |
 | "curate page" or "refresh this page" | `wiki-curate-page`   | Clean up one canonical page using raw evidence and freshness/drift signals                    |
 | "add missing [topic]"                | `wiki-add-missing`   | Create a new Wiki page for a missing concept, person, system, etc.                            |
@@ -338,7 +345,7 @@ Instead of running a full re-index, you can also execute `qmd embed`. This is us
 Canonical pages carry OKF v0.2 provenance frontmatter (see [Some background on provenance](#some-background-on-provenance)). The easy command is:
 
 ```
-scripts/wiki-freshness.sh --root .
+./scripts/wiki-freshness.sh --root .
 ```
 
 It runs the provenance lint, builds a freshness inventory, and writes two queues under `.wiki-scratch/` (generated local working state, ignored by Git):
@@ -476,7 +483,7 @@ This is the repo: https://github.com/YishenTu/claudian
 
 ## Re-creating the Wiki from Scratch
 
-To re-create the entire Wiki, remove the `wiki/` directory, `/clear` the LLM conversation and ask it to `ingest new notes`. Note that for large amounts of notes this may be expensive and take a long time.
+To re-create the entire Wiki, remove the contents of `wiki/` (keep the tracked `.gitkeep`), `/clear` the LLM conversation and ask it to `ingest new notes`. Note that for large amounts of notes this may be expensive and take a long time.
 
 **Note:** The `wiki/log.jsonl` file tracks which notes have already been ingested, including a content hash so that renamed raw notes are recognized as already ingested. If you share the `wiki/` directory across machines, any client can run incremental ingestions without re-processing everything.
 
@@ -500,19 +507,21 @@ The database is automatically checked for errors at the end of each `wiki-ingest
 ├── .claude/
 │   ├── skills/          ← the wiki skills (source of truth; one SKILL.md per skill)
 │   └── agents/          ← sub-agent definitions used by wiki-ingest for large imports
-├── .agents/, .codex/       ← mirrors of the skills for other agents (generated)
+├── .agents/, .codex/    ← mirrors of the skills and sub-agents for other agents (generated)
+├── .githooks/           ← pre-commit / pre-push allowlist guards (activated by scripts/install-hooks.sh)
 ├── .import/             ← in-progress batch import state (gitignored)
-├── .wiki-scratch/       ← freshness queues and migration report (gitignored)
+├── .wiki-scratch/       ← freshness queues, supersession queue and migration report (gitignored)
 ├── _resources/          ← Obsidian's default paste folder for attachments (gitignored)
-├── config/              ← settings.md, personal_info.md (gitignored), web clipper template
+├── config/              ← settings.md, personal_info.md (gitignored), web clipper template, intro image
+├── docs/                ← design docs and plans (gitignored)
 ├── templates/           ← Obsidian note templates (daily note, broken-link marker)
 ├── scripts/             ← helper scripts (see Scripts section)
 │   ├── lib/             ← shared Python package: doctor checks/fixers/TUI, provenance, freshness, drift, curation
 │   ├── system/          ← scripts invoked by skills and wrapper scripts (not normally run directly)
 │   └── tests/           ← unit tests
-├── INBOX/               ← draft notes (review/finish before ingestion); gitignored except RELEASE-NOTES.md
+├── INBOX/               ← draft notes (review/finish before ingestion); gitignored except index.md and RELEASE-NOTES.md
 │   └── RELEASE-NOTES.md ← changelog of script and skill changes
-├── raw/                 ← not stored in git
+├── raw/                 ← your notes are not stored in git (only the folder scaffolding: index.md, .gitkeep)
 │   ├── clips/           ← web articles and saved pages (web clipper)
 │   ├── confluence/      ← pages fetched from Atlassian Confluence (fetch cache)
 │   ├── diary/           ← dated personal/work diary notes
@@ -521,18 +530,17 @@ The database is automatically checked for errors at the end of each `wiki-ingest
 │   ├── scans/           ← handwritten pages, whiteboards (→ .md, originals in _resources/)
 │   ├── slack/           ← Slack channel and DM threads (fetched by "fetch slack")
 │   └── transcripts/     ← meeting transcripts (.vtt → .md, originals in _resources/)
-├── wiki/                ← not stored in git (only an empty placeholder)
+├── wiki/                ← not stored in git (only an empty .gitkeep placeholder)
 │   ├── index.md         ← top-level navigation to section indexes
-│   ├── log.jsonl        ← append-only ingest log (JSON Lines)
-│   ├── concepts/        ← mental models and domain concepts
-│   │   └── index.md     ← alphabetical index of concept pages
+│   ├── log.jsonl        ← append-only ingest log (JSON Lines; log.jsonl.bak is written before rewrites)
 │   ├── competition/     ← competitor profiles
+│   ├── concepts/        ← mental models and domain concepts
 │   ├── conversations/   ← interesting and valuable conversations (query results)
 │   ├── decisions/       ← decision records
 │   ├── people/          ← people and team pages
 │   ├── problems/        ← living problem tracking pages
 │   ├── projects/        ← living project tracking pages
-│   └── systems/         ← living system reference pages
+│   └── systems/         ← living system reference pages (every topic directory has its own index.md)
 ├── AGENTS.md            ← workflow and rules for all agents (skills, topic types, naming, linking)
 ├── CLAUDE.md            ← one-liner pointing Claude Code at AGENTS.md
 ├── index.md             ← vault entry point
@@ -544,7 +552,7 @@ When a non-Markdown file is converted, the original is moved into a `_resources/
 subdirectory of its directory and a companion `.md` note is written alongside it
 (in the directory the original came from). For example, `raw/transcripts/foo.vtt`
 becomes `raw/transcripts/_resources/foo.vtt` plus `raw/transcripts/foo.md`.
-The `raw/` directory is not stored in Git; create it (and its subdirectories) before first use.
+The folder scaffolding of `raw/` ships with the repo; only your notes stay local.
 
 ## Wiki topic types
 
@@ -586,6 +594,7 @@ The `raw/` directory is not stored in Git; create it (and its subdirectories) be
 | Script | Purpose |
 | ------ | ------- |
 | `qmd-full-reindex.sh` | Register the vault as a QMD collection, run the text re-index and vector embeddings. `--skip-embed` for text only; `--reset` to wipe and rebuild from scratch. |
+| `install-hooks.sh` | Sets `core.hooksPath` to `.githooks/` so the `pre-commit` / `pre-push` allowlist guards are active. Run once after cloning and again after every `git pull`. |
 
 ### For use by skills and wrapper scripts (not normally run directly)
 
@@ -594,13 +603,13 @@ The `raw/` directory is not stored in Git; create it (and its subdirectories) be
 | `system/wiki-create-import-batches.sh` | Partitions un-ingested notes into batch files for parallel import sessions, honouring `ingest: false`. Called by `wiki-ingest.sh` and the `wiki-ingest` skill. |
 | `system/wiki-merge-batch-logs.py` | Merges `.import/batch-log-*.jsonl` into `wiki/log.jsonl`, validating every line and quarantining malformed ones. Called by `wiki-finalize-ingest`. |
 | `system/wiki-stamp-log-hashes.py` | Stamps a content hash and mtime onto every `wiki/log.jsonl` entry so renamed raw notes are recognized as already ingested. Called by `wiki-finalize-ingest`. |
-| `system/wiki-relink-log-renames.py` | Repoints `wiki/log.jsonl` entries whose source note was renamed. Called by `wiki-finalize-ingest` and `wiki-doctor`. |
+| `system/wiki-relink-log-renames.py` | Repoints `wiki/log.jsonl` entries whose source note was renamed. Called by `wiki-finalize-ingest`; `wiki-doctor` does the same relinking in-process via `scripts/lib/fixers.py`. |
 | `system/wiki-clear-ingest-batches.py` | Lists (`--list`) or deletes (`--apply`) the batch files under `.import/`. Called by the `wiki-clear-ingest-batches` skill. |
 | `system/wiki-create-index-pages.py` | Rebuilds `index.md` files for each wiki section from the pages' `description:` frontmatter. Called by `wiki-finalize-ingest` and `wiki-migrate-existing.sh`. |
-| `system/wiki-backfill-descriptions.py` | Adds a derived `description:` to wiki pages that lack one. |
+| `system/wiki-backfill-descriptions.py` | Adds a derived `description:` to wiki pages that lack one. `--dry-run` to preview. |
 | `system/wiki-assign-dates.py` | Deterministically infers `date`, `date_span`, and `date_confidence` frontmatter for raw and wiki pages from filenames, folders, and existing frontmatter. `--apply` to write, `--revert` to undo. Called by `wiki-finalize-ingest` and `wiki-migrate-existing.sh`. |
 | `system/wiki-baseline-raw-log.py` | Adds migration-baseline entries to `wiki/log.jsonl` for existing raw files, while respecting `ingest: false`. Called by `wiki-migrate-existing.sh`. |
-| `system/wiki-provenance-lint.py` | Validates OKF v0.2 provenance frontmatter and `[^sN]` footnotes; flags legacy `kb-prov-v1` markup. Called by `wiki-freshness.sh` and `wiki-curate-page`. |
+| `system/wiki-provenance-lint.py` | Validates OKF v0.2 provenance frontmatter and `[^sN]` footnotes; flags legacy `kb-prov-v1` markup. Called by `wiki-freshness.sh`, `wiki-query`, and `wiki-curate-page`. |
 | `system/wiki-freshness-inventory.py` | Builds a read-only freshness inventory over `raw/` and `wiki/`. Called by `wiki-freshness.sh`. |
 | `system/wiki-drift-detect.py` | Finds canonical pages that deserve one-page curation because newer raw evidence may affect them. Called by `wiki-freshness.sh`. |
 | `system/wiki-provenance-coverage.py` | Lists every canonical page with missing or invalid provenance (`no-provenance`, `invalid-provenance`). Called by `wiki-freshness.sh`. |
@@ -608,14 +617,14 @@ The `raw/` directory is not stored in Git; create it (and its subdirectories) be
 | `system/wiki-curate-page.py` | Prepares a read-only curation packet for one canonical page. Called by `wiki-curate-page`. |
 | `system/wiki-provenance-stamp-status.py` | Writes minimal provenance frontmatter to reviewed legacy pages from a JSON manifest. |
 | `system/wiki-restore-source-footnotes.py` | One-time helper: restores `[^sN]` footnotes from a pre-OKF vault backup. |
-| `system/wiki-supersession-lint.py` | Checks that `superseded_by` / `supersedes` frontmatter pairs are consistent. |
+| `system/wiki-supersession-lint.py` | Checks `superseded_by` / `supersedes` frontmatter for dangling targets, missing back-links, and cycles, and writes a review queue of pages whose body uses supersession language without the field to `.wiki-scratch/supersession-candidates.md` (ignore list: `.wiki-scratch/supersession-ignore.txt`). `--quiet` for summary only. |
 | `system/convert-eml-to-md.py` | Converts `.eml` email files to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/migrate-converted-to-resources.py` | One-time migration from the legacy `converted/` layout to the current `_resources/` layout. Dry-run by default; pass `--apply` to modify files. |
 | `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` and `.claude/agents/` to `.agents/` and `.codex/`, and generates Codex TOML agent definitions, so all agents share the same skill set. |
 | `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Used by `qmd-full-reindex.sh --reset`. |
-| `system/qmd-sync-collections.sh` | Registers the vault root as the QMD collection `tomtom` (idempotent), removes stale per-subdirectory collections, and re-indexes. Called by `qmd-full-reindex.sh`, `wiki-ingest.sh`, and `wiki-finalize-ingest`. |
+| `system/qmd-sync-collections.sh` | Registers the vault root as the QMD collection `tomtom` (idempotent), removes stale per-subdirectory collections, and re-indexes. Called by `qmd-full-reindex.sh`, `qmd-reset-collections.sh`, `wiki-ingest.sh`, `wiki-migrate-existing.sh`, and `wiki-finalize-ingest`. |
 
 ## Development
 
