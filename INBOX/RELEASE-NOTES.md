@@ -1,5 +1,18 @@
 # Release Notes
 
+## 2026-09-06 — Junie support removed
+
+- **`.junie/` mirror deleted** and dropped from `copy-claude-skills-to-other-agents.sh`, `test_skill_mirrors.py`, `test_sync_all_repos.py`, `.gitignore` and `.githooks/allowlist.sh`. Skills are now mirrored to `.agents/` and `.codex/` only.
+- **`ai_backend: junie` removed** from `scripts/wiki-ingest.sh` (option parsing, backend command, smaller-batch default, experimental warning, banner), `config/settings.md` and the README. Supported backends: `claude`, `vibe`, `codex`.
+
+## 2026-09-06 — Fail-safe allowlist `.gitignore` and git hooks
+
+- **`.gitignore` is now a deny-all allowlist** (same design as the personal-knowledge-base repo): `/*` ignores everything, then only framework infrastructure is un-ignored — root docs, `config/`, `templates/`, `scripts/`, `.githooks/`, the `skills/`+`agents/` dirs of `.claude`/`.agents`/`.codex`/`.junie`, and the folder scaffolding (`index.md`/`.gitkeep`) of `INBOX/`, `raw/*`, `wiki/`, `.import/`. Notes can no longer be committed by accident, regardless of folder name or case; new folders are invisible until whitelisted.
+- **New `.githooks/pre-commit` and `.githooks/pre-push`** with a shared `.githooks/allowlist.sh` regex: block any staged/pushed path outside the allowlist, plus `index.jpg` covers, `.claude/settings*.json` and `config/personal_info.md` — even after `git add -f` or `git commit --no-verify`. Activate once per clone with the new `scripts/install-hooks.sh` (`core.hooksPath` is not cloned). README Quick Start and "Update the framework" sections document this.
+- **Untracked per-vault files:** the whole `.obsidian/` directory (themes included) and all `index.jpg` cover images. Four `.obsidian` files and `.agents/`/`.junie/` were listed in the old `.gitignore` yet still tracked; that inconsistency is gone. The `index.md` pages keep their `![[…/_resources/index.jpg]]` embeds — drop in your own cover per vault.
+- **Now tracked:** `.claude/skills/qmd` (the README already claimed it ships here) and the `.agents/`/`.junie/` skill mirrors for `wiki-curate-page`, `wiki-freshness`, `wiki-ground`, `wiki-migrate-existing`, `write-article`, `qmd`, `wiki-fetch-mail`, `wiki-fetch-slack`, which the old ignore rules had hidden.
+- **`INBOX/index.md`** gains a "Working with the knowledge base" guide (raw folders, doctor, freshness check, curate); **`raw/index.md`** drops the cover embed.
+
 ## 2026-09-04 — README audit and cleanup
 
 - **README rewritten against the code.** The provenance section now documents OKF v0.2 (frontmatter `sources`/`generated`/`verified`/`stale_after` + `[^sN]` footnotes) instead of the abolished `kb-prov-v1` callouts, `## Freshness Status`, `review_mode`, and `minimal-stamp` backlog label. Corrected: QMD registers one collection (`tomtom`), not per-subdirectory; MCP setup uses `claude mcp add`, not `claude_desktop_config.json`; `wiki-doctor.py` is deterministic (no LLM, no contradiction check) and its checks/flags (`--fix-simple-errors`, `--fix-orphans`) are listed; `wiki-ingest.sh` phases described as implemented; `wiki-assign-dates.py` no longer claimed to use `ai_backend`; `junie` listed everywhere as an experimental backend; "visit doctor" replaced by the real trigger "health check". Added: `write-article`, `wiki-templates`, `wiki-ingest-per-note`, `qmd` skills; `.claude/agents` and the `.agents`/`.codex`/`.junie` mirrors; the eleven undocumented `scripts/system/` scripts; a Development section (tests, mirror sync, release notes); AGENTS.md key rules (naming, exact-filename wikilinks, Obsidian CLI). Directory tree fixed (no `docs/`, `.claude/` added, AGENTS/CLAUDE roles corrected). Typos fixed throughout.

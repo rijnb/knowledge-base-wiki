@@ -1,0 +1,7 @@
+#!/bin/sh
+# Fail-safe pre-commit guard.
+# Blocks committing ANY file outside the infrastructure allowlist -- even if
+# it was force-staged with `git add -f`. Personal notes must never be committed.
+. "$(dirname "$0")/allowlist.sh"
+
+git diff --cached --name-only --diff-filter=ACMR | check_paths "pre-commit"

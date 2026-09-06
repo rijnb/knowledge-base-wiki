@@ -1,31 +1,112 @@
-.claude/settings.local.json
-.claude/skills/qmd
-.agents/
-.claudian/
-.gitnexus/
-.idea/
-.junie/
-.worktrees/
-.wiki-scratch/
-.obsidian/plugins/
-.obsidian/appearance.json
-.obsidian/community-plugins.json
-.obsidian/core-plugins.json
-.obsidian/graph.json
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.trash/
-.import/
-.output.txt
-/_*.md
-scripts/__pycache__/
+# ============================================================================
+# FAIL-SAFE ALLOWLIST
+# ----------------------------------------------------------------------------
+# Everything is ignored by default. Only the framework infrastructure that is
+# explicitly un-ignored below can ever be committed. Personal notes (raw/,
+# wiki/, INBOX/, docs/, ...) can NEVER be committed by accident -- regardless
+# of folder name, letter case, or the filesystem's case-sensitivity. New
+# folders/files are invisible to git until deliberately whitelisted here.
+#
+# Rule of thumb: if in doubt, git ignores it. That is the point.
+# Keep in sync with .githooks/allowlist.sh (the hooks are the second net).
+# ============================================================================
+
+# 1. Ignore everything at the repo root.
+/*
+
+# 2. Root-level infrastructure files.
+!/.gitignore
+!/AGENTS.md
+!/CLAUDE.md
+!/LICENSE
+!/README.md
+!/index.md
+
+# 3. Infrastructure directories that contain NO personal notes -> allow fully.
+!/config/
+!/templates/
+!/scripts/
+
+# 4. Git hooks (safety net; see .githooks/pre-commit and .githooks/pre-push).
+!/.githooks/
+
+# 5. Agent tooling: skills and agents only -- NOT settings, commands, caches.
+!/.claude/
+/.claude/*
+!/.claude/skills/
+!/.claude/agents/
+!/.agents/
+/.agents/*
+!/.agents/skills/
+!/.agents/agents/
+!/.codex/
+/.codex/*
+!/.codex/skills/
+!/.codex/agents/
+
+# 6. INBOX is a drop zone that DOES receive personal notes:
+#    allow only the specific infrastructure files, nothing else.
+!/INBOX/
+/INBOX/*
+!/INBOX/.gitkeep
+!/INBOX/index.md
+!/INBOX/RELEASE-NOTES.md
+
+# 7. raw/ holds personal source material: allow only the folder scaffolding
+#    (index.md + .gitkeep per subfolder), never the notes themselves.
+!/raw/
+/raw/*
+!/raw/index.md
+!/raw/clips/
+/raw/clips/*
+!/raw/clips/index.md
+!/raw/clips/.gitkeep
+!/raw/confluence/
+/raw/confluence/*
+!/raw/confluence/index.md
+!/raw/confluence/.gitkeep
+!/raw/diary/
+/raw/diary/*
+!/raw/diary/index.md
+!/raw/diary/.gitkeep
+!/raw/emails/
+/raw/emails/*
+!/raw/emails/index.md
+!/raw/emails/.gitkeep
+!/raw/notes/
+/raw/notes/*
+!/raw/notes/index.md
+!/raw/notes/.gitkeep
+!/raw/scans/
+/raw/scans/*
+!/raw/scans/index.md
+!/raw/scans/.gitkeep
+!/raw/slack/
+/raw/slack/*
+!/raw/slack/index.md
+!/raw/slack/.gitkeep
+!/raw/transcripts/
+/raw/transcripts/*
+!/raw/transcripts/index.md
+!/raw/transcripts/.gitkeep
+
+# 8. wiki/ and .import/ are LLM/personal territory: placeholder only.
+!/wiki/
+/wiki/*
+!/wiki/.gitkeep
+!/.import/
+/.import/*
+!/.import/.gitkeep
+
+# 9. Per-vault files inside allowed directories -- never track them.
 config/personal_info.md
-docs/
-draft/
-raw/
-wiki/
-INBOX/*
-!INBOX/RELEASE-NOTES.md
-_resources/
-sync-all-repos.sh
-.smart-env
+**/index.jpg
+**/.claude/settings*.json
+
+# 10. Belt-and-braces: never commit junk, even inside allowed directories.
+**/.DS_Store
+**/__pycache__/
+**/.cc-writes/
+*~
+*.tmp
+*.bak

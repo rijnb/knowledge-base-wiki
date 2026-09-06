@@ -25,6 +25,9 @@ git clone <repo-url> ~/my-knowledge-base
 cd ~/my-knowledge-base
 mkdir -p raw/{notes,clips,confluence,diary,emails,transcripts,scans,slack}
 
+# 2b. Activate the fail-safe git hooks (blocks committing/pushing personal notes, even with `git add -f`)
+./scripts/install-hooks.sh
+
 # 3. Install QMD (the semantic search engine; it runs on the Bun runtime)
 npm install -g bun
 npm install -g @tobilu/qmd
@@ -156,10 +159,24 @@ The framework is updated regularly, so it's wise to `git pull` every now and the
 cd ~/my-knowledge-base && git pull
 ```
 
+### Your notes never leave your machine
+
+`.gitignore` is a **fail-safe allowlist**: everything is ignored by default and only the framework
+infrastructure (`scripts/`, `config/`, `templates/`, the skills, the folder scaffolding) is un-ignored.
+`raw/`, `wiki/`, `INBOX/` contents, `docs/`, `.obsidian/`, cover images (`index.jpg`) and
+`config/personal_info.md` are invisible to git. The hooks in `.githooks/` (activated by
+`scripts/install-hooks.sh`) are the second and third net: `pre-commit` rejects any staged file outside
+the allowlist (even when force-staged), `pre-push` rejects any commit that touches one (even when
+committed with `--no-verify`). To add new infrastructure, whitelist it in **both** `.gitignore` and
+`.githooks/allowlist.sh`.
+
+This means you can safely make your own vault a clone of this repo: `git pull` brings in framework
+updates, and you can contribute framework fixes with a normal `git push` — your notes stay local.
+
 ## Prerequisites
 
 **Required:**
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI) — or Codex, Vibe, Junie (experimental)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI) — or Codex, Vibe
 - [Node.js / npm](https://nodejs.org/) — for installing bun and qmd
 - [QMD](https://github.com/tobi/qmd) — local semantic search engine (`npm install -g @tobilu/qmd`)
 - [Obsidian](https://obsidian.md) — vault UI (free, Mac/Windows/Linux)
@@ -231,7 +248,7 @@ The combination of using a semantic database to fetch relevant pages before anal
 
 ## Commands and skills
 
-The skills live in `.claude/skills/` (one `SKILL.md` per skill) and are mirrored to `.agents/`, `.codex/` and `.junie/` for other agents (see [Development](#development)). These skill commands and natural-language triggers are available.
+The skills live in `.claude/skills/` (one `SKILL.md` per skill) and are mirrored to `.agents/` and `.codex/` for other agents (see [Development](#development)). These skill commands and natural-language triggers are available.
 
 **Commonly used:**
 
@@ -276,7 +293,7 @@ You can use the script `scripts/wiki-ingest.sh` to start ingesting new notes. Th
 By default, the script reads `config/settings.md` and uses its `ai_backend`
 frontmatter value. You can override it for a single run like this:
 ```
-scripts/wiki-ingest.sh [--agent claude|vibe|codex|junie]
+scripts/wiki-ingest.sh [--agent claude|vibe|codex]
 ```
 
 Other options include `--threshold`, `--max-batches`, `--max-files-per-batch`, `--wait-between-batches`, `--max-errors`, and `--dry-run`. Use `wiki-ingest.sh --help` for details.
@@ -399,8 +416,7 @@ ai_backend: claude
 ```
 
 Supported values are `claude` (`claude -p ...`), `vibe` (`vibe -p ...`),
-`codex` (`codex exec ...`), and `junie` (experimental; the script asks for
-confirmation and uses smaller batches). Usage throttling only works for
+and `codex` (`codex exec ...`). Usage throttling only works for
 `claude`. If the selected CLI is missing or fails, the script keeps
 deterministic state intact and stops before consuming LLM-backed batches.
 
@@ -484,7 +500,7 @@ The database is automatically checked for errors at the end of each `wiki-ingest
 ├── .claude/
 │   ├── skills/          ← the wiki skills (source of truth; one SKILL.md per skill)
 │   └── agents/          ← sub-agent definitions used by wiki-ingest for large imports
-├── .agents/, .codex/, .junie/  ← mirrors of the skills for other agents (generated; .agents and .junie gitignored)
+├── .agents/, .codex/       ← mirrors of the skills for other agents (generated)
 ├── .import/             ← in-progress batch import state (gitignored)
 ├── .wiki-scratch/       ← freshness queues and migration report (gitignored)
 ├── _resources/          ← Obsidian's default paste folder for attachments (gitignored)
@@ -597,7 +613,7 @@ The `raw/` directory is not stored in Git; create it (and its subdirectories) be
 | `system/convert-html-to-md.py` | Converts `.html` email exports (e.g. from Microsoft Power Automate) to Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/convert-vtt-to-md.py` | Converts `.vtt` transcript files to readable Markdown with YAML frontmatter. Called by `wiki-ingest.sh` before ingestion. |
 | `system/migrate-converted-to-resources.py` | One-time migration from the legacy `converted/` layout to the current `_resources/` layout. Dry-run by default; pass `--apply` to modify files. |
-| `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` and `.claude/agents/` to `.agents/`, `.codex/`, and `.junie/`, and generates Codex TOML agent definitions, so all agents share the same skill set. |
+| `system/copy-claude-skills-to-other-agents.sh` | Copies `.claude/skills/` and `.claude/agents/` to `.agents/` and `.codex/`, and generates Codex TOML agent definitions, so all agents share the same skill set. |
 | `system/qmd-reset-collections.sh` | Removes all QMD collections and wipes the search index database. Used by `qmd-full-reindex.sh --reset`. |
 | `system/qmd-sync-collections.sh` | Registers the vault root as the QMD collection `tomtom` (idempotent), removes stale per-subdirectory collections, and re-indexes. Called by `qmd-full-reindex.sh`, `wiki-ingest.sh`, and `wiki-finalize-ingest`. |
 
@@ -607,7 +623,7 @@ The `raw/` directory is not stored in Git; create it (and its subdirectories) be
   ```bash
   python3 -m unittest discover -s scripts/tests -v
   ```
-- **Skills** are edited in `.claude/skills/` only. After changing a skill or agent definition, run `bash scripts/system/copy-claude-skills-to-other-agents.sh` from the vault root to refresh the `.agents/`, `.codex/`, and `.junie/` mirrors; `test_skill_mirrors.py` fails while they are out of sync.
+- **Skills** are edited in `.claude/skills/` only. After changing a skill or agent definition, run `bash scripts/system/copy-claude-skills-to-other-agents.sh` from the vault root to refresh the `.agents/` and `.codex/` mirrors; `test_skill_mirrors.py` fails while they are out of sync.
 - **Release notes**: append a short entry to `INBOX/RELEASE-NOTES.md` after any change to `scripts/` or the skills.
 
 ## Recognition

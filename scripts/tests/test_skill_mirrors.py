@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guards that .agents/, .junie/ and .codex/ skills match .claude/ verbatim.
+"""Guards that .agents/ and .codex/ skills match .claude/ verbatim.
 
 `.claude/skills` is canonical; the other three are copies produced by
 scripts/system/copy-claude-skills-to-other-agents.sh. Nothing failed when that
@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL = ROOT / ".claude" / "skills"
-MIRRORS = (".agents", ".junie", ".codex")
+MIRRORS = (".agents", ".codex")
 
 FIX = "run: bash scripts/system/copy-claude-skills-to-other-agents.sh"
 

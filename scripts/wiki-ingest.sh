@@ -64,7 +64,7 @@ read_ai_backend_setting() {
 
     case "$value" in
         ""|claude) echo "claude" ;;
-        vibe|codex|junie) echo "$value" ;;
+        vibe|codex) echo "$value" ;;
         *)
             echo "WARN: unknown ai_backend '$value' in config/settings.md; falling back to claude." >&2
             echo "claude"
@@ -83,7 +83,6 @@ backend_command() {
         claude) echo "claude" ;;
         vibe)   echo "vibe" ;;
         codex)  echo "codex" ;;
-        junie)  echo "junie" ;;
         *)      return 1 ;;
     esac
 }
@@ -117,15 +116,14 @@ reported as 0% (no throttling).
 
 Options:
   --agent BACKEND            Override config/settings.md ai_backend for this run.
-                             Allowed values: claude, vibe, codex, junie.
+                             Allowed values: claude, vibe, codex.
   --threshold N              Usage percentage ceiling (default: 85). Each phase starts only
                              when current usage is strictly below this value.
   --max-errors N             Maximum number of LLM backend command errors before the script
                              exits (default: 5). Each error pauses for confirmation first.
   --max-batches N            Maximum number of batches to process (default: 50).
                              The script exits cleanly after this many batches.
-  --max-files-per-batch N    Maximum number of files per batch (default: 10 for most
-                             backends, 3 for junie). Passed to wiki-create-import-batches.sh when
+  --max-files-per-batch N    Maximum number of files per batch (default: 10). Passed to wiki-create-import-batches.sh when
                              partitioning notes.
   --wait-between-batches N   Seconds to wait between batches (default: 60). The countdown
                              can be skipped with Enter or cancelled with ESC.
@@ -151,8 +149,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --agent)
             case "$2" in
-                claude|vibe|codex|junie) AGENT="$2"; AGENT_EXPLICIT=true ;;
-                *) echo "Unknown agent: $2 (allowed: claude, vibe, codex, junie)" >&2; usage >&2; exit 1 ;;
+                claude|vibe|codex) AGENT="$2"; AGENT_EXPLICIT=true ;;
+                *) echo "Unknown agent: $2 (allowed: claude, vibe, codex)" >&2; usage >&2; exit 1 ;;
             esac
             shift 2 ;;
         --threshold)
@@ -178,27 +176,9 @@ done
 
 resolve_ai_backend
 
-# Apply agent-specific defaults for options not explicitly set by the user.
-if [ "$AGENT" = "junie" ]; then
-    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:-3}
-else
-    MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:-10}
-fi
+MAX_FILES_PER_BATCH=${MAX_FILES_PER_BATCH:-10}
 
 check_dependencies
-
-# Warn when Junie is selected: the integration is experimental and untested.
-if [ "$AGENT" = "junie" ]; then
-    echo ""
-    echo "────────────────────────────────────────────────────────────────────"
-    echo "⚠️  WARNING: --agent junie is currently EXPERIMENTAL and has not been fully"
-    echo "            tested. Behaviour may be unreliable or produce unexpected results."
-    echo "────────────────────────────────────────────────────────────────────"
-    echo ""
-    echo -n "Press Enter to continue, or Ctrl-C to abort... "
-    read -r _junie_confirm
-    echo ""
-fi
 
 # Fetch utilization % from Anthropic API using the keychain OAuth token.
 # Prints an integer 0-100 on success, or returns non-zero on failure.
@@ -457,7 +437,6 @@ run_llm() {
         claude) claude -p "$prompt" ;;
         vibe)   vibe -p "$prompt" ;;
         codex)  codex exec "$prompt" ;;
-        junie)  junie --brave --skip-update-check --output-format=text --task "$prompt" ;;
     esac
 }
 
@@ -485,16 +464,6 @@ show_plan() {
    ██║      ██║     ██╔══██║██║   ██║ ██║  ██║██╔══╝
    ╚██████╗ ███████╗██║  ██║╚██████╔╝ ██████╔╝███████╗
     ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝
-BANNER
-            ;;
-        junie)
-            cat <<'BANNER'
-        ██╗ ██╗   ██╗ ███╗   ██╗ ██╗ ███████╗
-        ██║ ██║   ██║ ████╗  ██║ ██║ ██╔════╝
-        ██║ ██║   ██║ ██╔██╗ ██║ ██║ █████╗
-   ██   ██║ ██║   ██║ ██║╚██╗██║ ██║ ██╔══╝
-   ╚█████╔╝ ╚██████╔╝ ██║ ╚████║ ██║ ███████╗
-    ╚════╝   ╚═════╝  ╚═╝  ╚═══╝ ╚═╝ ╚══════╝
 BANNER
             ;;
         vibe)

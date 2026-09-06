@@ -74,7 +74,6 @@ class SyncAllReposTests(unittest.TestCase):
             (src / ".claude/skills/wiki-example/SKILL.md").read_text(encoding="utf-8"),
         )
         self.assertTrue((src / ".codex/skills/wiki-example/SKILL.md").is_file())
-        self.assertTrue((src / ".junie/skills/wiki-example/SKILL.md").is_file())
 
 
 if __name__ == "__main__":

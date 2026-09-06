@@ -9,5 +9,3 @@ After adding new notes, run the script
 scripts/wiki-ingest.sh
 ```
 This 'ingests' the notes into the knowledge base, meaning it will augment the knowledge Wiki with information from these notes.
-
-![[raw/_resources/index.jpg]]

@@ -16,9 +16,6 @@ copy_tree() {
     cp -R "$src" "$dest"
 }
 
-copy_tree .claude/skills .junie/skills
-copy_tree .claude/agents .junie/agents
-
 copy_tree .claude/skills .agents/skills
 copy_tree .claude/agents .agents/agents
 
@@ -93,4 +90,4 @@ for source in sorted(source_dir.glob("*.md")):
     )
 PY
 
-echo "Claude skills copied to .junie/, .agents/, and .codex/; Codex agents generated as TOML."
+echo "Claude skills copied to .agents/ and .codex/; Codex agents generated as TOML."
