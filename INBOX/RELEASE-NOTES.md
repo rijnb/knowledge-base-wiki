@@ -1,5 +1,11 @@
 # Release Notes
 
+## 2026-09-07 — New `wiki-find` skill and `scripts/wiki-find.py`
+
+- **New skill `wiki-find`**: lists *all* wiki pages relevant to a subject ("find all notes about agentic coding"). Steps: expand the subject into 6–12 terms → run the finder → QMD `vec`/`hyde` gap-fill → prune → deliver the complete list grouped by topic type → offer to file it under `wiki/conversations/`. Registered in `AGENTS.md`; mirrored to `.agents/` and `.codex/`.
+- **New `scripts/wiki-find.py`** (logic in `scripts/lib/topic_search.py`, tests in `scripts/tests/test_topic_search.py`): two passes — `wiki/<type>/index.md` lines (title, filename, description) and page frontmatter `tags:` (normalized, so `agentic coding` matches `agentic-coding`); `--body` adds body grep, `--types` scopes, `--format json` for post-processing, `--out FILE` writes the list to a file (broad subjects produce 50+ KB, which overflows the terminal). Runs over the whole vault in <1 s.
+- Why: a baseline agent without the skill needed ~48k tokens and 10 tool rounds of repeated `grep -ril` over ~7k pages, truncated the result, and only discovered late that tags are the vault's own taxonomy. The index files already carry title + description for every page, so scanning them is the cheap and complete first pass.
+
 ## 2026-09-06 — Junie support removed
 
 - **`.junie/` mirror deleted** and dropped from `copy-claude-skills-to-other-agents.sh`, `test_skill_mirrors.py`, `test_sync_all_repos.py`, `.gitignore` and `.githooks/allowlist.sh`. Skills are now mirrored to `.agents/` and `.codex/` only.

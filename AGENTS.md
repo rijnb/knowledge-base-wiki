@@ -15,6 +15,7 @@ Use the appropriate `wiki` skill for each action:
 - **Finalize ingest** (merge logs, rebuild indexes) — `wiki-finalize-ingest` skill
 - **Migrate existing KB** (adopt framework without bulk re-ingesting) — `wiki-migrate-existing` skill
 - **Query** — `wiki-query` skill (default: use this when the user asks any question)
+- **Find all notes on a subject** (inventory / list of relevant pages) — `wiki-find` skill
 - **Ground conversation in KB** — `wiki-ground` skill
 - **Health check / lint** — `wiki-doctor` skill
 - **Curate one page** — `wiki-curate-page` skill
