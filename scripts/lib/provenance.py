@@ -94,6 +94,18 @@ def _parse_scalar(value: str) -> Any:
             _unquote(part.strip())
             for part in next(csv.reader([inner], skipinitialspace=True))
         ]
+    if value.startswith("{") and value.endswith("}"):
+        # YAML flow mapping, e.g. {by: "agent:wiki-ingest", at: 2024-04-04}
+        inner = value[1:-1].strip()
+        mapping: dict[str, Any] = {}
+        if not inner:
+            return mapping
+        for part in next(csv.reader([inner], skipinitialspace=True)):
+            key, sep, raw_value = part.partition(":")
+            if not sep or not MAPPING_KEY_RE.match(key.strip()):
+                return _unquote(value)
+            mapping[key.strip()] = _unquote(raw_value.strip())
+        return mapping
     return _unquote(value)
 
 
@@ -290,6 +302,19 @@ def _validate_actor_entry(entry: Any, label: str, path: str) -> list[ProvenanceI
     return issues
 
 
+def _same_resource(link_target: str, resource: str) -> bool:
+    """True if a footnote wikilink target names the frontmatter resource.
+
+    Obsidian resolves ``[[raw/notes/Foo]]`` and ``[[raw/notes/Foo.md]]`` to
+    the same note, so a missing ``.md`` extension on the link is not an error.
+    """
+    def _norm(value: str) -> str:
+        value = value.strip()
+        return value[:-3] if value.endswith(".md") else value
+
+    return _norm(link_target) == _norm(resource)
+
+
 def _validate_footnotes(content: str, sources: Any, path: str) -> list[ProvenanceIssue]:
     """Cross-check `[^sN]` footnote refs/definitions against `sources[].id`."""
     id_to_resource: dict[str, Any] = {
@@ -334,7 +359,9 @@ def _validate_footnotes(content: str, sources: Any, path: str) -> list[Provenanc
             ))
         if source_id in defs:
             link_match = WIKILINK_TARGET_RE.search(defs[source_id])
-            if link_match and link_match.group(1) != id_to_resource[source_id]:
+            if link_match and not _same_resource(
+                link_match.group(1), id_to_resource[source_id]
+            ):
                 issues.append(ProvenanceIssue(
                     code="footnote-resource-mismatch",
                     message=(

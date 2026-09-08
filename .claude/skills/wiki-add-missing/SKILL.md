@@ -95,7 +95,7 @@ Apply the correct template for the chosen topic type. Fill every section with sy
 Additional rules:
 - Cite sources inline: `Source: raw/notes/2024-03-15 Meeting.md`
 - Set the required `description:` frontmatter field from the Step 2 description (plain text, wikilinks allowed, ~160 chars max, YAML double-quoted) — index entries are drawn from it.
-- Set the OKF v0.2 provenance frontmatter per `wiki-templates`: `sources:` listing the raw notes used, and `generated: {by: "agent:wiki-add-missing", at: <today, YYYY-MM-DD>}`.
+- Set the OKF v0.2 provenance frontmatter per `wiki-templates`: `sources:` listing the raw notes used, and `generated:` with indented `by: "agent:wiki-add-missing"` / `at: <today, YYYY-MM-DD>` (block form).
 
 Write the completed page to: `wiki/<topic>/<Name>.md`
 

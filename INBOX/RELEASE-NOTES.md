@@ -153,3 +153,9 @@ Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Link
 ## 2026-08-27 — write-article skill: minimum diagram font size
 
 - Visuals rules now require every Mermaid diagram to start with an init directive setting fontSize to at least 24px, for readability.
+
+## 2026-09-08 — provenance validator: tolerate `.md`-less footnote links, parse flow mappings
+
+- `scripts/lib/provenance.py`: `footnote-resource-mismatch` no longer fires when the footnote wikilink only lacks the `.md` extension of the frontmatter `resource` (Obsidian resolves both). Frontmatter parser now understands YAML flow mappings (`generated: {by: ..., at: ...}`), which the skill docs used as the example while the parser only accepted block form.
+- Skill docs (`wiki-ingest-per-note`, `wiki-add-missing`, all three copies): `generated:` example switched to block form; footnote-definition rule now says to include the `.md` extension.
+- Why: `wiki-freshness` reported 95 `invalid-provenance` pages after the 2026-08-26/08-24 ingests — 94 footnote/frontmatter mismatches (missing `.md`, an accent and a trailing space in `resource:` that did not match the real raw filename) and 1 unparsed flow mapping. Pages were repaired in place; the tooling change stops the `.md` and flow-mapping variants from recurring.

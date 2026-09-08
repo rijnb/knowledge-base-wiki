@@ -93,6 +93,17 @@ class ProvenanceParsingTests(unittest.TestCase):
         )
         self.assertEqual(parsed["stale_after"], "2027-01-01")
 
+    def test_parses_generated_flow_mapping(self):
+        content = VALID_PAGE.replace(
+            'generated:\n  by: "agent:wiki-ingest"\n  at: 2024-04-04',
+            'generated: {by: "agent:wiki-ingest", at: 2024-04-04}',
+        )
+        self.assertIn("generated: {", content)
+        self.assertEqual(
+            parse_provenance(content)["generated"],
+            {"by": "agent:wiki-ingest", "at": "2024-04-04"},
+        )
+
     def test_returns_none_without_provenance_keys(self):
         self.assertIsNone(parse_provenance("# No frontmatter\n\nBody\n"))
         self.assertIsNone(parse_provenance("---\ntype: concept\nstate: active\n---\n\n# Page\n"))
@@ -223,6 +234,13 @@ class FootnoteConsistencyTests(unittest.TestCase):
         self.assertEqual(
             self.issues(content).get("footnote-resource-mismatch"), "error"
         )
+
+    def test_accepts_definition_link_without_md_extension(self):
+        content = FOOTNOTE_PAGE.replace(
+            "[^s1]: [[raw/notes/2024-04-04 Foo.md]]",
+            "[^s1]: [[raw/notes/2024-04-04 Foo]]",
+        )
+        self.assertNotIn("footnote-resource-mismatch", self.issues(content))
 
     def test_ignores_footnote_examples_in_code(self):
         content = FOOTNOTE_PAGE + (
