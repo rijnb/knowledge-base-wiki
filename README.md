@@ -433,8 +433,8 @@ Add a `# Slack` section to `config/personal_info.md` to configure which channels
 
 | Channel / DM            | Days | Mode                      |
 |-------------------------|------|---------------------------|
-| #architecture-decisions | 14   | signal                    |
-| #team-platform          |      | all                       |
+| \#architecture-decisions | 14   | signal                    |
+| \#team-platform          |      | all                       |
 | @Alice van Dijk         | 7    | software design decisions |
 
 - `#channel-name` — a public or private Slack channel

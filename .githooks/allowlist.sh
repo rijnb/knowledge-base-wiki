@@ -31,6 +31,13 @@ check_paths() {
     return 1
   fi
 
+  vocab=$(echo "$paths" | grep -E '^config/tags\.md$' || true)
+  if [ -n "$vocab" ]; then
+    echo "$label: BLOCKED -- config/tags.md is this vault's own vocabulary and names" >&2
+    echo "  internal systems and customers. Ship config/tags.example.md instead." >&2
+    return 1
+  fi
+
   bad=$(echo "$paths" | grep -Ev "$ALLOW" || true)
   if [ -n "$bad" ]; then
     echo "$label: BLOCKED -- files outside the infrastructure allowlist:" >&2

@@ -7,6 +7,7 @@
 #      LLM calls are made and no finalization is run.
 #   2. Loop /wiki-ingest-next-batch until all batches are consumed.
 #   3. Run /wiki-finalize-ingest to wrap up.
+#   4. Post-process: tag new notes (wiki-tags.py), lint, QMD sync, freshness.
 #
 # Pauses 30 minutes whenever the 5-hour Claude usage is at or above the
 # threshold, then retries automatically. Usage tracking is Claude-only;
@@ -495,6 +496,7 @@ BANNER
     fi
 
     echo "  Phase 3  /wiki-finalize-ingest"
+    echo "  Phase 4  tag new notes, lint, QMD sync, freshness"
     echo ""
     printf "Pauses 30 min if 5-hour usage ≥ %s%%.\n" "$THRESHOLD"
     printf "Max batches: %s  |  Max errors: %s  |  Max files/batch: %s  |  Wait between batches: %ss\n" "$MAX_BATCHES" "$MAX_ERRORS" "$MAX_FILES_PER_BATCH" "$WAIT_BETWEEN_BATCHES"
@@ -882,7 +884,26 @@ run_phase_finalize() {
         return 2
     fi
     echo ""
-    echo "=== Phase 4 - POST-PROCESS: lint check, QMD sync, and freshness ==="
+    echo "=== Phase 4 - POST-PROCESS: tag, lint check, QMD sync, and freshness ==="
+
+    # Tagging runs first in this phase, and after the finalize skill's rename
+    # pass: `assign` reads the excerpt cache rather than the notes, and the
+    # cache stores paths, so it must be rebuilt after any rename. Running it
+    # before wiki-doctor and QMD means both see the final frontmatter.
+    #
+    # /wiki-finalize-ingest performs these same three steps, so in a normal
+    # pipeline run they have usually happened already. Repeating them is safe
+    # and nearly free: `assign` targets only notes with fewer than 3 tags, so
+    # with everything tagged it exits without calling the model.
+    echo "Tagging new notes (wiki-tags.py: excerpts, assign, write)..."
+    set +e
+    python3 "$PROJECT_DIR/scripts/wiki-tags.py" --root "$PROJECT_DIR" --phase excerpts \
+        && python3 "$PROJECT_DIR/scripts/wiki-tags.py" --root "$PROJECT_DIR" --phase assign \
+        && python3 "$PROJECT_DIR/scripts/wiki-tags.py" --root "$PROJECT_DIR" --phase write --apply
+    local tags_rc=$?
+    set -e
+    [ "$tags_rc" -ne 0 ] && echo "WARN: tagging exited with status $tags_rc — notes are ingested but untagged; re-run 'scripts/wiki-tags.py --phase excerpts|assign|write --apply' by hand" >&2
+
     echo "Running wiki-doctor.py..."
     set +e
     python3 "$PROJECT_DIR/scripts/wiki-doctor.py" --batch-mode --fix-simple-errors --fix-orphans --format text
@@ -983,7 +1004,7 @@ run_phase_batches_dry() {
 run_phase_finalize_dry() {
     echo ""
     echo "=== Phase 3 - FINALIZE (dry-run): would run /wiki-finalize-ingest ==="
-    echo "=== Phase 4 - POST-PROCESS (dry-run): would run wiki-doctor.py, qmd-sync-collections.sh, and wiki-freshness.sh ==="
+    echo "=== Phase 4 - POST-PROCESS (dry-run): would tag new notes (wiki-tags.py), then run wiki-doctor.py, qmd-sync-collections.sh, and wiki-freshness.sh ==="
     echo ""
     echo "────────────────────────────────────────────────────────────────────"
     echo "Dry-run complete — no changes were made.  Time: $(date '+%H:%M:%S')"

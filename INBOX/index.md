@@ -6,9 +6,21 @@ ingest new notes
 ```
 or run `scripts/wiki-ingest.sh` in a terminal for unattended bulk ingestion.
 
+## What is in this vault
+
+Three areas, with different owners:
+
+| | what it is | who edits it |
+|---|---|---|
+| `raw/` | your evidence — notes, clips, emails, transcripts, scans | **you** (the LLM never edits your notes) |
+| `wiki/` | canonical pages built from `raw/` | the LLM |
+| `work/` | your work organisation — what you are doing and what is next | **you**, one topic page at a time |
+
+The first two are the knowledge base: what we *know*. `work/` is separate — what you are *doing*. See below for each.
+
 ## Working with the knowledge base
 
-The vault has two halves: `raw/` is **human territory** (your evidence — the LLM never edits your notes), `wiki/` is **LLM territory** (canonical pages built from `raw/`). Every action below is a `wiki-*` skill you trigger with a plain phrase in Claude; most also have a script for unattended use.
+Every action below is a `wiki-*` skill you trigger with a plain phrase in Claude; most also have a script for unattended use.
 
 ### Adding raw notes
 
@@ -64,5 +76,32 @@ Also: **"add missing [topic]"** (`wiki-add-missing`) creates a page for a system
 ### Moving and renaming
 
 Use the Obsidian CLI so links stay intact: `obsidian vault="TomTom" move path=<from> to=<to>`.
+
+## Managing your work — `work/`
+
+`work/` organises your work so that at any moment you can answer: what am I working on, what is next (mine or delegated), who is overdue for contact, and what did I do last month. Budget for running it: **≤ 30 min/day**.
+
+**The only thing you maintain by hand is a topic page.** One file per large topic in `work/topics/`, each carrying a `status:` (`active` / `watching` / `parked`), a `progress:` sentence, and `## Next actions (me)`, `## Delegated` and `## Log` sections. Something to do → add `- [ ] …`. Something happened → add a dated line under `## Log`. A new subject with no topic → copy an existing page as a stub with `status: watching`.
+
+Everything else is either rarely touched or generated:
+
+| File | Role |
+|------|------|
+| `Compass.md` | mandate, lever, 90-day outcomes, and the out-list — rewritten rarely |
+| `Stakeholders.md` | who needs what, contact cadence, `Last` contact date |
+| `Backlog.md` | **compiled — never edit.** Regenerate with `python3 scripts/work-backlog.py` |
+| `Topics.base` | table views: Now / All / Overdue review / Watching and parked |
+| `weekly/`, `briefs/`, `reviews/`, `recaps/` | outputs of the skills below |
+
+Three things to say in Claude:
+
+| Say | Skill | What happens |
+|-----|-------|--------------|
+| **"run the weekly review"** | `work-weekly` | Monday review: scan what is new, triage each active topic, pick this week's work. Writes `work/weekly/YYYY-Www.md` |
+| **"brief me for my 1:1 with [name]"** | `work-brief` | Five lines before a 1:1, grounded in the topic pages and the evidence since you last spoke |
+| **"review this document"** | `review-doc` | A verdict on a doc, deck or proposal, grounded in the knowledge base |
+
+Full manual, including the daily and monthly loops: [[How To Use Work Planning]]. Like `raw/` and `wiki/`, `work/` is **never committed to git** — it is yours alone.
+
 
 ![[INBOX/_resources/index.jpg]]

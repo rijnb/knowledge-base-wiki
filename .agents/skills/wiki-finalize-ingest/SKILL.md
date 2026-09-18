@@ -5,7 +5,7 @@ description: Use when the user asks to finalize an ingest, merge batch logs, or 
 
 # Knowledge Base - Finalize Ingest
 
-> **When running as an agent** (dispatched by `wiki-ingest`, no user interaction available): at Step 0, abort with an error message if unclaimed batch files exist instead of using `AskUserQuestion`. At Step 6, run All steps without prompting.
+> **When running as an agent** (dispatched by `wiki-ingest`, no user interaction available): at Step 0, abort with an error message if unclaimed batch files exist instead of using `AskUserQuestion`. At Step 7 (post-processing menu), run All steps without prompting.
 
 > **Step ordering matters — do not reorder.** Hash-stamping (Step 3) MUST run *after* `wiki-assign-dates` (Step 2). The date pass mutates raw-note frontmatter (`date` / `date_span` / `date_confidence`), which changes each file's bytes. If hashes were stamped before dating, every freshly-ingested note would carry a stale hash and get re-flagged as "new" on the next `wiki-create-import-batches` run. Stamping last records the final, dated content.
 
@@ -65,7 +65,43 @@ python3 scripts/system/wiki-relink-log-renames.py
 
 Stamping records a `hash` (SHA-256 of the source bytes) and `mtime` on each entry so that **renaming** a raw note later in Obsidian does not cause it to be re-ingested; notes whose **content** changed are still re-ingested. Because this runs after Step 2, the hash reflects the note's final, date-stamped content — so a note ingested in this cycle is not falsely re-flagged as "new" on the next import. The relink pass rewrites the `file` of any entry whose note was renamed to its current path, so the log stays accurate and `prune_log` does not later orphan-drop it.
 
-## Step 4 — Rebuild indexes
+## Step 4 — Tag the new notes
+
+Every note ingested this cycle has no tags yet. Assign them from the approved
+vocabulary in `config/tags.md`. Run all three, in this order, from the project root:
+
+```bash
+python3 scripts/wiki-tags.py --phase excerpts
+python3 scripts/wiki-tags.py --phase assign
+python3 scripts/wiki-tags.py --phase write --apply
+```
+
+- `excerpts` **must** run first: `assign` reads the excerpt cache, not the notes,
+  so a note ingested this cycle is invisible to it until the cache is rebuilt.
+  It also has to run *after* Step 3, because the relink pass renames notes and
+  the cache stores paths.
+- `assign` targets only notes carrying fewer than 3 tags, so notes tagged in an
+  earlier cycle cost nothing. One model call per 50 notes.
+- `write --apply` merges additively — an existing tag is never removed. Obsidian
+  need not be running for any of the three.
+
+`scripts/wiki-ingest.sh` runs these same three commands in its Phase 4, so in a
+pipeline run they may already have happened. Running them again is safe and
+nearly free: with everything tagged, `assign` has no targets and exits without
+calling the model.
+
+Report the counts the commands print. Two things are worth surfacing to the user:
+
+- **`.tags/assign-rejects.tsv`** — tags the model wanted but could not use,
+  because the vocabulary is closed. This is the signal for what `config/tags.md`
+  is missing; mention the top few if the file is non-empty.
+- **`.tags/assign-failed.txt`** — notes that came back with no usable line. A
+  later run picks them up; no action needed now.
+
+Never add a tag to `config/tags.md` yourself — that file is the human's. See
+[[Tagging New Notes]] for the vocabulary rules and `--phase write-revert`.
+
+## Step 5 — Rebuild indexes
 
 Run the index-page script from the project root:
 
@@ -75,7 +111,7 @@ python3 scripts/system/wiki-create-index-pages.py
 
 This rebuilds `wiki/index.md` and all `wiki/<topic>/index.md` files.
 
-## Step 5 — Summarize
+## Step 6 — Summarize
 
 Present a table of all pages created/updated across all sessions (read from the just-merged session log data).
 
@@ -87,7 +123,7 @@ scripts/wiki-freshness.sh --root .
 
 This command does not rewrite `wiki/` pages. It writes `.wiki-scratch/freshness-curation-candidates.md` and `.wiki-scratch/provenance-coverage-backlog.md`; mention whether there are one-page curation candidates.
 
-## Step 6 — Post-processing menu
+## Step 7 — Post-processing menu
 
 Ask which post-processing steps to run. Use `AskUserQuestion` with `multiSelect: true` when available; otherwise ask a concise plain-text question and wait for the answer. Always run QMD before lint.
 
@@ -98,6 +134,6 @@ Always re-index QMD via `scripts/system/qmd-sync-collections.sh` — never call 
 - **QMD text re-index** (`bash scripts/system/qmd-sync-collections.sh --skip-embed`) — fast, keywords only
 - **QMD vector embedding** (`bash scripts/system/qmd-sync-collections.sh`) — slow, ~2 GB models; supersedes text-only if both selected
 
-## Step 7 - End message
+## Step 8 - End message
 
 After running the lint check or QMD do not suggest to run finalize again. If any problems were found during the lint check, suggest the user runs `python3 scripts/wiki-doctor.py` (interactive mode, without `--batch-mode`) to review and fix the remaining problems one by one.

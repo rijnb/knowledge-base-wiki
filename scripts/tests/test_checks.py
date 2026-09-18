@@ -204,11 +204,24 @@ class CheckFrontmatterTests(VaultFixtureMixin, unittest.TestCase):
 
     def test_kb_prov_remnant_is_error(self):
         self.write("wiki/concepts/prov.md",
-                   "---\ntype: concept\ndescription: d\n---\nbody kb-prov-v1 remnant\n")
+                   "---\ntype: concept\ndescription: d\n---\nbody\n\n"
+                   "> [!provenance]- Provenance\n> schema: kb-prov-v1\n")
         issues = self.issues_for("wiki/concepts/prov.md")
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["severity"], "error")
         self.assertIn("kb-prov-v1", issues[0]["reason"])
+
+    def test_kb_prov_schema_line_alone_is_error(self):
+        self.write("wiki/concepts/prov.md",
+                   "---\ntype: concept\ndescription: d\n---\nbody\n> schema: kb-prov-v1\n")
+        self.assertEqual(len(self.issues_for("wiki/concepts/prov.md")), 1)
+
+    def test_kb_prov_prose_mention_and_wikilink_are_fine(self):
+        self.write("wiki/concepts/prov.md",
+                   "---\ntype: concept\ndescription: d\n---\n"
+                   "The old `kb-prov-v1` scheme is described in [[kb-prov-v1]].\n"
+                   "- [[kb-prov-v1]]\n")
+        self.assertEqual(self.issues_for("wiki/concepts/prov.md"), [])
 
     def test_missing_description_is_warning(self):
         self.write("wiki/concepts/nodesc.md",

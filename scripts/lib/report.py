@@ -146,6 +146,29 @@ def format_text(result: dict) -> str:
         else:
             lines.append("No footnote issues found.")
 
+    if "tag_issues" in result:
+        lines.append("")
+        tg = result["tag_issues"]
+        tg_s = result.get("tag_summary", {})
+        lines.append(f"TAG CHECK: {tg_s.get('notes_scanned', '?')} notes checked against "
+                     f"{tg_s.get('vocabulary_size', 0)} approved tags, "
+                     f"{tg_s.get('malformed', 0)} malformed, "
+                     f"{tg_s.get('unapproved', 0)} unapproved, "
+                     f"{tg_s.get('untagged_notes', 0)} untagged note(s).")
+        if tg:
+            lines.append("TAG ISSUES (every tag must be listed in config/tags.md):")
+            # Group by tag: one bad tag usually spans many notes, and the tag is
+            # what has to be fixed, not each note.
+            by_tag = {}
+            for i in tg:
+                by_tag.setdefault((i["tag"], i["problem"]), []).append(i["file"])
+            for (tag, problem), files in sorted(by_tag.items(), key=lambda kv: -len(kv[1])):
+                shown = ", ".join(files[:3])
+                more = f" (+{len(files) - 3} more)" if len(files) > 3 else ""
+                lines.append(f"  [{problem}] {tag} — {len(files)} note(s): {shown}{more}")
+        else:
+            lines.append("No tag issues found.")
+
     if "loose_files" in result:
         lines.append("")
         lf = result["loose_files"]
@@ -274,6 +297,10 @@ def format_text(result: dict) -> str:
             n_err = fn_s.get("footnote_errors", 0)
             n_warn = fn_s.get("footnote_warnings", 0)
             lines.append(f"  footnotes    : {n_err} error(s), {n_warn} warning(s)")
+        if "tag_issues" in result:
+            tg_s = result.get("tag_summary", {})
+            lines.append(f"  tags         : {tg_s.get('tag_errors', 0)} error(s) "
+                         f"({tg_s.get('untagged_notes', 0)} untagged note(s))")
         if result.get("loose_files"):
             lf_s = result.get("loose_summary", {})
             n_loose = lf_s.get("loose_found", len(result["loose_files"]))

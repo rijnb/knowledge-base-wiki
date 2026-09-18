@@ -14,6 +14,7 @@ from .checks.legacy import check_legacy_converted, run_migration
 from .checks.loose import check_loose_files
 from .checks.orphans import check_orphans, fix_orphans
 from .checks.stubs import check_stubs
+from .checks.tags import check_tags
 from .checks.vault import check_vault
 from .report import format_text
 from .tui.app import run_interactive
@@ -321,6 +322,10 @@ def main():
         result["footnote_issues"] = footnote_result["footnote_issues"]
         result["footnote_summary"] = footnote_result["summary"]
 
+        tag_result = check_tags(root, args.quiet)
+        result["tag_issues"] = tag_result["tag_issues"]
+        result["tag_summary"] = tag_result["summary"]
+
         # After check_vault: with --fix-simple-errors this reports what REMAINS loose.
         loose_result = check_loose_files(root, args.quiet)
         result["loose_files"] = loose_result["loose_files"]
@@ -343,6 +348,7 @@ def main():
         or result.get("orphan_summary", {}).get("orphans_found", 0) > 0
         or result.get("stub_summary", {}).get("stubs_found", 0) > 0
         or result.get("frontmatter_summary", {}).get("frontmatter_errors", 0) > 0
+        or result.get("tag_summary", {}).get("tag_errors", 0) > 0
         or result.get("footnote_summary", {}).get("footnote_errors", 0) > 0
         or result.get("legacy_summary", {}).get("converted_dirs_found", 0) > 0
         or result.get("accent_duplicate_summary", {}).get("accent_duplicates_found", 0) > 0

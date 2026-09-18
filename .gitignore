@@ -100,6 +100,9 @@
 
 # 9. Per-vault files inside allowed directories -- never track them.
 config/personal_info.md
+# The real tag vocabulary names this vault's internal systems and customer
+# programmes. The framework ships config/tags.example.md instead.
+config/tags.md
 **/index.jpg
 **/.claude/settings*.json
 

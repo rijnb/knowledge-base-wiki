@@ -1,5 +1,6 @@
 """Validate YAML frontmatter of wiki pages: type/status vocabulary and remnants."""
 
+import re
 from pathlib import Path
 
 from ..frontmatter import FRONTMATTER_RE, split_frontmatter
@@ -19,6 +20,14 @@ ALLOWED_TYPES = {
 ALLOWED_STATUS = {"draft", "stable", "deprecated"}
 
 _LEGACY_PROVENANCE_MARKER = "kb-prov-v1"
+
+# A real remnant is the legacy provenance *callout* (`> [!provenance]` header
+# or its `> schema: kb-prov-v1` line) — not a prose mention or a wikilink to
+# the [[kb-prov-v1]] concept page, which pages about the scheme legitimately have.
+_LEGACY_CALLOUT_RE = re.compile(
+    r"^\s*>\s*(?:\[!provenance\]|schema\s*:\s*" + re.escape(_LEGACY_PROVENANCE_MARKER) + r"\b)",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def _validate_page(content: str) -> list[dict]:
@@ -63,7 +72,7 @@ def _validate_page(content: str) -> list[dict]:
                 "reason": "missing 'description:' field",
             })
 
-    if _LEGACY_PROVENANCE_MARKER in content:
+    if _LEGACY_CALLOUT_RE.search(content):
         issues.append({
             "severity": "error",
             "reason": f"legacy provenance remnant '{_LEGACY_PROVENANCE_MARKER}' found",
@@ -77,7 +86,8 @@ def check_frontmatter(root: Path, quiet: bool) -> dict:
 
     Errors: missing/unparseable frontmatter, missing or unknown 'type:',
     'status:' outside the OKF enum (draft|stable|deprecated), and any
-    'kb-prov-v1' legacy provenance remnant. Warnings: missing 'description:'.
+    'kb-prov-v1' legacy provenance callout remnant (prose mentions and
+    wikilinks to the concept page are fine). Warnings: missing 'description:'.
     """
     wiki_dir = root / "wiki"
     empty = {
