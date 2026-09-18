@@ -2,7 +2,7 @@
 # Shared allowlist for the fail-safe hooks (pre-commit, pre-push).
 # Keep in sync with .gitignore. Anything NOT matching is treated as a
 # personal note and blocked.
-ALLOW='^(\.gitignore|AGENTS\.md|CLAUDE\.md|LICENSE|README\.md|index\.md|config/|templates/|scripts/|\.githooks/|\.(claude|agents|codex)/(skills|agents)/|INBOX/(\.gitkeep|index\.md|RELEASE-NOTES\.md)$|raw/index\.md$|raw/(clips|confluence|diary|emails|notes|scans|slack|transcripts)/(index\.md|\.gitkeep)$|wiki/\.gitkeep$|\.import/\.gitkeep$)'
+ALLOW='^(\.gitignore|AGENTS\.md|CLAUDE\.md|LICENSE|README\.md|index\.md|config/|templates/|scripts/|\.githooks/|\.(claude|agents|codex)/(skills|agents)/|INBOX/(\.gitkeep|index\.md|RELEASE-NOTES\.md)$|work/How\ To\ Use\ Work\ Planning\.md$|raw/index\.md$|raw/(clips|confluence|diary|emails|notes|scans|slack|transcripts)/(index\.md|\.gitkeep)$|wiki/\.gitkeep$|\.import/\.gitkeep$)'
 
 # Prints blocked paths from stdin (one path per line); exit 0 if none.
 # $1 = label used in the error message (e.g. "pre-commit" or "pre-push").

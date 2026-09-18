@@ -90,6 +90,12 @@
 !/raw/transcripts/index.md
 !/raw/transcripts/.gitkeep
 
+# 7b. work/ is personal work organisation: only its manual is infrastructure.
+#     Compass, Stakeholders, Backlog and topics/ are this person's own work.
+!/work/
+/work/*
+!/work/How To Use Work Planning.md
+
 # 8. wiki/ and .import/ are LLM/personal territory: placeholder only.
 !/wiki/
 /wiki/*
