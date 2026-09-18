@@ -76,7 +76,14 @@ there *before* using it; never invent one on the fly.
 
 ## Release Notes
 
-After any changes to scripts (`scripts/`) or skills (`~/.claude/skills/`), append a brief entry to `INBOX/RELEASE-NOTES.md` describing what changed and why.
+After any change to `scripts/` or `.claude/skills/`, add an entry to `INBOX/RELEASE-NOTES.md`.
+
+- **Newest first** — add at the top, under the intro.
+- `## YYYY-MM-DD — <short title>`, then **2–4 bullets, one line each**.
+- Only what changed and why it matters. A number that makes the point is worth more than a sentence
+  explaining it.
+- No implementation detail, no file-by-file listing, no test counts. That belongs in the commit
+  message, which is where to look for it.
 
 ## File names for notes
 

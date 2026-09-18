@@ -1,282 +1,195 @@
 # Release Notes
 
-## 2026-09-17 — work-* generated files open with a callout, not an HTML comment
+_Newest first. A few short bullets per release — only what changed and why it matters. Detail lives in the commit messages and in the plan notes each entry points to._
 
-- The "generated file — compiled by …" banner at the top of `work/Backlog.md`, recaps, the weekly packet and the brief packet is now an Obsidian `> [!info] Generated file` callout (one shared `generated_banner()` in `lib/work_backlog.py`). Why: an HTML comment is invisible in reading view, so the warning not to hand-edit a compiled file was never seen; a callout is open by default.
+## 2026-09-18 — `work-topic` skill
 
-## 2026-09-17 — work-* tooling hardened after adversarial review
+- Say "add a topic": interviews you, then writes `work/topics/<Topic>.md` and recompiles.
+- Offers to fold the subject into an existing topic instead, and defaults to `watching` — only 10 topics may be active.
 
-Three single-lens adversarial reviews (data safety, real-data robustness, tests/leaks/skill coherence) of the new `work-*` scripts and skills, every finding reproduced before it was accepted; fixes each carry a regression test; a refutation pass re-ran every repro and its ten survivors were fixed the same way (`work-brief` now uses the same contact rule as the weekly packet — `### Contact` vs `### Mentions them (not contact)`; a `from:` addressed only to distribution lists is not contact, and the list detector knows more list words; nested YAML keys stay nested; one shared ISO-week validator; ambiguous first names fall back to full-name matching; a blank line inside the stakeholder table no longer drops the rows after it). Suite 650 → 747.
+## 2026-09-18 — `wiki-doctor` tag check
 
-- **`work-backlog.py --archive-done` is now safe on real pages.** The write path decodes strictly and skips (with a warning) any page that is not valid UTF-8 instead of silently replacing bytes; one shared scanner marks fenced *and* indented code so a `- [x]` in a code sample is never moved; a checked box moves together with its child bullets and continuation lines, and only top-level boxes are archived; line surgery splits and rejoins on the file's own newline, so CRLF pages and lines containing U+2028/form feed survive byte-for-byte. `--dry-run` on archive is now tested to leave every page identical.
-- **Pages that used to vanish now parse.** Zero-indent YAML lists, inline `# comments`, a BOM, a closing `---` as the last byte and CRLF frontmatter are handled locally (shared `lib/frontmatter.py` untouched). Duplicate section headings are all read and flagged; an unclosed code fence no longer hides the headings below it. New smells: duplicate heading, unclosed fence, unlinkable filename (`#`, `|`, leading/trailing space).
-- **Recap** lists a topic under *Closed in period* when it is `done` and its newest log entry falls in the period — the previous rule could never fire.
-- **`work-weekly.py`: contact is no longer "name appears somewhere".** Contact evidence is now a diary note naming the person, a `from:` by them, a `to:`/`cc:` with ≤ 3 recipients, or an `attendees:`/speaker line; distribution-list broadcasts and being one of many recipients count as *weak mentions*, reported under the row but not as contact. On real data this flipped several rows from "due soon" to "never contacted", which was the truth.
-- **Topic mapping is strong/weak.** A raw file maps to a topic only on the topic title or a `related:` target (wikilink at any length, phrase only if ≥ 2 words); goal and stakeholder hits are counted as `+N weak` per topic instead of listed. The same split applies to wiki-change touches (title/related strong, cited-source lines excluded) and to `work-brief`'s "on their topics" section.
-- **Matching and scanning.** Word-boundary matching with NFC normalisation on both sides, tokens under three characters dropped (no more `TT` in `https`); the stakeholder table survives `\|` in a cell, a missing trailing pipe, a malformed row and renamed headers, and warns when no `Person`/`Cadence` header is found; every `raw/*` folder with markdown is scanned (previously a fixed subset skipped ~600 files), with a larger read limit for diary/transcripts/emails; one haystack serves mentions and mapping. Minor: no-cadence rows sort last; an interaction is flagged only for a shared goal or ≥ 2 shared stakeholders; `--since` defaults from the newest weekly file's own date; log records for deleted pages are skipped; filename/frontmatter date disagreements warn once with a count.
-- **Skills.** `work-brief` gets an explicit filename derivation (bracket strip, role suffix dropped, diacritics transliterated, filesystem characters removed) and a non-zero-exit guard; `work-weekly` handles an absent `Compass.md`, non-zero exits, the strong/weak vocabulary and long ingest-week packets; `review-doc`'s lens override now matches the config syntax (`(add)` / `(replace <Default>)`) with an arithmetic ≤ 8 reviewer cap and a documented drop order, plus a missing-input guard.
+- Flags tags absent from `config/tags.md` and malformed shapes, several of which Obsidian silently refuses to index.
+- Vault clean: 11,283 notes, 0 bad tags. Every ingest now validates its own tags.
 
-## 2026-09-17 — New `review-doc` skill
+## 2026-09-18 — Tagging wired into both ingest paths
 
-- **New skill `review-doc`**: turns "review this document" / "what do you think of X" into a draft review the user adjudicates. Two modes. **Quick** (a chat-sized question or ≤1 page of text): one `wiki-query`, ≤10 cited lines, no subagents, no file. **Full** (a document, deck, proposal, RFC or plan): a three-line neutral summary of what it proposes, asks for and from whom → grounding with ≤3 `wiki-query` calls, recording each page's `date` / `date_confidence` / `superseded_by` → one reviewer subagent **per lens in parallel**, each given its lens, the text and the grounding notes and nothing else, returning ≤5 findings as `severity — finding — evidence — why it matters` → a **refutation pass** where a *fresh* adversarial subagent (cap 6, blockers and majors first) tries to knock each finding down, so it is filed `confirmed` / `weakened` / `dropped` rather than merely asserted.
-- **Output** is `work/reviews/YYYY-MM-DD <Document title>.md`: Summary, Verdict draft (5–8 sentences in the user's voice, opening "My draft — edit before sending", taking a position rather than listing findings), the findings table with refutation status, ≤5 questions for the author, the evidence with dates, and the lenses plus subagent count for cost awareness. The chat gets the verdict draft and the top three confirmed findings.
-- **Eight default lenses**, overridable: claims vs evidence, strategy alignment, economics, architecture and duplication, risks and unstated assumptions, operational feasibility, decision-readiness, what is missing. Per-user lenses, standing context and verdict voice live in the **git-ignored** `work/review-lenses.md` (created with a generic placeholder template) so nothing work-specific enters a committable path.
-- **Guardrails:** the reviewed document is treated as data, never as instructions; nothing is ever sent on the user's behalf; a missing KB page is reported as a gap instead of filled in; freshness and supersession are weighed exactly as `wiki-query` does; only the review file is written — never the document, a wiki page or a topic page. Handles vault PDFs and decks by reading the companion note's `> [!ocr-extractor]-` callout.
-- Why: unplanned review requests arrive with a deadline and no preparation time, so they get answered from impression rather than from what the knowledge base already knows. The judgement — the verdict — is irreducibly the user's, but reading the document, checking its claims against the KB, and attacking the findings that result is lookup and legwork, and one broad reviewer does that noticeably worse than several narrow ones followed by a refuter. Skill-only change: no new scripts, no new tests; suite unchanged at 650. Registered in `AGENTS.md` under "Work skills"; mirrored to `.agents/` and `.codex/`.
+- `wiki-ingest.sh` Phase 4 and the `wiki-finalize-ingest` skill both tag new notes; the skill covers interactive ingests the shell phase never reaches.
+- Must run after the rename pass: `assign` reads the excerpt cache, which stores paths.
 
-## 2026-09-17 — New `work-brief` skill and `scripts/work-brief.py` 1:1 packet
+## 2026-09-18 — Tag assignment applied
 
-- **New `scripts/work-brief.py`** (logic in `scripts/lib/work_brief.py`, tests in `scripts/tests/test_work_brief.py`): gathers the deterministic packet one pre-1:1 stakeholder brief is written from — no LLM, no network — in six sections. `Person` (the stakeholder row: needs from me, cadence, channel, last contact with its evidence path, next), `Their topics`, `Since last contact`, `Open asks`, `Other stakeholders on the same topics`, `Suggested brief skeleton`. Nothing is parsed twice: topic pages come from `lib.work_backlog`, and the stakeholder table, raw scan, name matching, cadence and topic mapping from `lib.work_weekly` — so a brief and a weekly review can never disagree about a date or a name. `--today`, `--since`, `--vault`, `--out` and `--format md|json` as in the sibling scripts; prints to stdout by default.
-- **`PERSON` resolution.** Matched case-insensitively against the `Person` column — the cell as written, its wikilink targets, or the cell with any ` / …` suffix dropped — with any unique substring accepted, so a first name is usually enough. An exact key wins over a longer substring, and an ambiguous or unknown name exits 2 listing every candidate rather than guessing.
-- **Their topics is a union**: the row's `Topics` column (in the user's own order) plus every live topic whose own `stakeholders:` field names the person, because the column is a habit that gets forgotten and the page's frontmatter is the other half of the same fact. A named topic with no page is reported, not dropped. Per topic: `progress`, my first unchecked action, the unchecked `@Name` items belonging to that person (matched on first name, since a delegated owner is parsed as one whitespace-free token) and the log lines inside the window.
-- **The window** is `(since, today]`, half-open at the start so material from the day of the last conversation is not reported back as news. `--since` defaults to the resolved last contact (table date or newest naming note in `raw/emails|slack|diary|transcripts` within 90 days, whichever is later), else one cadence back, else 14 days. `Since last contact` splits the raw material in two: notes that name the person, and notes that land on their topics *without* naming them — the ones they probably have not seen. `raw/clips/` is out of scope: somebody else's article is not news about this person.
-- **The skeleton is mechanical.** Five labelled empty lines — *Since last time / What I need from you / Risk I see / Decision needed / FYI* — each with up to three candidates lifted verbatim from the sections above: log lines in the window, delegated items, overdue reviews and topics with no action of mine, deadlines inside six weeks, and unseen topic material. No ranking and no summarising; which candidate earns a line is the skill's call.
-- **New skill `work-brief`**: run the script, then write `work/briefs/YYYY-MM-DD <Person>.md` — the five lines (one sentence each, a line with nothing behind it says so), an `## Evidence` list of the raw paths used, and the packet's `Open asks` verbatim for reading out in the meeting. 5-minute budget, domain claims checked with `wiki-query`, and it **never sends anything** — the user edits and delivers. Afterwards it reminds the user to add one dated line to `raw/diary/`, set `Last` in `work/Stakeholders.md`, record new delegated items as `- [ ] @Name — …` on the topic page, and recompile. Registered in `AGENTS.md` under "Work skills"; mirrored to `.agents/` and `.codex/`.
-- Why: the 1:1s that matter most are the ones there is no time to prepare for, so they get improvised and the same three asks are forgotten every week. Everything a brief needs is already in the vault — the row, the topics, the delegated items, the raw evidence — and assembling it is lookup, not thought. Splitting it that way puts the whole preparation inside five minutes. 27 tests; suite at 650.
+- 4730 notes tagged. Coverage 99% of 11,282 notes, mean 4.3 tags; `raw/` went from 971 tagged to 3735 of 3736.
+- Wrong-namespace suggestions are corrected when one approved tag shares the term — 84% of rejects were that, recovering 1312 tags.
+- Structural files (`index.md`, `CLAUDE.md`, …) are no longer tagged, and notes that had no frontmatter are revertible again.
 
-## 2026-09-17 — New `work-weekly` skill and `scripts/work-weekly.py` review packet
+## 2026-09-17 — Tag assignment uses Sonnet, not Haiku
 
-- **New `scripts/work-weekly.py`** (logic in `scripts/lib/work_weekly.py`, tests in `scripts/tests/test_work_weekly.py`): gathers the deterministic data packet for the Monday weekly review — no LLM, no network — in eight sections. `Snapshot` (one `- [[Topic]] — <progress>` line per live topic, in the exact shape `work-backlog.py --recap` reads back), `Backlog` (the compiled backlog embedded with its headings demoted one level, so the compiler stays the only source of the backlog's shape), `Stakeholder cadence`, `New on my topics since <date>`, `Unmapped new material`, `New or changed wiki pages`, `Deadlines and horizon flags`, `Interaction check`. All topic parsing is imported from `lib.work_backlog`; `--today`, `--since`, `--vault`, `--out` and `--format md|json` as in the other scripts. Prints to stdout by default — the packet is input to the review, not a vault file.
-- **Cadence and last contact.** `work/Stakeholders.md` is parsed by column *name* rather than position, so a reordered column does not shift every value. Free-text cadences map to days (`weekly`→7, `2-weekly`/`biweekly`/`fortnightly`→14, `monthly`→30, `bi-monthly`→60, `quarterly`→90; longest pattern first, because "bi-monthly" contains "monthly"); anything else is reported as "no fixed cadence" instead of guessed at. Last contact is the later of the table's own `Last` date and the newest note in `raw/emails|slack|diary|transcripts` within 90 days that names the person (filename, frontmatter `from`/`to`/`cc`/`title`/`speakers`, or the first 40 lines; full names only — a first name in a shared inbox is not evidence). The evidence path is printed, and rows sort most-overdue first.
-- **Scan input.** Raw notes dated in `(since, today]` are mapped to topics by title, `goal`/`related` targets and stakeholder names, annotated `(via <name>)` when the match was not the title itself; notes that map to nothing are listed separately, with the link targets shared by two or more of them as candidate new topics. Wiki pages come from `wiki/log.jsonl` (`pages_created`/`pages_updated`), restricted to `problems`, `decisions`, `projects`, `systems`, `competition`, and each touched topic carries *why* — `(title)`, `(related)`, `(goal)` or `(stakeholder)`. Ordering is by strong touches (title, related) first: on a real week a single shared quarterly goal otherwise put every hub page at the top of the list with no interaction behind it.
-- **Runtime.** About 0.4 s over ~5.5k raw files. The leading `YYYY-MM-DD` of a filename is trusted, so only a file whose name carries no date is opened to read its frontmatter, and only a file inside the window is read in full.
-- **New skill `work-weekly`**: run the script, read `work/Compass.md`, then write `work/weekly/YYYY-Www.md` — Snapshot and Portfolio verbatim, then the Scan (one line per candidate: what it is, which topics it genuinely touches, disposition `new topic` / `fold into [[X]]` / `watching` / `ignore`), overdue stakeholders, news per topic, interaction check, deadlines, three named chosen-work blocks, and a triage checklist for the user. 30-minute budget (scan ≤10, triage ≤15, commit ≤5), at most one `wiki-query` dive that the *user* picks, new topics enter as `status: watching` unless they displace an active one. The skill never edits a topic page. Registered in `AGENTS.md` under a new "Work skills" section; mirrored to `.agents/` and `.codex/`.
-- Why: the value of the ingest pipeline is the "what happened on my topics that I didn't notice" list, but assembling it by hand each Monday is exactly the work that gets skipped. Splitting it — everything countable in the script, only the judgement in the skill — makes the review repeatable and keeps its cost inside half an hour. 36 tests; suite at 616.
+- Measured A/B: 3.3× faster, half the off-list rate, steadier tag counts. $6.81 vs $3.41 for the whole phase.
+- The two models agreed on almost nothing (Jaccard 0.21), so the diffs decided it, not the statistics.
 
-## 2026-09-17 — New `scripts/work-backlog.py` backlog compiler
+## 2026-09-17 — Tag remap applied
 
-- **New `scripts/work-backlog.py`** (logic in `scripts/lib/work_backlog.py`, tests in `scripts/tests/test_work_backlog.py`): compiles the personal topic pages in `work/topics/` into one `work/Backlog.md`. Deterministic — no LLM, no network — so the output is a pure projection of the pages and can be regenerated or deleted at will. Sections: active portfolio ordered `now`→`next`→`later` (with a warning above ten topics), open actions of mine grouped by horizon, delegated items grouped by person (`@Name — text`, em dash / en dash / hyphen all parsed), overdue `next_review` dates, deadlines inside six weeks, structural smells (active topic with no next action, missing `progress`, malformed `next_review`), and the watching/parked list. `--today YYYY-MM-DD` fixes the clock, `--vault`, `--out` and `--dry-run` as in the other scripts.
-- **Two further modes.** `--archive-done DATE` moves every checked box out of `## Next actions (me)` and `## Delegated` on each topic page into its `## Log` as `- DATE — done: <text>` — line surgery, so hand-formatted tables and unquoted YAML survive byte-for-byte, and idempotent, so a second run moves nothing. `--recap PERIOD` writes `work/recaps/<PERIOD>.md` from the in-period log lines, closed topics last; `PERIOD` is `YYYY-MM`, `YYYY-Www`, `YYYY-Www..Www`, `last-month` or `last-week`, and the relative forms resolve to their absolute label so a filename never depends on when it ran. Start-of-period progress is read from optional `work/weekly/YYYY-Www.md` snapshots (a `## Snapshot` section of `- [[Topic]] — <progress>` lines) and omitted when none exist.
-- **Frontmatter list support**: `lib.frontmatter.split_frontmatter` is scalar-only, so `parse_frontmatter` here reuses its `FRONTMATTER_RE` and adds the inline (`[a, b]`) and block (`- a`) list shapes that topic pages use for `stakeholders` and `related`. Pages without `type: topic` in the folder are skipped rather than guessed at.
-- Why: a personal topic/backlog system needs one place to look each morning, but a hand-maintained backlog drifts from the topic pages that own the detail. Compiling it instead keeps the pages the single source of truth, and makes the weekly review mechanical (archive, recap) rather than a rewrite. 35 tests; suite at 575.
+- 8464 notes rewritten: 39,692 occurrences over 4444 flat tags → 33,091 over 1857 hierarchical ones.
+- Refuses any target absent from `config/tags.md`; every note backed up and hash-verified revertible.
+- Frontmatter surgery preserves each note's existing shape, so only the tags line changes.
 
-## 2026-09-07 — New `wiki-find` skill and `scripts/wiki-find.py`
+## 2026-09-17 — Tag taxonomy built
 
-- **New skill `wiki-find`**: lists *all* wiki pages relevant to a subject ("find all notes about agentic coding"). Steps: expand the subject into 6–12 terms → run the finder → QMD `vec`/`hyde` gap-fill → prune → deliver the complete list grouped by topic type → offer to file it under `wiki/conversations/`. Registered in `AGENTS.md`; mirrored to `.agents/` and `.codex/`.
-- **New `scripts/wiki-find.py`** (logic in `scripts/lib/topic_search.py`, tests in `scripts/tests/test_topic_search.py`): two passes — `wiki/<type>/index.md` lines (title, filename, description) and page frontmatter `tags:` (normalized, so `agentic coding` matches `agentic-coding`); `--body` adds body grep, `--types` scopes, `--format json` for post-processing, `--out FILE` writes the list to a file (broad subjects produce 50+ KB, which overflows the terminal). Runs over the whole vault in <1 s.
-- Why: a baseline agent without the skill needed ~48k tokens and 10 tool rounds of repeated `grep -ril` over ~7k pages, truncated the result, and only discovered late that tags are the vault's own taxonomy. The index files already carry title + description for every page, so scanning them is the cheap and complete first pass.
+- 4443 tags → 1818 canonical in 19 namespaces, via two LLM passes and three deterministic ones.
+- `.tags/overrides.tsv` holds the hand-made gate corrections and wins over every automatic pass.
+- `--phase consolidate` re-derives everything from the checkpoint for free.
+
+## 2026-09-17 — `wiki-tags.py`: inventory, hashtag escaping, excerpts
+
+- New tag pipeline, phases 0–2. Dry run is the default throughout.
+- 92 stray inline hashtags escaped across 47 files; 39 tags Obsidian never indexed are now classified.
+- The Obsidian CLI only answers when the app is already running — otherwise it boots it and hangs the caller.
+- Plan and measurements: `INBOX/Plan Systematic Tags.md`.
+
+## 2026-09-17 — `work-*` tooling hardened
+
+- Three adversarial reviews, every finding reproduced before it was accepted; suite 650 → 747.
+- `--archive-done` is now safe on real pages (encoding, code fences, CRLF), and pages that used to vanish parse.
+- "Contact" now means evidence of contact, not a name appearing somewhere — several rows were wrong.
+
+## 2026-09-17 — `review-doc` skill
+
+- "Review this document" → a draft verdict you adjudicate, grounded in the KB.
+- One reviewer subagent per lens in parallel, then a fresh adversarial pass that confirms, weakens or drops each finding.
+- Never sends anything; writes only the review file.
+
+## 2026-09-17 — `work-brief` skill and script
+
+- Assembles the deterministic packet a pre-1:1 brief is written from; the five lines are the skill's judgement.
+- Reuses the weekly script's parsing, so a brief and a review can never disagree about a date or a name.
+
+## 2026-09-17 — `work-weekly` skill and script
+
+- Monday review: snapshot, backlog, overdue stakeholders, what happened on your topics, unmapped material.
+- Everything countable in the script, only the judgement in the skill — keeps the review inside half an hour.
+- ~0.4 s over ~5.5k raw files.
+
+## 2026-09-17 — `work-backlog.py` compiler
+
+- Compiles `work/topics/` into `work/Backlog.md`: portfolio, open actions, delegated, overdue, deadlines, smells.
+- Deterministic, so the topic pages stay the single source of truth and the backlog can be deleted at will.
+- Also `--archive-done` (checked boxes into the log) and `--recap PERIOD`.
+
+## 2026-09-17 — Generated `work-*` files warn visibly
+
+- The "do not hand-edit" banner is a callout, not an HTML comment — a comment is invisible in reading view.
+
+## 2026-09-09 — Legacy-provenance check scoped to real callouts
+
+- The `kb-prov-v1` error now needs an actual callout, so the nine pages documenting the old scheme stop failing.
+
+## 2026-09-08 — Provenance validator tolerances
+
+- A footnote link missing only the `.md` extension is no longer a mismatch; YAML flow mappings parse.
+- Fixed 95 false `invalid-provenance` pages.
+
+## 2026-09-07 — `wiki-find` skill and script
+
+- Lists *every* wiki page on a subject, from the index files and frontmatter tags. Whole vault in <1 s.
+- Replaces ~48k tokens of repeated grep that truncated its own answer.
 
 ## 2026-09-06 — Junie support removed
 
-- **`.junie/` mirror deleted** and dropped from `copy-claude-skills-to-other-agents.sh`, `test_skill_mirrors.py`, `test_sync_all_repos.py`, `.gitignore` and `.githooks/allowlist.sh`. Skills are now mirrored to `.agents/` and `.codex/` only.
-- **`ai_backend: junie` removed** from `scripts/wiki-ingest.sh` (option parsing, backend command, smaller-batch default, experimental warning, banner), `config/settings.md` and the README. Supported backends: `claude`, `vibe`, `codex`.
+- `.junie/` mirror deleted; backends are now `claude`, `vibe`, `codex`.
 
-## 2026-09-06 — Fail-safe allowlist `.gitignore` and git hooks
+## 2026-09-06 — Fail-safe allowlist `.gitignore` and hooks
 
-- **`.gitignore` is now a deny-all allowlist** (same design as the personal-knowledge-base repo): `/*` ignores everything, then only framework infrastructure is un-ignored — root docs, `config/`, `templates/`, `scripts/`, `.githooks/`, the `skills/`+`agents/` dirs of `.claude`/`.agents`/`.codex`/`.junie`, and the folder scaffolding (`index.md`/`.gitkeep`) of `INBOX/`, `raw/*`, `wiki/`, `.import/`. Notes can no longer be committed by accident, regardless of folder name or case; new folders are invisible until whitelisted.
-- **New `.githooks/pre-commit` and `.githooks/pre-push`** with a shared `.githooks/allowlist.sh` regex: block any staged/pushed path outside the allowlist, plus `index.jpg` covers, `.claude/settings*.json` and `config/personal_info.md` — even after `git add -f` or `git commit --no-verify`. Activate once per clone with the new `scripts/install-hooks.sh` (`core.hooksPath` is not cloned). README Quick Start and "Update the framework" sections document this.
-- **Untracked per-vault files:** the whole `.obsidian/` directory (themes included) and all `index.jpg` cover images. Four `.obsidian` files and `.agents/`/`.junie/` were listed in the old `.gitignore` yet still tracked; that inconsistency is gone. The `index.md` pages keep their `![[…/_resources/index.jpg]]` embeds — drop in your own cover per vault.
-- **Now tracked:** `.claude/skills/qmd` (the README already claimed it ships here) and the `.agents/`/`.junie/` skill mirrors for `wiki-curate-page`, `wiki-freshness`, `wiki-ground`, `wiki-migrate-existing`, `write-article`, `qmd`, `wiki-fetch-mail`, `wiki-fetch-slack`, which the old ignore rules had hidden.
-- **`INBOX/index.md`** gains a "Working with the knowledge base" guide (raw folders, doctor, freshness check, curate); **`raw/index.md`** drops the cover embed.
+- Everything is ignored by default; only framework infrastructure is un-ignored, so notes cannot be committed by accident.
+- `pre-commit`/`pre-push` block anything outside the allowlist even after `git add -f` or `--no-verify`.
+- Activate per clone with `scripts/install-hooks.sh` — `core.hooksPath` is not cloned.
 
-## 2026-09-04 — README audit and cleanup
+## 2026-09-04 — README audit
 
-- **README rewritten against the code.** The provenance section now documents OKF v0.2 (frontmatter `sources`/`generated`/`verified`/`stale_after` + `[^sN]` footnotes) instead of the abolished `kb-prov-v1` callouts, `## Freshness Status`, `review_mode`, and `minimal-stamp` backlog label. Corrected: QMD registers one collection (`tomtom`), not per-subdirectory; MCP setup uses `claude mcp add`, not `claude_desktop_config.json`; `wiki-doctor.py` is deterministic (no LLM, no contradiction check) and its checks/flags (`--fix-simple-errors`, `--fix-orphans`) are listed; `wiki-ingest.sh` phases described as implemented; `wiki-assign-dates.py` no longer claimed to use `ai_backend`; `junie` listed everywhere as an experimental backend; "visit doctor" replaced by the real trigger "health check". Added: `write-article`, `wiki-templates`, `wiki-ingest-per-note`, `qmd` skills; `.claude/agents` and the `.agents`/`.codex`/`.junie` mirrors; the eleven undocumented `scripts/system/` scripts; a Development section (tests, mirror sync, release notes); AGENTS.md key rules (naming, exact-filename wikilinks, Obsidian CLI). Directory tree fixed (no `docs/`, `.claude/` added, AGENTS/CLAUDE roles corrected). Typos fixed throughout.
-- **`config/settings.md`** documents `junie` and drops the false "smart date inference in wiki-doctor" claim.
-- **`raw/index.md` / `INBOX/index.md`** point to `scripts/wiki-ingest.sh` instead of the removed `wiki-ingest-loop.sh`.
-- **Repo hygiene:** deleted the stale root-level `tests/test_ai_backend_settings.py` (older copy of the one in `scripts/tests/`), removed the empty `.claude/commands/`, and resynced the skill mirrors (`write-article` and the newer `wiki-doctor` paragraphs were missing) so `test_skill_mirrors.py` passes again.
+- Rewritten against the code: provenance section, QMD collection, doctor flags, skills and scripts all corrected.
 
-## 2026-08-30 — Wikilink rewriters tolerate padding inside brackets
+## 2026-08-30 — Wikilink rewriters tolerate padding
 
-- **`wiki-doctor` TUI replace (`s`/`n`) no longer silently no-ops on padded wikilinks** like `[[ Great Wall Motors]]`. `extract_links` strips the target (`links.py:98`) but every rewriter in `scripts/lib/rewrite.py` matched `\[\[` + the stripped target verbatim, so a link with whitespace inside the brackets never matched: 0 substitutions, "no match — may already be changed", warning persisted on rescan. All five wikilink rewriters (`fix_wikilinks_in_file`, `mark_broken_wikilinks_in_file`, `delete_wikilink_in_file`, `delink_wikilink_in_file`, `mark_as_broken_link_in_file`) now accept `[ \t]*` around the target and normalize the padding away on rewrite — `d`, delink, and broken-marking were affected the same way. 7 regression tests in `test_rewrite.py` (padded fix/mark/delete/delink cases, incl. the exact table-row repro); suite at 419 tests, only pre-existing unrelated failures (skill mirrors, sync-all-repos fixture).
+- `[[ Padded Link]]` silently no-opped in every rewriter; all five now match and normalise the padding.
+- New `write-article` skill: publication-quality articles from vault plus web research, with footnoted claims.
 
-- **New `.claude/skills/write-article`** — produces publication-quality articles grounded in vault + web research. Five-phase workflow: grill-me-style interview (topic, audience, thesis, length), research (wiki-query + WebSearch/defuddle) into a fact sheet, outline + user-approved visualization choices, writing, and a closing `## Potential Weaknesses` section for easy review. Style contract distilled from the 25 most recent well-produced `raw/clips/` articles (claim-headings, vignette lede, concrete numbers, controlling metaphor, "Do this today" close). Grounding via `[^n]` footnotes at point of claim (compatible with the `wiki-doctor` footnote check); visuals are Mermaid only, ≤12 nodes, user-selected. Output lands in `INBOX/YYYY-MM-DD Title.md` with authored-note frontmatter.
+## 2026-08-27 — `write-article` refinements
+
+- Articles end with a weaknesses table (stable IDs, so "fix W3" works) and a heading-alternatives table.
+- An explicit end-of-article marker separates the piece from its review apparatus.
+- Mermaid diagrams need a minimum font size.
 
 ## 2026-08-26 — Orphan attachments in the review TUI
 
-- **Orphan attachments are a fourth item kind in the interactive `wiki-doctor` TUI**: `[ATCH]` rows (magenta) with a header count, `d` = delete, `e` = open in default app, Enter = preview with file metadata (name, type, size, mtime; binaries not rendered as text — `attachment_info_lines` in `scripts/lib/tui/previews.py`). No `k`/keep action: there is no frontmatter to stamp on a binary, so leaving a row unhandled keeps it. Summary table gains "Attachments deleted". Verified end-to-end in a pty (list, preview, delete, summary).
-- **Superseded the same-day interim fix**: interactive runs computed the orphan-attachment check and counted it in the exit code but never displayed it (`format_text` is batch-only). First fix printed the section after the review (`format_orphan_attachments`, extracted into `scripts/lib/report.py`); the TUI handling replaced it and `print_post_review_findings` was removed. Batch-mode reporting is unchanged.
+- `[ATCH]` rows with preview and delete; no "keep" action, because there is no frontmatter to stamp on a binary.
 
-## 2026-08-25 — Orphan attachments, Unicode-normalized links, footnote check
+## 2026-08-25 — Orphan attachments, Unicode links, footnote check
 
-- **New `ORPHAN ATTACHMENT CHECK` in `wiki-doctor`** (`check_orphan_attachments` in `scripts/lib/checks/attachments.py`, reported as `orphan_attachments` / `orphan_attachment_summary`). Flags files in the vault-root `_resources/` — Obsidian's default paste folder — that no raw/wiki/INBOX note references (any link form, NFC-normalized) and that have no companion `.md`: strays left when the embedding note was deleted or ingested away. The misplaced-attachment check is link-driven so it never saw them, and the loose-file check does not scan the vault root. Report-only (no referencing note ⇒ no destination), and deliberately scoped to the root `_resources/` — extending it to raw/ and INBOX/ would flag ~300 legitimate conversion byproducts (`.pdf.txt` sidecars, docx `media/` images). Currently flags 7 files, kept as a validation set. Tests: `CheckOrphanAttachmentsTests` in `test_attachments.py` (7 cases incl. NFC/NFD matching).
-- **NFC normalization in link resolution.** The same vault synced to two machines gave different `wiki-doctor` results — clean on APFS (NFC) but dozens of broken links on HFS+ (NFD) — because link text was compared to directory names byte-for-byte, so `[[Adam Kepiński]]` (NFC) missed the NFD-stored file. New `nfc()` helper in `scripts/lib/links.py`; `VaultIndex` (`scripts/lib/paths.py`) stores NFC keys in `stem_index`/`path_suffix_set`; `scripts/lib/resolve.py` normalizes targets in `resolve_wikilink`, `resolve_wikilink_to_path`, `find_whitespace_before_ext_match` and `normalize_name`. Results are now identical on either filesystem.
-- **New accent-duplicate check** (`scripts/lib/checks/duplicates.py`, `accent_duplicates` / `accent_duplicate_summary`, `ACCENT DUPLICATE CHECK` section). Flags same-directory `.md` files whose names match once diacritics are stripped (substitute map covers non-decomposable `ł`, `ø`, `ß`) — the fork pattern the sync mismatch creates — and names the ASCII file to keep, per the vault's naming rule.
-- **Vault cleanup:** merged the 3 duplicate pairs found (`Adam Kepiński` → `Adam Kepinski`, `Frédéric Depuydt` → `Frederic Depuydt`, `Živorad Baralić` → `Zivorad Baralic`), retargeted wikilinks in 13 pages (accented display text kept via aliases), deduplicated `wiki/people/index.md`, deleted the accented files. 26 other accent-named pages have no ASCII twin (naming violations, not duplicates) — left untouched. Tests: `UnicodeNormalizationTests` in `test_resolve.py`, new `test_duplicates.py`; suite green except the pre-existing unrelated `test_sync_all_repos` failure.
-- **New footnote check in `wiki-doctor`** (`scripts/lib/checks/footnotes.py`, `footnote_issues` / `footnote_summary`, `FOOTNOTE CHECK` section). `[^s2]` is a local reference, not a vault link, so the link checker never resolved it — confirmed across the vault's 3,329 refs. The doctor now validates the reference itself per page: no `[^id]:` definition or a doubly-defined id are errors, an unreferenced definition is a warning. Ids match narrowly (`[A-Za-z0-9][A-Za-z0-9_-]*`) and code/frontmatter is skipped, so prose like `[^/]+` is not mistaken for a ref. The OKF cross-check (`[^sN]` vs `sources[].id`) stays in `wiki-provenance-lint.py`. Vault clean: 6,838 pages, 0 errors, 0 warnings; 390 tests pass, incl. `CheckFootnotesTests` and two regression tests in `test_links.py`.
-- **23 stale source paths repaired** (content fix; backup at `~/.vault-backups/tomtom-stale-source-paths-20260825.tar.gz`). Six raw notes had been renamed or moved after the citing pages were written — five gained the `YYYY-MM-DD ` ingest prefix, one moved `raw/notes/` → `raw/clips/`, one changed path in the `converted/` → `_resources/` migration. Each old path was fixed everywhere it appeared (frontmatter `sources[].resource`, `[^sN]:` definitions, projects inline `*Sources: …*` comments): 48 occurrences in 22 pages, verified against `wiki/log.jsonl` and disk. Frontmatter and footnote agreed on the same wrong path, so only the broken-link check could see these. `wiki/projects/GeoIntelligence Division.md` had the mirror defect (frontmatter naming a non-existent file, footnote missing `.md`) — both now name the real file. Vault: 0 broken links (was 23), provenance lint 0 errors (was 1).
+- New orphan-attachment check for the vault-root `_resources/` — report-only, since there is no note to relocate to.
+- **NFC normalisation in link resolution**: the same vault gave different results on APFS and HFS+. Now identical.
+- New accent-duplicate check; 3 real duplicate pairs merged.
+- New footnote check: `[^s2]` is a local ref the link checker never saw. Vault clean across 3,329 refs.
 
-## 2026-08-24 — Six log/link integrity fixes (four reported externally)
+## 2026-08-24 — Six log/link integrity fixes
 
-- **`prune_log` no longer deletes fetch records.** Entries with no `file` field — the `email-fetch`/`slack-fetch` records from the `wiki-fetch-*` skills — counted as "file no longer exists" and were dropped, so `wiki-doctor --fix-simple-errors` silently reset the watermark `wiki-fetch-slack` reads back and the next fetch started from scratch. They are now preserved verbatim, in place, and never deduplicated.
-- **Non-HTTP URI schemes are no longer reported as broken links.** `is_external()` accepted only `http`/`https`/`ftp`/`mailto`, so `cid:`, `tel:`, `sms:`, `obsidian://`, `slack://` fell through to the internal resolver. Now an explicit `EXTERNAL_SCHEMES` allowlist in `scripts/lib/links.py` — deliberately not a generic `<scheme>:` regex, which would treat `[[Meeting: 2026 plan]]` as external and hide real breakage.
-- **Batch-log merging is validated** — new `scripts/system/wiki-merge-batch-logs.py`, used by `wiki-finalize-ingest` Step 1 instead of `cat .import/batch-log-*.jsonl >> wiki/log.jsonl`. The old append fused two entries into one corrupt line whenever a batch log lacked a trailing newline and deleted the batch logs even on failure. Lines are now parsed as JSON objects first, malformed ones quarantined in `.import/batch-log-rejected.jsonl`, and batch files removed only after the merged log is safely in place.
-- **`wiki-clear-ingest-batches` shows what it will delete.** New `scripts/system/wiki-clear-ingest-batches.py` (`--list` / `--apply`) replaces an inline `rm -f` over two overlapping globs that double-counted claimed batches (3 files, "Cleared 4 file(s)"), counted before deleting, and resolved `.import/` against the current directory. The skill now lists files before asking and warns when batch logs still hold records that never reached `wiki/log.jsonl`.
-- **`wiki-doctor --format json` works without `--batch-mode`.** It started the curses TUI regardless of format, aborting the run with `_curses.error: cbreak() returned ERR` after a full scan. Interactivity is now decided once, up front, and needs a real terminal on both ends plus a non-JSON format; otherwise the run prints its report.
-- **Agent skill mirrors resynced and guarded.** `.agents/`, `.junie/`, `.codex/` are copies of `.claude/skills` made by `copy-claude-skills-to-other-agents.sh`, but nothing failed when the sync was skipped: 8 of 19 skills had drifted and 12 mirror files still described `wiki/<topic>/_index.md` and `kb-prov-v1` provenance. Mirrors are back in sync and `scripts/tests/test_skill_mirrors.py` fails on future drift.
-- Tests: 378 pass, including new coverage in `test_links.py`, `test_fixers.py`, `test_cli_integration.py` and the new `test_batch_logs.py`.
+- `prune_log` no longer deletes fetch records, which had been silently resetting the Slack fetch watermark.
+- Batch-log merging is validated; the old `cat` append fused entries and deleted logs even on failure.
+- Non-HTTP URI schemes (`cid:`, `tel:`, `obsidian://`) are no longer reported as broken links.
+- Skill mirrors resynced, and `test_skill_mirrors.py` now fails on drift.
 
-## 2026-08-20 — OKF v0.2 migration, index rename, frontmatter check
+## 2026-08-20 — OKF v0.2 migration
 
-- **Vault-wide OKF v0.2 frontmatter migration** across `wiki/` (backup: `~/.vault-backups/tomtom-pre-okf-20260820-130749.tar.gz`): `status:` → `state:` on 839 pages (values verbatim), so `status:` is free for OKF's lifecycle enum `draft|stable|deprecated`; type vocabulary fixed (`competitor` → `competition` on 83 pages, `systems` → `system` on 1) to exactly the 8 topic types; `kb-prov-v1` abolished — 294 pages' provenance callouts mapped to `sources: [{id, resource}]`, `generated: {by, at}`, `verified: [{by, at}]`. Per-block status/confidence detail was dropped by decision; `^block-id` anchors remain as plain anchors. Verification: 329 tests OK, frontmatter check clean on 6,838 pages, provenance lint 0 errors and 1 genuine warning.
-- **Provenance tooling moved to frontmatter.** `scripts/lib/provenance.py` gained `parse_provenance()` (constrained YAML-subset parser) and a frontmatter-based `validate_provenance()`; the callout parser was deleted and duplicate `^block-id` detection kept. `wiki-provenance-lint.py` keeps its CLI/exit codes but now errors on any leftover `kb-prov-v1` string in a non-index page. Stamping (`provenance_stamp.py`, `wiki-provenance-stamp-status.py`) inserts frontmatter `sources` + `generated` and refuses pages that already have them; the "## Freshness Status" body section is gone. `provenance_coverage.py` reduces to covered / no-provenance / invalid-provenance; `freshness_index.py`, `freshness_query.py`, `drift.py`, `curation.py` rank whole pages by frontmatter dates (drift reasons renamed `no-page-provenance`, `stale-page`).
-- **`[^sN]` footnotes cross-checked against `sources[].id`** in `validate_provenance`, flowing into the lint and freshness index. New codes: `unknown-footnote-id`, `undefined-footnote-ref`, `footnote-resource-mismatch` (errors), `unreferenced-footnote-def` (warning); code fences and non-`sN` prose footnotes ignored. First run caught a real defect — `Knowledge Freshness Frontmatter Schema.md` had two sources mangled into one escaped string by a comma-heuristic bug in the legacy callout parser (fixed in `scripts/lib/legacy_callout.py`: fully quoted values always split; page repaired).
-- **Claim↔source links restored in OKF-native form** after the migration dropped them. New `scripts/system/wiki-restore-source-footnotes.py` (+ `scripts/lib/source_footnotes.py` and a vendored, flow-style-capable callout parser) joins the backup's `anchor → resources` with the current `resource → sN` mapping, inserting `[^sN]` refs before each anchor plus an end-of-page definitions block (dry-run by default, idempotent, JSON report). Applied to all 292 pages: 2,137 refs inserted, 44 anchors on 28 pages had no callout entry (reported only). Three pages whose flow-style callouts the migration could not parse were re-stamped from the backup.
-- **Every non-index `wiki/**/*.md` page now has a one-line `description:`** (6,838 backfilled). New shared extractor `scripts/lib/descriptions.py` (`extract_description()`: first sentence after frontmatter, HTML comments stripped, wikilinks intact, leading emphasis unwrapped, 160-char cap) and idempotent `scripts/system/wiki-backfill-descriptions.py` (`--dry-run`) which inserts the field after `type:`/`tags:`, YAML double-quoted. `wiki-create-index-pages.py` prefers the field and falls back to the extractor. Tests in `test_descriptions.py`.
-- **New frontmatter validation check in `wiki-doctor`** (batch mode, `scripts/lib/checks/frontmatter.py`), covering every `wiki/**/*.md` except `index.md`. Errors: missing/unparseable frontmatter, missing or unknown `type:` (competition, concept, conversation, decision, person, problem, project, system), `status:` outside `draft|stable|deprecated`, any `kb-prov-v1` remnant. Warning (exit-code-neutral): missing `description:`. Reported as `FRONTMATTER CHECK` / `frontmatter_issues` + `frontmatter_summary`; no `--fix`. Tests in `test_checks.py` and `test_cli_integration.py`.
-- **Index rename `_index.md` → `index.md`** (8 files, moved via the Obsidian CLI so inbound wikilinks were rewritten), aligning with OKF v0.2's reserved-filename convention (§8) — consumers looking for `index.md` previously found nothing and lost all progressive disclosure. Skills updated to the new name and format (`wiki-templates` — indexes documented as generated artifacts, do not hand-edit — plus `wiki-query`, `wiki-finalize-ingest`, `wiki-ingest-per-note`).
-- **Index generator rewritten for progressive disclosure** (`scripts/system/wiki-create-index-pages.py`, fully deterministic): `wiki/index.md` is the only index with frontmatter (`okf_version: "0.2"`) and its section table gains per-topic counts; topic indexes carry none (§8-strict — index detection everywhere is filename-based) and the rebuild date moved to the byline; topics over 100 pages are grouped under letter headings (diacritics NFKD-folded, Ž→Z) with a counted `Sections:` jump line; new `## Recently updated` block (top 10 by `date`, when ≥10 dated pages); entry summaries are first-sentence, 160 chars, wikilink-balance-safe. `_index.md` was dropped from the index-filename checks in `paths.py`, `checks/orphans.py`, `checks/stubs.py`, `wiki-assign-dates.py`, `wiki-supersession-lint.py`, `migrate-converted-to-resources.py`. Updating the generator in the same change as the rename was mandatory — it regenerates all 9 indexes wholesale on every finalize-ingest and would have recreated the `_index.md` files. Historical `_index.md` mentions in `raw/` and the INBOX assessment were left as evidence.
-- **Verification and a resolved pre-existing issue:** provenance lint clean (6,838 files), 296 tests pass, all 10,209 wikilinks in the 9 regenerated indexes resolve. Three `wiki/problems/` pages had `#` in their filenames, which Obsidian parses as a heading anchor in any wikilink; renamed `#` → `_` via the Obsidian CLI with the 7 inbound links rewritten by hand (Obsidian cannot auto-rewrite links it mis-parses) and indexes regenerated. Display texts and prose mentions of the real GitHub refs (`smart-data-access#240`) were kept — only targets and filenames changed.
+- Vault-wide frontmatter migration: `status:` → `state:` on 839 pages, type vocabulary fixed, `kb-prov-v1` abolished.
+- Provenance moved from body callouts to frontmatter, with `[^sN]` footnotes cross-checked against `sources[].id`.
+- `_index.md` → `index.md` (8 files), index generator rewritten for progressive disclosure.
+- Every non-index page gained a one-line `description:` (6,838 backfilled); new frontmatter check in `wiki-doctor`.
 
-## 2026-08-18 — wiki-doctor: new misplaced-attachment check
+## 2026-08-18 — Misplaced-attachment check
 
-- **`wiki-doctor` (batch mode) now verifies that every attachment linked from a note under `raw/` or `INBOX/` lives in that note's own `_resources/`** (legacy `*.resources/` siblings accepted). The two existing checks were weaker — broken links only require the target to exist *somewhere*, loose files only require *some* `_resources/` — so a raw note embedding an attachment from another directory's or the legacy vault-root `_resources/` passed silently. `wiki/` notes are exempt by design (they may reference `raw/` attachments), companion notes inside a resources tree may reference anything in that tree, and an attachment co-located with one referencing note satisfies the rule for all of them.
-- **Reporting and fixing:** `misplaced_attachments`/`attachment_summary` in JSON, a "MISPLACED ATTACHMENTS" text section, and a non-zero exit code. `--fix-simple-errors` relocates each misplaced file once into the referencing note's `_resources/` via the Obsidian CLI (links update automatically, clash-safe renaming, skipped with a warning when Obsidian is unavailable). Resolution searches `raw/`, `wiki/`, `INBOX/` and the legacy vault-root `_resources/`, skips symlinks and files outside the vault, and normalizes curly quotes like `resolve_wikilink`. New `scripts/lib/checks/attachments.py` + `fix_misplaced_attachments` in `fixers.py`, tests in `test_attachments.py`. First real run found 69 misplaced links (32 unique files), mostly bare-name embeds pointing at the legacy vault-root `_resources/`.
+- Verifies an attachment linked from `raw/` or `INBOX/` lives in that note's own `_resources/`; `--fix-simple-errors` relocates it.
+- First run found 69 misplaced links across 32 files.
 
-## 2026-07-29 — Fix `finalize_lock: unbound variable` crash at end of `wiki-ingest.sh`
+## 2026-07-29 — Fix `finalize_lock` crash at end of ingest
 
-- `run_phase_finalize` installed `trap 'rmdir "$finalize_lock" ...' RETURN` to release the parallel-session finalize lock, but a RETURN trap is not per-function: it stayed installed and fired on every later function return, where the `local` no longer existed, so with `set -u` the script died with `line 1019: finalize_lock: unbound variable` once `main` returned — after all ingest work had completed. Fix: expand the lock path into the trap body at install time and have the trap clear itself (`trap - RETURN`), so it fires exactly once. The same latent pattern for `hdr_file` in the usage-API call (harmless only because that function always runs in a command substitution) got the same fix.
+- A `RETURN` trap is not per-function: it fired on every later return and killed the script under `set -u`, after all work was done.
 
-## 2026-07-22 — Fix finalize step order so freshly-ingested notes aren't re-flagged
+## 2026-07-22 — Fix finalize step order
 
-- `wiki-finalize-ingest` stamped log hashes (old Step 1) *before* running `wiki-assign-dates` (old Step 3). The date pass writes `date`/`date_span`/`date_confidence` frontmatter onto raw notes, changing their bytes, so every just-ingested note ended up with a stale hash and was re-flagged as "new" by `wiki-create-import-batches` (observed: two already-ingested clips reappeared in a later batch). Reordered to **Merge → Assign dates → Stamp/relink → Rebuild indexes → Summarize → Post-processing → End**, with an explicit "do not reorder" note. No code changes — `wiki-stamp-log-hashes.py` still never overwrites existing hashes, it just sees final content when it first stamps.
+- Hashes were stamped before the date pass rewrote the notes, so every fresh note was re-flagged as new.
+- Order is now Merge → Assign dates → Stamp/relink → Rebuild → Summarize → Post-process.
 
-## 2026-07-08 — Stop slugified wikilinks in answers and generated pages
+## 2026-07-08 — Stop slugified wikilinks
 
-Answers and generated pages sometimes emitted slug-style wikilinks (`[[Note-Links-Like-This]]`) instead of the real spaced filename, so they did not resolve in Obsidian. Root cause: weak guidance plus a resolver that could not repair the slugs.
+- A wikilink target is the exact filename with spaces, never a slug — stated in the skills, `CLAUDE.md` and the resolver.
 
-- **`wiki-query` skill**: the citation instruction now states that a wikilink target is the note's exact filename with spaces — never slugified — with correct/incorrect examples.
-- **`CLAUDE.md`**: new always-loaded "Linking to notes" section with the same rule, covering answers and pages.
-- **`wiki-add-missing`, `wiki-curate-page`, `wiki-ground` skills**: one-line "Wikilink format" reminder.
-- **`scripts/lib/resolve.py`**: hyphen added to `_PROBLEMATIC_CHARS` so `wiki-doctor`'s fuzzy resolver maps slug links back to spaced filenames — safe because file stems normalize through the same function (genuinely hyphenated titles still match themselves) and only unique matches auto-fix. Three tests added in `test_resolve.py`; suite passes (265 tests).
+## 2026-07-03 — Vault-wide link resolution
 
-## 2026-07-03 — wiki-doctor: vault-wide link resolution
+- Links to files outside `raw/` and `wiki/` were falsely reported broken; the index now walks the whole vault, as Obsidian does.
 
-- `wiki-doctor` reported false "file not found" for wikilinks whose targets live outside `raw/` and `wiki/` (e.g. the vault-root `_resources/`), because the resolution index only walked those two trees. Obsidian resolves a link against any file in the vault, so `VaultIndex` now builds its path-suffix index from a whole-vault walk (dot-directories like `.git`/`.obsidian` excluded, matching Obsidian). The set of `.md` files scanned/linted is unchanged — still `raw/` and `wiki/` only.
+## 2026-06-25 — Freshness follow-up fixes
 
-## 2026-06-25 — Freshness review follow-up fixes
+- `ingest: false` notes are respected throughout; `wiki-freshness.sh` writes its queues even when the lint fails.
 
-- Freshness inventory, drift, and QMD raw-hit mapping now respect `ingest: false` protected raw notes and their explicitly linked local raw files.
-- `wiki-freshness.sh` runs all freshness/provenance steps before returning a non-zero status, so lint errors no longer prevent drift and coverage queues from being written.
-- Minimal provenance stamping rejects manifest page paths outside `wiki/` under the selected vault root.
-- Added missing-value and negative-limit guards for freshness/migration helper entrypoints.
+## 2026-06-24 — Provenance and freshness tooling
 
-## 2026-06-24 — Provenance/freshness tooling, ingest fixes, and review follow-ups
+- Block provenance, freshness inventory, drift detection, curation packets and a query-time freshness packet.
+- One command, `scripts/wiki-freshness.sh`, runs lint → inventory → drift → coverage; the ingest loop calls it.
+- `scripts/wiki-migrate-existing.sh` adopts an existing `raw/` + `wiki/` corpus without re-ingesting it.
+- New `ingest: false` frontmatter opt-out.
 
-- **Block provenance foundation**: read-only `kb-prov-v1` provenance parser/validator plus a `wiki-provenance-lint.py` entrypoint — the first migration slice for query-time freshness, letting canonical pages carry stable block IDs and a compact provenance callout without rewriting existing pages.
-- **Freshness inventory, drift detection, and curation**: read-only inventory, drift detection and page-curation packet scripts with deterministic block-ranking tests, plus `wiki-curate-page` guidance. Query, ingest and finalize skills now treat freshness as block/query-time evidence first and canonical rewrites as targeted review work.
-- **Query-time freshness packet**: `wiki-freshness-query.py` + `scripts/lib/freshness_query.py` turn retrieved pages into ranked canonical blocks for a query. `--qmd` runs local discovery, resolves QMD's normalized Wiki IDs back to real vault paths, demotes historical/stale/disputed evidence with explanations, and flags unmigrated legacy pages instead of silently trusting them. A follow-up fixed an empty QMD-to-Wiki resolution falling back to scanning every page, and made inline provenance lists parse quoted comma-containing paths.
-- **Raw-hit bridge**: `--qmd` raw-note hits are resolved to real vault paths, mapped to canonical pages via wikilinks and title variants, exposed as `raw_mappings`, and kept as `raw_evidence` when no canonical page is found.
-- **Provenance coverage backlog**: `wiki-provenance-coverage.py` + `scripts/lib/provenance_coverage.py` separate full coverage from freshness drift, writing `.wiki-scratch/provenance-coverage-backlog.md` for all canonical pages still lacking block provenance; `wiki-drift-detect.py` stays the smaller risk-driven queue.
-- **Minimal provenance status stamps**: `wiki-provenance-stamp-status.py` + `scripts/lib/provenance_stamp.py` add a `Freshness Status` block with `migration_status: legacy-inferred-minimal` for classifier-approved low-risk legacy pages; query packets report them as `use-as-page-caution` and coverage keeps them as `minimal-stamp`. Extended with `review_mode` values (`source-mismatch`, `needs-currentness-answer`, `sensitive-review`) so the high-risk drift queue can be made safer at query time with caution-only stamps.
-- **One-command freshness workflow**: `scripts/wiki-freshness.sh` runs lint, inventory, drift detection and coverage backlog; the ingest loop runs it automatically after finalization/QMD sync. Added a `wiki-freshness` skill and updated ingest/finalize/query skills so the lower-level script names need not be remembered. Generated `.wiki-scratch/` queue files are now ignored, `wiki-doctor.py` emits a structured freshness follow-up recommendation, and the ingest dry-run text mentions the automatic freshness step.
-- **Existing-KB migration**: `scripts/wiki-migrate-existing.sh` is a dry-run-first wrapper for existing `raw/` + `wiki/` corpora; with `--apply` it baselines existing raw files in `wiki/log.jsonl` so future ingest skips the historical corpus (`--allow-reingest-existing` reverses it). Added `wiki-baseline-raw-log.py`, root-aware date/QMD helpers, tests, README guidance, and a `wiki-migrate-existing` skill.
-- **Supersession lint noise cut**: `wiki-supersession-lint.py` skips matches inside code fences, table rows, headings and inline-code-hugged phrases, plus self-references (a page describing its own rename) — queue down from 96 to 75 on the current vault. Confirmed false positives go in `.wiki-scratch/supersession-ignore.txt` and never reappear.
-- **Ingest robustness**: colliding sanitized raw filenames are preserved instead of overwritten, zero-sized batches rejected, unconverted HTML email exports kept visible to batching, and agent skill mirrors refreshed from `.claude/skills`. Fixed stale batch files (e.g. `batch-log-1.jsonl`) surviving finalize/clear and blocking the next ingest with "previous ingest not completed". `sync-all-repos.sh` now runs `copy-claude-skills-to-other-agents.sh` first so `.agents/`, `.codex/`, `.junie/` mirrors are current in every synced target.
-- **`ingest: false` frontmatter opt-out**: notes under `raw/` can opt out of ingestion; local files linked from a protected note are skipped too. Remove the field to make the note eligible again. Documented in `README.md`.
-- **Code-review fixes across the new tooling**: freshness ranking now uses recency as a genuine secondary sort key after status+confidence (`score_block` no longer folds in a saturated date term); the provenance comma-splitter only keeps a comma inside a value when it sits in a recognized unterminated source reference; two block IDs in one paragraph no longer cross-contaminate each other's `text`; a `missing-sources` warning was added for claim blocks with no sources (minimal stamps exempt) and lint exits non-zero only on errors; `wiki-migrate-existing.sh` runs the legacy-layout step inside `--root` and gained `--strict`; `wiki-baseline-raw-log.py` matches the canonical writer's key order, backs up the log before append, and surfaces append failures cleanly. Minor: shared `wiki_pages`/`wikilink_target`/`split_frontmatter` helpers, non-negative `--limit`/`--qmd-limit` guards, a `--root` arg guard in `qmd-sync-collections.sh`, and ambiguous-title handling in drift detection.
+## 2026-06-15 — Converters, date scope, rename-safe dedup
 
-## 2026-06-15 — Finalize QMD re-index, converter scripts, date-assignment scope, rename-safe dedup
+- Ingest uses the converter scripts for `.eml`/`.html`/`.vtt`, so filenames and frontmatter are right.
+- "Already ingested" is decided by content hash, not filename: renaming a note no longer re-ingests it.
+- Date assignment never touches top-level vault files.
 
-- **Finalize re-indexes QMD via the sync script**, keeping collections consistent (single `tomtom` collection, stale collections removed, embeddings retried) instead of running raw `qmd update`.
-- **Per-note ingest uses the converter scripts for `.eml`/`.html`/`.vtt`**, so emails get the correct `YYYY-MM-DD ` filename prefix and frontmatter. Manual conversion applies only to types with no script (pdf, images, docx).
-- **Date assignment never touches top-level vault files**: `date`/`date_span`/`date_confidence` are written only under `wiki/` or `raw/`, never to `CLAUDE.md`, `README.md` or `index.md`.
-- **Rename-safe ingest dedup**: "already ingested" is decided by content hash + mtime, not filename. Renaming a raw note in Obsidian no longer re-ingests it; editing it still does.
+## 2026-06-11 — Test suite and loose-file check
 
-## 2026-06-11 — Test suite, wiki-doctor loose-file check, new converted-file layout
+- New test suite under `scripts/tests/`.
+- `wiki-doctor` detects non-Markdown files outside `_resources/` and can move them.
+- Converted sources now sit in `_resources/` with a companion `.md`, replacing the old `converted/` layout.
 
-- **New test suite** in `scripts/tests/` — run with `python3 -m unittest discover -s scripts/tests -v`.
-- **`wiki-doctor` detects non-Markdown files outside `_resources/`** (in `raw/`, `wiki/`, `INBOX`) and can auto-move them.
-- **New layout for converted non-Markdown files**: converted sources (`.eml`, `.html`, `.vtt`, `.pdf`, `.docx`, images) no longer go in a `converted/` subdirectory — the original moves to `_resources/` and a companion `.md` (preview embed + extracted text) is created in its place. Migrating an existing corpus: run `python3 scripts/wiki-doctor.py` once; interactive mode detects legacy `converted/` directories and offers to migrate. The migration is warning-neutral and re-running is a no-op.
+## 2026-06-10 — AI backend configuration and `wiki-ground`
 
-## 2026-06-10 — AI backend configuration and new `wiki-ground` skill
-
-- **AI backend configuration (`config/settings.md`)**: LLM-backed scripts read their backend from `ai_backend` (`claude`, `vibe`, or `codex`). Change the value and save — no code edits. Falls back to deterministic behavior if the CLI is missing or fails.
-- **New `wiki-ground` skill**: `/wiki-ground [optional topic]` grounds the whole conversation in the knowledge base, querying the KB before answering domain questions. The optional topic front-loads relevant pages on activation.
-
-## 2026-08-27 — write-article skill: heading alternatives table
-
-- Added Phase 4b: every article now ends with a `## Heading Alternatives` section (after Potential Weaknesses, before footnotes) — one row per body heading, ≥3 alternatives in three flavors (short claim / imperative / plain).
-- User picks with a short reply like "headings: 1b, 2a"; the picks are applied and the table deleted. Added a common-mistakes row so the table never survives into a published article.
-- Why: heading selection after delivery proved useful in practice (2026-08-26 code-reviews article) and full-claim headings were sometimes hard to read.
-
-## 2026-08-27 — write-article skill: weaknesses table with IDs
-
-- Potential Weaknesses is now a table (ID / Section / Kind / Weakness) with stable IDs W1, W2, … so weaknesses can be addressed by ID in later prompts ("fix W3").
-- IDs are never renumbered; resolved rows are deleted or reworded, remaining IDs stay stable. Delivery message repeats the table and mentions the ID syntax.
-
-## 2026-08-27 — write-article skill: end-of-article marker
-
-- Articles now end with an explicit marker (`---` + "— End of article. The sections below are review aids and references. —") after the closing synthesis; Potential Weaknesses, Heading Alternatives, and footnote definitions all sit below it.
-- On external/Confluence publication the skill asks whether the apparatus ships or gets cut.
-
-## 2026-08-27 — write-article skill: minimum diagram font size
-
-- Visuals rules now require every Mermaid diagram to start with an init directive setting fontSize to at least 24px, for readability.
-
-## 2026-09-08 — provenance validator: tolerate `.md`-less footnote links, parse flow mappings
-
-- `scripts/lib/provenance.py`: `footnote-resource-mismatch` no longer fires when the footnote wikilink only lacks the `.md` extension of the frontmatter `resource` (Obsidian resolves both). Frontmatter parser now understands YAML flow mappings (`generated: {by: ..., at: ...}`), which the skill docs used as the example while the parser only accepted block form.
-- Skill docs (`wiki-ingest-per-note`, `wiki-add-missing`, all three copies): `generated:` example switched to block form; footnote-definition rule now says to include the `.md` extension.
-- Why: `wiki-freshness` reported 95 `invalid-provenance` pages after the 2026-08-26/08-24 ingests — 94 footnote/frontmatter mismatches (missing `.md`, an accent and a trailing space in `resource:` that did not match the real raw filename) and 1 unparsed flow mapping. Pages were repaired in place; the tooling change stops the `.md` and flow-mapping variants from recurring.
-
-## 2026-09-09 — wiki-doctor: legacy provenance remnant check scoped to real callouts
-
-- `scripts/lib/checks/frontmatter.py`: the `kb-prov-v1` remnant error now fires only on an actual legacy provenance callout (`> [!provenance]` header or `> schema: kb-prov-v1` line), not on any occurrence of the string. Tests updated (`test_checks.py`): positive cases use a real callout; new negative test for prose mentions and `[[kb-prov-v1]]` wikilinks.
-- Why: nine pages that *document* the old scheme ([[kb-prov-v1]], [[Open Knowledge Format (OKF)]], [[Knowledge Base Wiki]], …) were flagged as errors on every doctor run although they carry no remnant.
-
-## 2026-09-17 — wiki-tags.py: tag inventory, inline-hashtag escaping, excerpt building
-
-- New `scripts/wiki-tags.py` + `scripts/lib/wiki_tags.py`: phases 0-2 of `INBOX/Plan Systematic Tags.md`. `--phase inventory` builds the real tag inventory from `obsidian tags` (stripping phantom parent aggregates) joined against `wiki/<type>/` page names; `--phase escape`/`escape-revert` rewrites stray inline `#hashtags` as `\#hashtag` in body text only, with fsynced full-text backups; `--phase excerpts` builds the capped, PDF-free excerpt per note that the later LLM phases read. Dry run is the default; the LLM phases (taxonomy, assign), the remap and the doctor check are not implemented yet.
-- The inventory classifies the 39 tags Obsidian does not index (`blind` column): 19 `case-variant` (Obsidian folds case, so `ACME` counts under `acme`), 17 `illegal-char` (`1:1` on 14 notes, `t&d`, `c++` — invisible in the tag pane however many notes declare them), 1 `numeric-only` (`2026`), 1 `malformed-frontmatter` (`tags: [..., stub: true]` in `wiki/systems/London.md` and `wiki/systems/ToledoAMS.md`), 1 `unindexed`.
-- Phase 1 applied to the vault: 92 inline hashtags escaped across 47 files (Slack channel names, LinkedIn hashtag blobs in clipped articles, hex colours, OCR fragments). Inline-only tags 49 → 0; Obsidian's distinct tags 4457 → 4409, now exactly matching the 4444 tags notes actually declare. Reversible via `--phase escape-revert --apply`.
-- Escaping walks `iter_vault_md` (whole vault bar `scripts/`, `config/`, `templates/` and dot-dirs), not `iter_notes`: Obsidian also indexes `_resources/<note>.resources/` attachment payloads and root-level files, and `README.md`'s Slack-channel table was registering as vault tags. Excerpts and the inventory keep note scope so payloads never reach the LLM phases.
-- The escape backup is append-only across runs and `escape-revert` restores the earliest snapshot per path, so repeated passes still revert to the original text.
-- New `scripts/tests/test_wiki_tags.py` (55 tests).
-- `AGENTS.md`: new Tags section (`config/tags.md` is the vocabulary; read the inventory via `obsidian tags`, never grep; writes go through the script), plus the Obsidian CLI gotcha found while building this — the CLI only answers when Obsidian is **already running**; with the app closed the `obsidian` shim *is* the app binary, so it boots the app and hangs any caller waiting on it. Check with `_obsidian_responds` rather than relying on a timeout; always close stdin.
-- Why: the vault had 4444 flat tags, 2097 of them used exactly once, no curated vocabulary, and no tag assignment anywhere in the ingest pipeline — so `wiki-find`'s tags pass missed every framework-era page. Measured baseline and the full plan are in `INBOX/Plan Systematic Tags.md`.
-
-## 2026-09-17 — wiki-tags.py phase 3: taxonomy, term merge, gate overrides
-
-- **`scripts/lib/ai_backend.py`**: Python port of `wiki-ingest.sh`'s backend selection, so both entry points obey `ai_backend:` in `config/settings.md`. Claude calls run `--tools "" --setting-sources ""` (containment, not tuning: the subprocess then has no tools and cannot open a note or a PDF, and per-call context drops ~46k → ~9k tokens) with `stdin` closed (`claude -p` otherwise appends stdin to the prompt).
-- **`scripts/lib/usage.py`**: the 5-hour usage throttle ported from the shell pipeline (Anthropic API, HUD cache fallback, threshold 85%, 30-min pause). Unknown utilization continues unthrottled rather than stalling a long run.
-- **`scripts/lib/wiki_taxonomy.py`** + phases `namespaces`, `taxonomy`, `terms`, `consolidate`. 19 namespaces (sonnet proposed 23; `competition` and `concept` rejected at the gate and now blocked by `BANNED_NAMESPACES`, `career` folded into `hr`, `engineering` into `process`). 4443 tags → **1818 canonical** via: LLM mapping into namespaces (38 calls), LLM synonym merge within each namespace (41 calls, 274 merges), deterministic lexical-variant merge (134), cross-namespace term merge (43), and dropping tags left on a single note (measured to strip only 5 notes of their last tag).
-- **`--phase consolidate`** re-derives every deterministic pass from the checkpoint with no LLM calls, so a rule change costs nothing to re-apply.
-- **`.tags/overrides.tsv`**: hand-authored gate corrections, applied last and winning outright (a one-note customer tag survives the singleton drop because it was asked for). Used to fix three inconsistencies the independent chunks produced: all OEM customers now `project/<name>` (two had been kept and 22 dropped, purely by chance of chunk boundary), two competitor tags dropped (one had become `system/<competitor>`, contradicting `system` = built inside the organisation), and `aws` → `cloud/aws` alongside `azure`/`google-cloud`.
-- **Bug fixed, found by the pilot chunk**: `merge_cross_namespace` folded `ai/general`, `map/general`, `navigation/general`, `security/general` and `governance/general` onto `automotive/general` because they share the term `general` — silently reassigning 1880 notes' worth of correct mappings. Merging on a shared final term is only valid when the term carries the meaning; `GENERIC_TERMS` now exempts `general`, `other`, `misc`, `core` and similar. Regression test pinned.
-- `INBOX/Tag Remap Review.md`: the 935 remap rows covering >5 notes, grouped by namespace, for the human gate. 47 new tests in `scripts/tests/test_wiki_taxonomy.py`.
-
-## 2026-09-17 — wiki-tags.py phase 4: the remap, applied
-
-- **`--phase remap`** rewrites frontmatter tags across `raw/`, `wiki/` and `INBOX/` from `.tags/remap.tsv`. Fenced, because it is the only bulk tag-removing operation: every target must already be present in `config/tags.md` or it refuses outright, and each note is backed up — flushed and fsynced — *before* being rewritten, since these trees are outside git. `--phase remap-revert` restores the recorded frontmatter onto the note's current body, but only when the rebuilt file hashes back to the original; a note whose body changed since the backup is reported and left alone.
-- **`write_tags` is shape-preserving line surgery** (`scripts/lib/wiki_tags.py`): an inline `tags: [a, b]` stays inline, a block list stays a block list, a bare scalar becomes inline, and an emptied list is written `tags: []` rather than dropping the key. Every other frontmatter line survives byte-for-byte, so hand-quoted `description:`, block `sources:` lists and `^block-id` anchors are untouched. A generic renderer cannot be used: the repo's `split_frontmatter` is scalar-only and reports `""` for a block list, so rendering from it would delete the tags line and orphan its items.
-- **Applied: 8464 of 11304 notes rewritten**, 6599 tag slots removed, 0 added, 254 notes left tagless (phase 5 re-tags them). 8464 backup records, all hash-verified revertible. Result: **39,692 occurrences over 4444 flat tags → 33,091 over 1857 hierarchical ones**, every one conforming, and Obsidian's tag pane now shows 1857 tags at depth 2 under 23 namespace roll-ups.
-- **Eight errors caught by the dry run** before anything was written, and fixed by override: `clip` (106 notes) had become `map/clip` — it is a web-clipping *provenance* marker read as map-region clipping, and `raw/clips/` already records it, so it is now dropped like `email`/`article`/`video`/`stub`; `platform-engineering` (34) is a discipline, not a system, so `process/`; `nda` (22) → `governance/`; `android-automotive` (15) and `android-auto` (14) are Google platforms, not the organisation-built systems, so `automotive/`; one tag named an external company with its own `wiki/competition/` page, so dropped; `confluence` and `slack` are external tools, so `tool/`. Six new tags were added to `config/tags.md` to match.
-- **`load_vocabulary` harvesting is scoped to `## <namespace>` sections** and a tag must sit under its own namespace's heading. Matching every backticked list item also swallowed the file's own prose — the Rules section's "- `year/YYYY` is the one exempt pattern." and "- `namespace/term` or `namespace/term/term`…" were both harvested and would have been offered to the model as assignable tags, and the second is a valid tag shape, so validating the tag alone cannot tell it from a real entry. The whole `year/` namespace is withheld from assignment (not just four-digit forms: `year/2015-2016` slipped a stricter rule).
-
-## 2026-09-17 — phase 5 assignment switched from Haiku to Sonnet (measured)
-
-- **`MODEL_ASSIGN` is now `sonnet`, not `haiku`.** A/B on two identical 50-note bundles, same vocabulary, same prompt: Sonnet 16-17s vs Haiku 51-57s (3.3x faster), off-list tags ~3.7% vs ~7.1% (half the rate), tags per note a steady 4.2-4.4 vs Haiku's erratic 3.7-4.7. Both returned 50/50 lines and assigned 50/50 notes, so reply reliability was never the discriminator.
-- The models agreed on almost nothing — mean Jaccard 0.21, identical on **0 of 50** notes in both runs — so adherence statistics could not settle quality; the diffs did. Haiku's failure modes are title-word traps (`hr/psychology` for an article about prompt engineering) and near-miss entities (`tool/github` for GitNexus, `ai/llm` where `tool/obsidian` + `research/second-brain` fit). A closed vocabulary cannot catch either, because the wrong tag is itself a valid tag.
-- Cost, measured by building all 95 real prompts: 3.05M input + 0.07M output tokens → **$6.81 on Sonnet 5 vs $3.41 on Haiku 4.5** ($3.40 for the upgrade). End-to-end ~27 min against ~85 min.
-- Two earlier figures corrected: Sonnet 5 input is $2/MTok, not the $3 quoted before (that is Sonnet 4.6); and the phase 5 target set is **4750 notes** with fewer than 3 tags (3094 with none), not 2837 — the remap dropped 6599 tag slots, pushing more notes below the threshold. 95 bundles, not 57.
-
-## 2026-09-18 — phase 5 applied; INBOX/Tagging New Notes.md documents the manual step
-
-- **Phase 5 done.** `--phase assign` (Sonnet, closed vocabulary, 50 notes/call, checkpointed) and `--phase write` (additive frontmatter merge, fsynced per-note backup) are implemented. Applied: 4730 notes assigned, tag occurrences 33,091 → 48,812, coverage now **99% of 11,282 notes** at a mean 4.3 tags — `raw/` went from 971 of 5468 notes tagged to 3735 of 3736.
-- **Namespace rescue in `parse_assignments`**: when the model names the right term under the wrong namespace (`navigation/horizon` for `automotive/horizon`) and exactly one approved tag shares that term, it is corrected instead of discarded. Measured: 84% of off-list suggestions were this, not invention. A re-run of the 2456 thin notes with the rescue recovered **1312 tags** and cut off-list suggestions from 1254 to 111. Ambiguous terms (`process/strategy` → `ai/strategy` or `business/strategy`) stay rejected.
-- **Two bugs found by verifying the backups, both fixed and tested.** (1) Structural files were being tagged — 18 `index.md` pages plus `INBOX/CLAUDE.md` and `RELEASE-NOTES.md` had frontmatter injected; `iter_notes` now skips `NON_NOTE_FILES` while `iter_vault_md` still sees them so escaping can reach a stray hashtag in `README.md`. All 21 restored. (2) `frontmatter_backup_record` could not distinguish "no frontmatter" from "empty frontmatter", so restoring rebuilt a hollow `---\n\n---\n` block, the hash never matched, and 23 notes were unrevertible; there is now a `had_frontmatter` flag with inference for older records.
-- **`--phase write` is append-only across runs and `--phase write-revert` added.** Refusing over an existing backup was wrong for a step that recurs every time new notes arrive; revert keeps the earliest record per path, so replaying any number of runs still lands on the original frontmatter.
-- **New `INBOX/Tagging New Notes.md`**: tagging a new note is a manual three-command run (`excerpts` → `assign` → `write --apply`), verified end-to-end on a fresh note. Nothing tags notes automatically — the `wiki-ingest` hook of decision 17 is still unbuilt, and the note says so.
-
-## 2026-09-18 — tagging wired into both ingest paths
-
-- **`scripts/wiki-ingest.sh` Phase 4** now runs `wiki-tags.py --phase excerpts`, `--phase assign` and `--phase write --apply` before the existing lint/QMD/freshness steps, so those see the final frontmatter. Chained with `&&` and a `WARN` on failure — an ingest that tags nothing still finishes, and the warning names the commands to re-run by hand. `--dry-run` reports the step and skips it, as it already did for finalization.
-- **`wiki-finalize-ingest` skill: new Step 4 — Tag the new notes** (subsequent steps renumbered 5–8, and the agent-mode note's reference to the post-processing menu updated to Step 7). This covers an ingest driven interactively through the Claude CLI, which the shell script's Phase 4 would not reach. Mirrored to `.agents/` and `.codex/` via `copy-claude-skills-to-other-agents.sh`.
-- Placement is load-bearing: tagging runs **after** Step 3's rename/relink pass, because `assign` reads the excerpt cache rather than the notes and the cache stores paths. Both entry points document that the other exists, and that a repeat run is nearly free — `assign` targets only notes with fewer than 3 tags, so with everything tagged it exits without calling the model.
-- The skill tells the agent to surface `.tags/assign-rejects.tsv` (what the closed vocabulary is missing) and never to add tags to `config/tags.md` itself — that file stays the human's.
-- `INBOX/Tagging New Notes.md` updated: the manual run is now the exception (notes not from ingest, or retrying a failure), not the rule. This supersedes the plan's decision 17, which had the ingest *agent* assign tags per-note; the script does it in both paths instead, and it is validated and cheaper.
-
-## 2026-09-18 — phase 7: wiki-doctor tag check
-
-- **New `scripts/lib/checks/tags.py`**, wired into `wiki-doctor` (`lib/cli.py` invokes it and counts its errors towards the exit status; `lib/report.py` prints a section grouped by tag — one bad tag usually spans many notes, and the tag is what gets fixed — plus an `ISSUES SUMMARY` line). Reports `unapproved` (a tag absent from `config/tags.md`, the closed vocabulary) and `malformed` (a tag breaking the curated shape, several of which Obsidian silently refuses to index, so the tag is invisible in the tag pane however many notes declare it). An untagged note is counted but not flagged — that is a coverage gap for the assign phase. A missing `config/tags.md` reports a zero-size vocabulary rather than condemning every tag in the vault.
-- **Result on the vault: 11,283 notes against 1869 approved tags — 0 malformed, 0 unapproved, 1 untagged.** The tag work validates end to end. Verified negatively too: against a fixture carrying `megacorp`, `1:1`, `A/B` and `a/b/c/d` the check reports 4 malformed and 1 unapproved, pinned by a test — a lint that only ever passes proves nothing.
-- 8 new tests in `scripts/tests/test_check_tags.py`; suite at 771. This closes the last phase of `INBOX/Plan Systematic Tags.md`.
-- Because `wiki-ingest.sh` Phase 4 runs `wiki-doctor` immediately after the tagging step, every future ingest now validates its own tags.
-
-## 2026-09-18 — new `work-topic` skill: interview, then write the topic page
-
-- **New `.claude/skills/work-topic/SKILL.md`** (mirrored to `.agents/` and `.codex/`), registered in `AGENTS.md` under Work skills and referenced from step 3 of `work/How To Use Work Planning.md`. Triggers on "new topic", "add a topic", "track this".
-- Reads `work/topics/`, the status/horizon distribution and `work/Compass.md` **before** asking anything, so each of the six questions leads with a proposed answer. Two guards come from that context: it checks whether the subject belongs on an existing topic and offers to fold it in rather than open an eleventh page, and it defaults `status` to `watching` because the portfolio cap is 10 active topics — if the user wants `active` at the cap it names the topic that implies parking and lets them choose rather than parking one itself.
-- Pushes for a factual `progress:` sentence and a real next action, because those are the two fields that decide whether a topic page is revisited or becomes a stub; an `active` topic with no next action is a smell the compiler reports. If the user declines either, the skill says the page is a stub instead of presenting it as done.
-- Documents what the compiler actually requires: `type: topic` is mandatory (without it the file is skipped and the topic never appears in the backlog), only `Next actions (me)` / `Delegated` / `Log` / `Snapshot` are parsed so any other section is free-form, and `work/Backlog.md` is never hand-written. Ends by running `scripts/work-backlog.py` and reporting the active count against the cap plus anything the compiler flags.
+- LLM-backed scripts read `ai_backend` from `config/settings.md`; no code edits to switch.
+- New `wiki-ground` skill grounds a whole conversation in the knowledge base.
