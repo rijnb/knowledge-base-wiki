@@ -88,7 +88,7 @@ Trigger phrases: "fetch Slack", "ingest Slack", "sync Slack channels".
 `wiki/log.jsonl` is append-only. One JSON object per line, sorted oldest-to-newest by append order.
 
 ```jsonl
-{"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/meeting-2026-03-01.md","summary":"Quarterly planning meeting notes.","pages_created":["wiki/decisions/adopt-vector-tiles.md","wiki/projects/AutoStream.md"],"pages_updated":["wiki/people/Jane Smith.md"]}
+{"date":"YYYY-MM-DD HH:mm:ss","session":1,"file":"raw/notes/meeting-2026-03-01.md","summary":"Quarterly planning meeting notes.","pages_created":["wiki/decisions/adopt-vector-tiles.md","wiki/projects/StreamKit.md"],"pages_updated":["wiki/people/Jane Smith.md"]}
 ```
 
 Finding un-ingested notes: `jq -r '.file' wiki/log.jsonl` — lists all ingested paths.  

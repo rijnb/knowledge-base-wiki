@@ -40,10 +40,10 @@ class ExtractDescriptionTests(unittest.TestCase):
         self.assertEqual(extract_description(content), "Body text.")
 
     def test_wikilinks_kept_intact(self):
-        content = "# T\n\nWorks with [[Real-Time Map]] and [[Orbis Maps]].\n"
+        content = "# T\n\nWorks with [[Real-Time Map]] and [[Example Maps]].\n"
         self.assertEqual(
             extract_description(content),
-            "Works with [[Real-Time Map]] and [[Orbis Maps]].",
+            "Works with [[Real-Time Map]] and [[Example Maps]].",
         )
 
     def test_bold_intro_unwrapped(self):

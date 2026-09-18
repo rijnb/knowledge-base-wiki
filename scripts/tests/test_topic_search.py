@@ -33,14 +33,14 @@ CONCEPTS_INDEX = """# Concepts
 ## A
 
 - [[wiki/concepts/Agentic Coding|Agentic Coding]] — Software development where an AI agent plans and edits code.
-- [[wiki/concepts/AutoStream|[[AutoStream]]]] — [[AutoStream]] is TomTom's map streaming system.
+- [[wiki/concepts/StreamKit|[[StreamKit]]]] — [[StreamKit]] is a map streaming system.
 - [[wiki/concepts/Claude Code|Claude Code]] — Anthropic's terminal coding agent.
 - [[wiki/concepts/Zebra Crossing|Zebra Crossing]]
 """
 
 SYSTEMS_INDEX = """# Systems
 
-- [[wiki/systems/NavSDK|NavSDK]] — Navigation SDK; teams use coding agents to maintain it.
+- [[wiki/systems/RouteSDK|RouteSDK]] — Navigation SDK; teams use coding agents to maintain it.
 """
 
 
@@ -56,10 +56,10 @@ class ParseIndexLineTests(unittest.TestCase):
 
     def test_nested_wikilink_title(self):
         hit = parse_index_line(
-            "- [[wiki/concepts/AutoStream|[[AutoStream]]]] — [[AutoStream]] is TomTom's map streaming system."
+            "- [[wiki/concepts/StreamKit|[[StreamKit]]]] — [[StreamKit]] is a map streaming system."
         )
-        self.assertEqual(hit.path, "wiki/concepts/AutoStream")
-        self.assertEqual(hit.title, "[[AutoStream]]")
+        self.assertEqual(hit.path, "wiki/concepts/StreamKit")
+        self.assertEqual(hit.title, "[[StreamKit]]")
         self.assertIn("streaming", hit.description)
 
     def test_line_without_description(self):
@@ -99,11 +99,11 @@ class SearchIndexesTests(VaultFixtureMixin, unittest.TestCase):
         hits = search_indexes(self.root, ["coding agent", "claude code"])
         by_path = {h.path: h for h in hits}
         self.assertIn("wiki/concepts/Claude Code", by_path)
-        self.assertIn("wiki/systems/NavSDK", by_path)
+        self.assertIn("wiki/systems/RouteSDK", by_path)
         # Claude Code matches both title (claude code) and description (coding agent)
         self.assertEqual(by_path["wiki/concepts/Claude Code"].matched_in, "title")
         self.assertEqual(sorted(by_path["wiki/concepts/Claude Code"].terms), ["claude code", "coding agent"])
-        self.assertEqual(by_path["wiki/systems/NavSDK"].matched_in, "description")
+        self.assertEqual(by_path["wiki/systems/RouteSDK"].matched_in, "description")
 
     def test_case_insensitive_and_dedupes_recently_updated(self):
         hits = search_indexes(self.root, ["AGENTIC CODING"])
@@ -111,7 +111,7 @@ class SearchIndexesTests(VaultFixtureMixin, unittest.TestCase):
 
     def test_type_filter(self):
         hits = search_indexes(self.root, ["coding"], types=["systems"])
-        self.assertEqual([h.path for h in hits], ["wiki/systems/NavSDK"])
+        self.assertEqual([h.path for h in hits], ["wiki/systems/RouteSDK"])
 
     def test_ranking_more_terms_first(self):
         hits = search_indexes(self.root, ["claude code", "coding agent", "streaming"])
@@ -160,7 +160,7 @@ class FormatMarkdownTests(unittest.TestCase):
     def test_groups_by_type_and_tags_body_hits(self):
         hits = [
             Hit("wiki/concepts/Agentic Coding", "Agentic Coding", "concepts", "Desc A.", "title", ["agentic"]),
-            Hit("wiki/systems/NavSDK", "NavSDK", "systems", "Desc N.", "body", ["coding agent"]),
+            Hit("wiki/systems/RouteSDK", "RouteSDK", "systems", "Desc N.", "body", ["coding agent"]),
             Hit("wiki/systems/Harness", "Harness", "systems", "", "tags", ["agentic coding"]),
         ]
         out = format_markdown(hits)

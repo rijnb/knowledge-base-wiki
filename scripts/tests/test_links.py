@@ -49,7 +49,7 @@ class IsExternalTests(unittest.TestCase):
         # reporting them when they really are broken.
         for t in (
             "Meeting: 2026 plan",
-            "wiki/decisions/Decision: pick TPEG.md",
+            "wiki/decisions/Decision: pick a format.md",
             "Note:subtitle",
             "C:/not/a/scheme",
         ):

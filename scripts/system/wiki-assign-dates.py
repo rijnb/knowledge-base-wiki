@@ -75,7 +75,7 @@ STRIP_KEYS = ("date", "date_span", "date_confidence",
 
 ISO_FULL = re.compile(r"\b((?:19|20)\d{2})-(0[1-9]|1[0-2])-([0-3]\d)\b")
 # digit-lookarounds (not \b): matches 2021 in '2021_Workshop' but rejects
-# JIRA ticket numbers like GOSDK-196636 (digit-adjacent).
+# JIRA ticket numbers like PROJ-196636 (digit-adjacent).
 YEAR = re.compile(r"(?<!\d)(19|20)\d{2}(?!\d)")
 MONTHS = {m: i+1 for i, m in enumerate(
     ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"])}

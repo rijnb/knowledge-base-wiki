@@ -34,7 +34,7 @@ Use `AskUserQuestion` (free text) to ask:
 
 > "What is the name and a one-sentence description of the missing page?
 >
-> Example: Name: NDS.Live / Description: The tile and layer-based streaming format of NDS used for real-time map data delivery."
+> Example: Name: TileStream / Description: A tile and layer-based streaming format used for real-time map data delivery."
 
 Parse the response to extract:
 - **name** — the page title (used verbatim as the filename and H1)
@@ -48,7 +48,7 @@ Use `AskUserQuestion` (free text) to ask:
 
 > "List any related terms, acronyms, aliases, or people that should be searched to find relevant notes (comma-separated).
 >
-> Example: NDS, tile streaming, LiveMap, HERE HD Live, map tiles"
+> Example: tile streaming, live map, streamed tiles, map tiles"
 
 Combine these terms with the name and description from Step 2. You will use all of them in the searches below.
 
