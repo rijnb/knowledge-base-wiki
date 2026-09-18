@@ -27,6 +27,7 @@ Use the appropriate `wiki` skill for each action:
 Personal work organisation lives in `work/` (topic pages, backlog, stakeholders) and is
 compiled by `scripts/work-backlog.py`.
 
+- **Add a work topic** (interview, then write `work/topics/<Topic>.md`) — `work-topic` skill
 - **Monday weekly review** (scan, triage, this week's chosen work) — `work-weekly` skill
 - **Pre-1:1 stakeholder brief** (five lines before a 1:1) — `work-brief` skill
 - **Review a document, deck or proposal** (or a quick take on a question) — `review-doc` skill

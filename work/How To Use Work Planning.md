@@ -10,8 +10,7 @@ The system answers four questions at any time:
 - who is overdue for contact, and
 - what did I do last month.
 
-Design and rationale: [[raw/notes/2026-09-18 Plan Work Organisation]]. 
-Budget: ≤ 30 min/day on the system.
+Budget: ≤ 5 per day and ≤ 60 min/week on the system.
 
 ## What lives where (all in `work/`, never in git)
 
@@ -30,7 +29,9 @@ Budget: ≤ 30 min/day on the system.
 
 1. **Something needs doing** → topic page: add `- [ ] …` under `## Next actions (me)`, or `- [ ] @Name — …` under `## Delegated`.
 2. **Something happened** → topic page: one line under `## Log`: `- YYYY-MM-DD — …`.
-3. **New subject with no topic** → create a stub in `work/topics/` (copy any existing one), `status: watching`.
+3. **New subject with no topic** → say **"add a topic"** and the `work-topic` skill
+   interviews you and writes the page. By hand: copy any existing page in `work/topics/`
+   and set `status: watching`.
 4. **Execute** `scripts/work-backlog.py` — regenerates `Backlog.md`.
 
 ### Monday (≤ 30 min) — say **"run the weekly review"**
@@ -76,7 +77,13 @@ The **Shell commands** plugin is configured (`.obsidian/plugins/obsidian-shellco
 Assign a hotkey to *Work: compile backlog* under Settings → Hotkeys if you want one.
 
 ## Cheat sheet
-![[How To Use Work Planning-1789665226252.jpeg]]
+
+| Command                                                                                | Hotkey       |
+| -------------------------------------------------------------------------------------- | ------------ |
+| Shell commands: Execute: Work: archive done items (today)                              | Cmd-Option A |
+| Shell commands: Execute: Work: compile backlog                                         | Cmd-Option B |
+| Shell commands: Execute: Work: recap last month                                        | Cmd-Option M |
+| Shell commands: Execute: Work: weekly review packet (dry run to work/weekly/packet.md) | Cmd-Option W |
 
 | Want                           | Do                                                                             |
 | ------------------------------ | ------------------------------------------------------------------------------ |
